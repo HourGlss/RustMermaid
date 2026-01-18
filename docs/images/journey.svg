@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="470" viewBox="0 0 1040 470" class="mermaid">
+  <style>
+
+.journey-title {
+  font-family: trebuchet ms, verdana, arial, sans-serif;
+}
+.journey-section text {
+  font-family: trebuchet ms, verdana, arial, sans-serif;
+}
+.task {
+  cursor: pointer;
+}
+.task-line {
+  stroke: #666;
+  stroke-width: 1px;
+  stroke-dasharray: 4 2;
+}
+.face {
+  fill: white;
+  stroke: #666;
+}
+.mouth {
+  stroke: #666;
+}
+.legend {
+  font-family: trebuchet ms, verdana, arial, sans-serif;
+}
+.label {
+  font-family: trebuchet ms, verdana, arial, sans-serif;
+  font-size: 14px;
+}
+.activity-line {
+  fill: none;
+}
+
+.section-type-0 {
+  fill: #191970;
+}
+.task-type-0 {
+  fill: #191970;
+}
+
+.section-type-1 {
+  fill: #8B008B;
+}
+.task-type-1 {
+  fill: #8B008B;
+}
+
+.section-type-2 {
+  fill: #4B0082;
+}
+.task-type-2 {
+  fill: #4B0082;
+}
+
+.section-type-3 {
+  fill: #2F4F4F;
+}
+.task-type-3 {
+  fill: #2F4F4F;
+}
+
+.section-type-4 {
+  fill: #800000;
+}
+.task-type-4 {
+  fill: #800000;
+}
+
+.section-type-5 {
+  fill: #8B4513;
+}
+.task-type-5 {
+  fill: #8B4513;
+}
+
+.section-type-6 {
+  fill: #00008B;
+}
+.task-type-6 {
+  fill: #00008B;
+}
+
+
+.actor-0 {
+  fill: #8FBC8F;
+}
+
+.actor-1 {
+  fill: #7CFC00;
+}
+
+.actor-2 {
+  fill: #00FFFF;
+}
+
+.actor-3 {
+  fill: #20B2AA;
+}
+
+.actor-4 {
+  fill: #B0E0E6;
+}
+
+.actor-5 {
+  fill: #FFFFE0;
+}
+
+
+  </style>
+  <defs>
+    <defs>
+    <marker id="arrowhead" refX="5" refY="2" markerWidth="6" markerHeight="4" orient="auto">
+      <path d="M 0,0 V 4 L6,2 Z"/>
+    </marker>
+  </defs>
+  </defs>
+  <g class="root">
+    <g class="clusters">
+
+    </g>
+    <g class="edgePaths">
+      <line x1="150" y1="250" x2="936" y2="250" class="activity-line" stroke="black" marker-end="url(#arrowhead)" stroke-width="4"/>
+    </g>
+    <g class="edgeLabels">
+
+    </g>
+    <g class="nodes">
+      <g class="actor-legend">
+        <circle cx="20" cy="110" r="7" class="actor-0" stroke="#000" fill="#8FBC8F"/>
+        <text x="40" y="115" class="legend" fill="#666" font-size="14px">Cat</text>
+        <circle cx="20" cy="135" r="7" class="actor-1" stroke="#000" fill="#7CFC00"/>
+        <text x="40" y="140" class="legend" font-size="14px" fill="#666">Me</text>
+      </g>
+      <text x="150" y="25" class="journey-title" font-weight="bold" font-size="24px" fill="#333333">My working day</text>
+      <g class="journey-sections">
+        <g>
+          <rect x="150" y="100" width="470" height="50" rx="3" ry="3" class="journey-section section-type-0" fill="#191970"/>
+          <text x="385" y="130" class="journey-section section-type-0" fill="#fff" font-size="14px" text-anchor="middle">Go to work</text>
+        </g>
+        <g>
+          <rect x="630" y="100" width="310" height="50" rx="3" ry="3" class="journey-section section-type-1" fill="#8B008B"/>
+          <text x="785" y="130" class="journey-section section-type-1" fill="#fff" text-anchor="middle" font-size="14px">Go home</text>
+        </g>
+      </g>
+      <g class="journey-tasks">
+        <g class="task-group task-0" id="task0">
+          <line x1="225" y1="150" x2="225" y2="450" class="task-line" stroke-width="1" stroke-dasharray="4 2" stroke="#666"/>
+          <g class="face-group">
+            <circle cx="225" cy="300" r="15" class="face" stroke-width="2" overflow="visible"/>
+            <circle cx="220" cy="295" r="1.5" fill="#666" stroke="#666" stroke-width="2"/>
+            <circle cx="230" cy="295" r="1.5" fill="#666" stroke="#666" stroke-width="2"/>
+            <path d="M 217.5 302 A 7.5,6.8181818181818175 0 0,0 232.5,302" class="mouth" fill="none" stroke="#666" stroke-width="2"/>
+          </g>
+          <rect x="150" y="150" width="150" height="50" rx="3" ry="3" class="task task-type-0" fill="#191970"/>
+          <circle cx="164" cy="150" r="7" class="actor-1" fill="#7CFC00" title="Me" stroke="#000"/>
+          <foreignObject x="150" y="150" width="150" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table;height:100%;width:100%;"><div class="label" style="display:table-cell;text-align:center;vertical-align:middle;color:#fff;">Make tea</div></div></foreignObject>
+        </g>
+        <g class="task-group task-1" id="task1">
+          <line x1="385" y1="150" x2="385" y2="450" class="task-line" stroke-width="1" stroke-dasharray="4 2" stroke="#666"/>
+          <g class="face-group">
+            <circle cx="385" cy="360" r="15" class="face" overflow="visible" stroke-width="2"/>
+            <circle cx="380" cy="355" r="1.5" stroke-width="2" stroke="#666" fill="#666"/>
+            <circle cx="390" cy="355" r="1.5" stroke-width="2" stroke="#666" fill="#666"/>
+            <line x1="380" y1="367" x2="390" y2="367" class="mouth" stroke-width="1" stroke="#666"/>
+          </g>
+          <rect x="310" y="150" width="150" height="50" rx="3" ry="3" class="task task-type-0" fill="#191970"/>
+          <circle cx="324" cy="150" r="7" class="actor-1" stroke="#000" title="Me" fill="#7CFC00"/>
+          <foreignObject x="310" y="150" width="150" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table;height:100%;width:100%;"><div class="label" style="display:table-cell;text-align:center;vertical-align:middle;color:#fff;">Go upstairs</div></div></foreignObject>
+        </g>
+        <g class="task-group task-2" id="task2">
+          <line x1="545" y1="150" x2="545" y2="450" class="task-line" stroke-width="1" stroke="#666" stroke-dasharray="4 2"/>
+          <g class="face-group">
+            <circle cx="545" cy="420" r="15" class="face" stroke-width="2" overflow="visible"/>
+            <circle cx="540" cy="415" r="1.5" stroke="#666" fill="#666" stroke-width="2"/>
+            <circle cx="550" cy="415" r="1.5" stroke-width="2" fill="#666" stroke="#666"/>
+            <path d="M 537.5 427 A 7.5,6.8181818181818175 0 0,1 552.5,427" class="mouth" stroke-width="2" fill="none" stroke="#666"/>
+          </g>
+          <rect x="470" y="150" width="150" height="50" rx="3" ry="3" class="task task-type-0" fill="#191970"/>
+          <circle cx="484" cy="150" r="7" class="actor-1" fill="#7CFC00" stroke="#000" title="Me"/>
+          <circle cx="494" cy="150" r="7" class="actor-0" title="Cat" fill="#8FBC8F" stroke="#000"/>
+          <foreignObject x="470" y="150" width="150" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table;height:100%;width:100%;"><div class="label" style="display:table-cell;text-align:center;vertical-align:middle;color:#fff;">Do work</div></div></foreignObject>
+        </g>
+        <g class="task-group task-3" id="task3">
+          <line x1="705" y1="150" x2="705" y2="450" class="task-line" stroke-dasharray="4 2" stroke-width="1" stroke="#666"/>
+          <g class="face-group">
+            <circle cx="705" cy="300" r="15" class="face" stroke-width="2" overflow="visible"/>
+            <circle cx="700" cy="295" r="1.5" stroke="#666" fill="#666" stroke-width="2"/>
+            <circle cx="710" cy="295" r="1.5" stroke="#666" stroke-width="2" fill="#666"/>
+            <path d="M 697.5 302 A 7.5,6.8181818181818175 0 0,0 712.5,302" class="mouth" stroke="#666" stroke-width="2" fill="none"/>
+          </g>
+          <rect x="630" y="150" width="150" height="50" rx="3" ry="3" class="task task-type-1" fill="#8B008B"/>
+          <circle cx="644" cy="150" r="7" class="actor-1" fill="#7CFC00" title="Me" stroke="#000"/>
+          <foreignObject x="630" y="150" width="150" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table;height:100%;width:100%;"><div class="label" style="display:table-cell;text-align:center;vertical-align:middle;color:#fff;">Go downstairs</div></div></foreignObject>
+        </g>
+        <g class="task-group task-4" id="task4">
+          <line x1="865" y1="150" x2="865" y2="450" class="task-line" stroke-width="1" stroke-dasharray="4 2" stroke="#666"/>
+          <g class="face-group">
+            <circle cx="865" cy="360" r="15" class="face" overflow="visible" stroke-width="2"/>
+            <circle cx="860" cy="355" r="1.5" stroke="#666" fill="#666" stroke-width="2"/>
+            <circle cx="870" cy="355" r="1.5" stroke="#666" fill="#666" stroke-width="2"/>
+            <line x1="860" y1="367" x2="870" y2="367" class="mouth" stroke-width="1" stroke="#666"/>
+          </g>
+          <rect x="790" y="150" width="150" height="50" rx="3" ry="3" class="task task-type-1" fill="#8B008B"/>
+          <circle cx="804" cy="150" r="7" class="actor-1" title="Me" stroke="#000" fill="#7CFC00"/>
+          <foreignObject x="790" y="150" width="150" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table;height:100%;width:100%;"><div class="label" style="display:table-cell;text-align:center;vertical-align:middle;color:#fff;">Sit down</div></div></foreignObject>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

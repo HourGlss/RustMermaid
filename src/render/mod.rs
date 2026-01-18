@@ -9,6 +9,7 @@ mod er;
 mod flowchart;
 mod gantt;
 mod git;
+mod journey;
 mod mindmap;
 mod packet;
 mod pie;
@@ -97,6 +98,7 @@ pub fn render_with_config(diagram: &Diagram, config: &RenderConfig) -> Result<St
         Diagram::Packet(db) => packet::render_packet(db, config),
         Diagram::XyChart(db) => xychart::render_xychart(db, config),
         Diagram::Treemap(db) => treemap::render_treemap(db, config),
+        Diagram::Journey(db) => journey::render_journey(db, config),
         _ => Err(MermaidError::RenderError(format!(
             "Diagram type {:?} not yet supported for rendering",
             diagram_type_name(diagram)
