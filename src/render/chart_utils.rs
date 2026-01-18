@@ -105,7 +105,7 @@ pub fn get_chart_color(index: usize) -> &'static str {
 }
 
 /// Get a color from a custom palette, cycling through if index exceeds palette size
-pub fn get_color_from_palette<'a>(palette: &'a [String], index: usize) -> &'a str {
+pub fn get_color_from_palette(palette: &[String], index: usize) -> &str {
     &palette[index % palette.len()]
 }
 
@@ -511,9 +511,6 @@ pub fn render_background(width: f64, height: f64, fill: &str, class: &str) -> Sv
     }
 }
 
-// Re-export escape_xml from svg module for convenience
-pub use crate::render::svg::escape_xml;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -574,11 +571,5 @@ mod tests {
     fn test_truncate_label() {
         assert_eq!(truncate_label("short", 10), "short");
         assert_eq!(truncate_label("this is a very long label", 10), "this is...");
-    }
-
-    #[test]
-    fn test_escape_xml() {
-        assert_eq!(escape_xml("a < b & c > d"), "a &lt; b &amp; c &gt; d");
-        assert_eq!(escape_xml("\"quoted\""), "&quot;quoted&quot;");
     }
 }
