@@ -5,7 +5,7 @@
 
 use crate::diagrams::quadrant::QuadrantDb;
 use crate::error::Result;
-use crate::render::chart_utils::title_offset;
+use crate::render::chart_utils::{self, title_offset};
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 
 /// Default chart dimensions (matching mermaid.js defaults)
@@ -59,18 +59,8 @@ pub fn render_quadrant(db: &QuadrantDb, config: &RenderConfig) -> Result<String>
     let quadrant_width = chart_width / 2.0;
     let quadrant_height = chart_height / 2.0;
 
-    // Render background
-    let bg = SvgElement::Rect {
-        x: 0.0,
-        y: 0.0,
-        width,
-        height,
-        rx: None,
-        ry: None,
-        attrs: Attrs::new()
-            .with_fill(&config.theme.background)
-            .with_class("quadrant-background"),
-    };
+    // Render background using shared utility
+    let bg = chart_utils::render_background(width, height, &config.theme.background, "quadrant-background");
     doc.add_element(bg);
 
     // Render title if present

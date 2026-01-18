@@ -8,6 +8,7 @@
 
 use crate::diagrams::timeline::{TimelineDb, TimelineTask};
 use crate::error::Result;
+use crate::render::svg::markers::create_arrowhead_marker;
 use crate::render::svg::{escape_xml, Attrs, RenderConfig, SvgDocument, SvgElement};
 
 // Mermaid-compatible layout constants
@@ -65,8 +66,8 @@ pub fn render_timeline(db: &TimelineDb, config: &RenderConfig) -> Result<String>
         doc.add_style(&generate_timeline_css(&config.theme));
     }
 
-    // Add arrowhead marker
-    add_arrowhead_marker(&mut doc);
+    // Add arrowhead marker (using shared marker from svg::markers)
+    doc.add_defs(vec![create_arrowhead_marker()]);
 
     // Render title (at top)
     if !db.title.is_empty() {
@@ -217,18 +218,6 @@ fn estimate_node_height(text: &str, max_width: f64) -> f64 {
     let line_height = FONT_SIZE * 1.1;
     let height = line_count as f64 * line_height + NODE_PADDING + 10.0;
     height.max(EVENT_HEIGHT)
-}
-
-/// Add arrowhead marker definition
-fn add_arrowhead_marker(doc: &mut SvgDocument) {
-    let marker = SvgElement::Defs {
-        children: vec![SvgElement::Raw {
-            content: r#"<marker id="arrowhead" refX="5" refY="2" markerWidth="6" markerHeight="4" orient="auto">
-                <path d="M 0,0 V 4 L6,2 Z"></path>
-            </marker>"#.to_string(),
-        }],
-    };
-    doc.add_element(marker);
 }
 
 /// Render timeline with sections

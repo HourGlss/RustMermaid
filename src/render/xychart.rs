@@ -51,18 +51,8 @@ pub fn render_xychart(db: &XYChartDb, config: &RenderConfig) -> Result<String> {
     let plot_width = plot_right - plot_left;
     let plot_height = plot_bottom - plot_top;
 
-    // Render background
-    let bg = SvgElement::Rect {
-        x: 0.0,
-        y: 0.0,
-        width,
-        height,
-        rx: None,
-        ry: None,
-        attrs: Attrs::new()
-            .with_fill(&config.theme.background)
-            .with_class("xychart-background"),
-    };
+    // Render background using shared utility
+    let bg = chart_utils::render_background(width, height, &config.theme.background, "xychart-background");
     doc.add_element(bg);
 
     // Render title if present

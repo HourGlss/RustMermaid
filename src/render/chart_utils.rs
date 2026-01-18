@@ -491,6 +491,26 @@ pub fn truncate_label(label: &str, max_len: usize) -> String {
     }
 }
 
+// =============================================================================
+// Background Rendering
+// =============================================================================
+
+/// Create a background rectangle element for a chart
+///
+/// Returns an SvgElement::Rect that fills the entire chart area with the
+/// specified background color and CSS class.
+pub fn render_background(width: f64, height: f64, fill: &str, class: &str) -> SvgElement {
+    SvgElement::Rect {
+        x: 0.0,
+        y: 0.0,
+        width,
+        height,
+        rx: None,
+        ry: None,
+        attrs: Attrs::new().with_fill(fill).with_class(class),
+    }
+}
+
 // Re-export escape_xml from svg module for convenience
 pub use crate::render::svg::escape_xml;
 

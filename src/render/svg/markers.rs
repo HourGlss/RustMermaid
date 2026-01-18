@@ -93,6 +93,19 @@ pub fn create_arrow_markers(_theme: &Theme) -> Vec<SvgElement> {
     ]
 }
 
+/// Create a simple arrowhead marker used by timeline and journey diagrams
+///
+/// This creates a compact arrowhead suitable for activity/timeline lines.
+/// Returns an SvgElement::Raw containing the marker definition.
+pub fn create_arrowhead_marker() -> SvgElement {
+    SvgElement::Raw {
+        content: r#"<marker id="arrowhead" refX="5" refY="2" markerWidth="6" markerHeight="4" orient="auto">
+      <path d="M 0,0 V 4 L6,2 Z"/>
+    </marker>"#
+            .to_string(),
+    }
+}
+
 /// Get the marker URL for an edge type
 pub fn get_marker_url(edge_type: Option<&str>) -> Option<String> {
     match edge_type {

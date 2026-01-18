@@ -5,6 +5,7 @@
 
 use crate::diagrams::journey::JourneyDb;
 use crate::error::Result;
+use crate::render::svg::markers::create_arrowhead_marker;
 use crate::render::svg::{escape_xml, Attrs, RenderConfig, SvgDocument, SvgElement};
 
 // Layout configuration (matching mermaid.js defaults from config.schema.yaml)
@@ -57,8 +58,8 @@ pub fn render_journey(db: &JourneyDb, config: &RenderConfig) -> Result<String> {
         doc.add_style(&generate_journey_css(config));
     }
 
-    // Add arrow marker definition
-    doc.add_defs(vec![create_arrow_defs()]);
+    // Add arrow marker definition (using shared marker from svg::markers)
+    doc.add_defs(vec![create_arrowhead_marker()]);
 
     // Build actor color map from theme
     let theme_actor_colors = &config.theme.journey_actor_colors;
@@ -96,16 +97,6 @@ pub fn render_journey(db: &JourneyDb, config: &RenderConfig) -> Result<String> {
     doc.add_edge_path(activity_line);
 
     Ok(doc.to_string())
-}
-
-/// Create arrow marker definition
-fn create_arrow_defs() -> SvgElement {
-    SvgElement::Raw {
-        content: r#"<marker id="arrowhead" refX="5" refY="2" markerWidth="6" markerHeight="4" orient="auto">
-      <path d="M 0,0 V 4 L6,2 Z"/>
-    </marker>"#
-            .to_string(),
-    }
 }
 
 /// Render the actor legend on the left side
