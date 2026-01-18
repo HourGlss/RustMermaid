@@ -291,6 +291,7 @@ fn render_sections_and_tasks(
 }
 
 /// Render a section header
+#[allow(clippy::too_many_arguments)]
 fn render_section(
     text: &str,
     x: f64,
@@ -337,6 +338,7 @@ fn render_section(
 }
 
 /// Render a task with its face and actor indicators
+#[allow(clippy::too_many_arguments)]
 fn render_task(
     task: &crate::diagrams::journey::JourneyTask,
     x: f64,
