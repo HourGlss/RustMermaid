@@ -4,6 +4,7 @@ use std::f64::consts::PI;
 
 use crate::diagrams::pie::PieDb;
 use crate::error::Result;
+use crate::render::chart_utils::{self, LegendConfig, LegendItem};
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 
 /// Render a pie chart to SVG
@@ -197,92 +198,34 @@ pub fn render_pie(db: &PieDb, config: &RenderConfig) -> Result<String> {
 
     // Build legend items in ORIGINAL input order (not sorted)
     // Include the raw value for showData display
-    let legend_items: Vec<(String, String, f64, f64)> = sections_vec
+    let show_data = db.get_show_data();
+    let legend_items: Vec<LegendItem> = sections_vec
         .iter()
         .enumerate()
         .map(|(i, (label, value))| {
             let color = colors[i % colors.len()];
-            let percentage = *value / total;
-            (color.to_string(), label.clone(), percentage, *value)
+            let mut item = LegendItem::new(label.clone(), color.to_string());
+            if show_data {
+                // Format value: use integer if whole number, otherwise keep decimal
+                let value_str = if value.fract() == 0.0 {
+                    format!("{}", *value as i64)
+                } else {
+                    format!("{}", value)
+                };
+                item = item.with_extra(value_str);
+            }
+            item
         })
         .collect();
 
-    // Render legend
-    let legend_group = render_legend(
-        &legend_items,
-        legend_x,
-        legend_y,
-        legend_item_height,
-        legend_box_size,
-        db.get_show_data(),
-    );
+    // Render legend using shared utility
+    let legend_config = LegendConfig::new(legend_x, legend_y)
+        .with_box_size(legend_box_size)
+        .with_item_height(legend_item_height);
+    let legend_group = chart_utils::render_legend(&legend_items, &legend_config);
     doc.add_element(legend_group);
 
     Ok(doc.to_string())
-}
-
-/// Render a legend for the pie chart
-/// Note: Legend shapes (rects) are rendered before text to ensure correct z-order
-fn render_legend(
-    items: &[(String, String, f64, f64)], // (color, label, percentage, value)
-    x: f64,
-    y: f64,
-    item_height: f64,
-    box_size: f64,
-    show_data: bool,
-) -> SvgElement {
-    let mut children = Vec::new();
-
-    // First pass: render all colored boxes (shapes before text for z-order)
-    for (i, (color, _, _, _)) in items.iter().enumerate() {
-        let item_y = y + (i as f64) * item_height;
-
-        // Colored box with matching stroke (mermaid.js style)
-        children.push(SvgElement::Rect {
-            x,
-            y: item_y,
-            width: box_size,
-            height: box_size,
-            rx: None,
-            ry: None,
-            attrs: Attrs::new()
-                .with_fill(color)
-                .with_stroke(color)
-                .with_class("legend"),
-        });
-    }
-
-    // Second pass: render all text labels
-    for (i, (_, label, _percentage, value)) in items.iter().enumerate() {
-        let item_y = y + (i as f64) * item_height;
-
-        // Label text - include value in brackets when showData is set (mermaid.js style)
-        // mermaid.js uses x="22" relative to rect x (i.e., box_size + 4)
-        let display_label = if show_data {
-            // Format value: use integer if whole number, otherwise keep decimal
-            let value_str = if value.fract() == 0.0 {
-                format!("{}", *value as i64)
-            } else {
-                format!("{}", value)
-            };
-            format!("{} [{}]", label, value_str)
-        } else {
-            label.clone()
-        };
-        children.push(SvgElement::Text {
-            x: x + box_size + 4.0,
-            y: item_y + 14.0, // mermaid.js uses y="14" relative to rect
-            content: display_label,
-            attrs: Attrs::new()
-                .with_class("legend")
-                .with_attr("font-size", "17"),
-        });
-    }
-
-    SvgElement::Group {
-        children,
-        attrs: Attrs::new().with_class("legend"),
-    }
 }
 
 fn generate_pie_css(theme: &crate::render::svg::Theme) -> String {

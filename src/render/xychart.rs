@@ -4,6 +4,7 @@
 
 use crate::diagrams::xychart::{ChartOrientation, Plot, PlotType, XAxisData, XYChartDb, YAxisData};
 use crate::error::Result;
+use crate::render::chart_utils::{self, title_offset as calc_title_offset};
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 
 /// Default chart dimensions (matching mermaid.js defaults)
@@ -13,18 +14,6 @@ const PADDING: f64 = 50.0;
 const TITLE_HEIGHT: f64 = 30.0;
 const AXIS_LABEL_PADDING: f64 = 40.0;
 const TICK_LENGTH: f64 = 5.0;
-
-/// XY Chart color palette (matching mermaid.js default theme)
-const PLOT_COLORS: &[&str] = &[
-    "#4C78A8", // Blue
-    "#F58518", // Orange
-    "#E45756", // Red
-    "#72B7B2", // Teal
-    "#54A24B", // Green
-    "#EECA3B", // Yellow
-    "#B279A2", // Purple
-    "#FF9DA6", // Pink
-];
 
 /// Chart area dimensions and data range
 struct ChartArea {
@@ -52,11 +41,7 @@ pub fn render_xychart(db: &XYChartDb, config: &RenderConfig) -> Result<String> {
     }
 
     // Calculate plot area
-    let title_offset = if !db.title.is_empty() {
-        TITLE_HEIGHT + 10.0
-    } else {
-        0.0
-    };
+    let title_offset = calc_title_offset(&db.title, TITLE_HEIGHT + 10.0);
 
     let plot_left = PADDING + AXIS_LABEL_PADDING;
     let plot_right = width - PADDING;
@@ -159,7 +144,7 @@ fn render_vertical_chart(
 
     // Render plots
     for (plot_idx, plot) in db.get_plots().iter().enumerate() {
-        let color = PLOT_COLORS[plot_idx % PLOT_COLORS.len()];
+        let color = chart_utils::get_chart_color(plot_idx);
 
         match plot.plot_type {
             PlotType::Bar => render_vertical_bars(doc, plot, color, area),
@@ -203,7 +188,7 @@ fn render_horizontal_chart(
 
     // Render plots
     for (plot_idx, plot) in db.get_plots().iter().enumerate() {
-        let color = PLOT_COLORS[plot_idx % PLOT_COLORS.len()];
+        let color = chart_utils::get_chart_color(plot_idx);
 
         match plot.plot_type {
             PlotType::Bar => render_horizontal_bars(doc, plot, color, area),
@@ -754,22 +739,14 @@ fn get_x_axis_categories(db: &XYChartDb, num_points: usize) -> Vec<String> {
     (1..=num_points).map(|i| i.to_string()).collect()
 }
 
-/// Format a number for display
+/// Format a number for display (delegate to shared utility)
 fn format_number(value: f64) -> String {
-    if value.fract() == 0.0 || value.abs() >= 1000.0 {
-        format!("{:.0}", value)
-    } else {
-        format!("{:.1}", value)
-    }
+    chart_utils::format_number(value)
 }
 
-/// Truncate a label if too long
+/// Truncate a label if too long (delegate to shared utility)
 fn truncate_label(label: &str, max_len: usize) -> String {
-    if label.len() > max_len {
-        format!("{}...", &label[..max_len - 3])
-    } else {
-        label.to_string()
-    }
+    chart_utils::truncate_label(label, max_len)
 }
 
 /// Generate CSS for XY chart styling

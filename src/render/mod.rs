@@ -5,6 +5,7 @@
 mod architecture;
 mod block;
 mod c4;
+pub(crate) mod chart_utils;
 mod class;
 mod er;
 mod flowchart;

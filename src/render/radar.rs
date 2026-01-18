@@ -7,15 +7,12 @@ use std::f64::consts::PI;
 
 use crate::diagrams::radar::{Graticule, RadarDb};
 use crate::error::Result;
+use crate::render::chart_utils::{self, ChartMargins, LegendConfig, LegendItem};
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 
 /// Default radar chart dimensions (matching mermaid.js defaults)
 const DEFAULT_WIDTH: f64 = 400.0;
 const DEFAULT_HEIGHT: f64 = 400.0;
-const MARGIN_TOP: f64 = 50.0;
-const MARGIN_RIGHT: f64 = 50.0;
-const MARGIN_BOTTOM: f64 = 50.0;
-const MARGIN_LEFT: f64 = 50.0;
 
 /// Axis scale and label factors
 const AXIS_SCALE_FACTOR: f64 = 0.85;
@@ -24,26 +21,15 @@ const AXIS_LABEL_FACTOR: f64 = 1.1;
 /// Curve tension for smooth curves (Catmull-Rom spline)
 const CURVE_TENSION: f64 = 0.167;
 
-/// Radar colors (matching mermaid.js theme)
-const RADAR_COLORS: &[&str] = &[
-    "#4C78A8", // Blue
-    "#F58518", // Orange
-    "#E45756", // Red
-    "#72B7B2", // Teal
-    "#54A24B", // Green
-    "#EECA3B", // Yellow
-    "#B279A2", // Purple
-    "#FF9DA6", // Pink
-];
-
 /// Render a radar chart to SVG
 pub fn render_radar(db: &RadarDb, config: &RenderConfig) -> Result<String> {
     let mut doc = SvgDocument::new();
 
     let chart_width = DEFAULT_WIDTH;
     let chart_height = DEFAULT_HEIGHT;
-    let total_width = chart_width + MARGIN_LEFT + MARGIN_RIGHT;
-    let total_height = chart_height + MARGIN_TOP + MARGIN_BOTTOM;
+    let margins = ChartMargins::default();
+    let total_width = chart_width + margins.horizontal_total();
+    let total_height = chart_height + margins.vertical_total();
 
     doc.set_size(total_width, total_height);
 
@@ -53,8 +39,8 @@ pub fn render_radar(db: &RadarDb, config: &RenderConfig) -> Result<String> {
         doc.add_style(&generate_radar_css(&config.theme));
     }
 
-    let center_x = MARGIN_LEFT + chart_width / 2.0;
-    let center_y = MARGIN_TOP + chart_height / 2.0;
+    let center_x = margins.left + chart_width / 2.0;
+    let center_y = margins.top + chart_height / 2.0;
     let radius = chart_width.min(chart_height) / 2.0;
 
     let axes = db.get_axes();
@@ -103,20 +89,18 @@ pub fn render_radar(db: &RadarDb, config: &RenderConfig) -> Result<String> {
         draw_legend(&mut main_group_children, curves, chart_width, chart_height);
     }
 
-    // Draw title
+    // Draw title using shared utility
     if !title.is_empty() {
-        let title_elem = SvgElement::Text {
+        let title_config = chart_utils::TitleConfig {
             x: 0.0,
-            y: -(chart_height / 2.0) - MARGIN_TOP + 20.0,
-            content: title.to_string(),
-            attrs: Attrs::new()
-                .with_attr("text-anchor", "middle")
-                .with_class("radarTitle")
-                .with_attr("font-size", "16")
-                .with_attr("font-weight", "bold")
-                .with_fill(&config.theme.primary_text_color),
+            y: -(chart_height / 2.0) - margins.top + 20.0,
+            font_size: 16.0,
+            class: "radarTitle".to_string(),
+            text_anchor: "middle".to_string(),
         };
-        main_group_children.push(title_elem);
+        if let Some(title_elem) = chart_utils::render_title(title, &title_config, &config.theme.primary_text_color) {
+            main_group_children.push(title_elem);
+        }
     }
 
     // Wrap in centered group
@@ -249,7 +233,7 @@ fn draw_curves(
             continue;
         }
 
-        let color = RADAR_COLORS[index % RADAR_COLORS.len()];
+        let color = chart_utils::get_chart_color(index);
 
         // Compute points for the curve
         let points: Vec<(f64, f64)> = curve
@@ -346,47 +330,34 @@ fn closed_round_curve(points: &[(f64, f64)], tension: f64) -> String {
     d
 }
 
-/// Draw the legend
+/// Draw the legend using shared utility
 fn draw_legend(
     children: &mut Vec<SvgElement>,
     curves: &[crate::diagrams::radar::RadarCurve],
     chart_width: f64,
     chart_height: f64,
 ) {
-    let legend_x = (chart_width / 2.0 + MARGIN_RIGHT) * 3.0 / 4.0;
-    let legend_y = -(chart_height / 2.0 + MARGIN_TOP) * 3.0 / 4.0;
-    let line_height = 20.0;
+    let margins = ChartMargins::default();
+    let legend_x = (chart_width / 2.0 + margins.right) * 3.0 / 4.0;
+    let legend_y = -(chart_height / 2.0 + margins.top) * 3.0 / 4.0;
 
-    for (index, curve) in curves.iter().enumerate() {
-        let item_y = legend_y + (index as f64) * line_height;
-        let color = RADAR_COLORS[index % RADAR_COLORS.len()];
+    // Build legend items
+    let legend_items: Vec<LegendItem> = curves
+        .iter()
+        .enumerate()
+        .map(|(index, curve)| {
+            LegendItem::new(curve.label.clone(), chart_utils::get_chart_color(index).to_string())
+        })
+        .collect();
 
-        // Colored box
-        let box_elem = SvgElement::Rect {
-            x: legend_x,
-            y: item_y,
-            width: 12.0,
-            height: 12.0,
-            rx: None,
-            ry: None,
-            attrs: Attrs::new()
-                .with_fill(color)
-                .with_class(&format!("radarLegendBox-{}", index)),
-        };
-        children.push(box_elem);
+    // Use shared legend rendering with custom config for radar
+    let legend_config = LegendConfig::new(legend_x, legend_y)
+        .with_box_size(12.0)
+        .with_item_height(20.0)
+        .with_font_size(12.0);
 
-        // Label text
-        let text_elem = SvgElement::Text {
-            x: legend_x + 16.0,
-            y: item_y,
-            content: curve.label.clone(),
-            attrs: Attrs::new()
-                .with_attr("dominant-baseline", "hanging")
-                .with_class("radarLegendText")
-                .with_attr("font-size", "12"),
-        };
-        children.push(text_elem);
-    }
+    let legend_elem = chart_utils::render_legend(&legend_items, &legend_config);
+    children.push(legend_elem);
 }
 
 /// Generate radar-specific CSS
