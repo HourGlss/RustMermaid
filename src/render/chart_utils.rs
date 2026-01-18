@@ -491,14 +491,8 @@ pub fn truncate_label(label: &str, max_len: usize) -> String {
     }
 }
 
-/// Escape special XML characters
-pub fn escape_xml(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
-}
+// Re-export escape_xml from svg module for convenience
+pub use crate::render::svg::escape_xml;
 
 #[cfg(test)]
 mod tests {

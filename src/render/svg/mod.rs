@@ -11,7 +11,7 @@ mod theme;
 
 pub use color::Color;
 pub use document::SvgDocument;
-pub use elements::{Attrs, SvgElement};
+pub use elements::{escape_xml, Attrs, SvgElement};
 pub use structure::SvgStructure;
 pub use theme::{Theme, ThemeBuilder};
 
@@ -905,14 +905,6 @@ const ARCH_ICON_UNKNOWN: &str = r#"<g><rect width="80" height="80" style="fill: 
 
 const ARCH_ICON_BLANK: &str =
     r#"<g><rect width="80" height="80" style="fill: #087ebf; stroke-width: 0px;"/></g>"#;
-
-fn escape_xml(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
-}
 
 /// Sanitize CSS to prevent script injection and other attacks
 ///

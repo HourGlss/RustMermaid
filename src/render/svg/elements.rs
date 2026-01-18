@@ -92,7 +92,14 @@ impl Attrs {
 }
 
 /// Escape special XML characters
-fn escape_xml(s: &str) -> String {
+///
+/// Converts characters that have special meaning in XML to their entity equivalents:
+/// - `&` → `&amp;`
+/// - `<` → `&lt;`
+/// - `>` → `&gt;`
+/// - `"` → `&quot;`
+/// - `'` → `&apos;`
+pub fn escape_xml(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")

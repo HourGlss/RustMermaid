@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use crate::diagrams::sankey::SankeyDb;
 use crate::error::Result;
-use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
+use crate::render::svg::{escape_xml, Attrs, RenderConfig, SvgDocument, SvgElement};
 
 /// Default dimensions matching mermaid.js
 const DEFAULT_WIDTH: f64 = 600.0;
@@ -21,15 +21,6 @@ const NODE_WIDTH: f64 = 10.0;
 const NODE_PADDING: f64 = 25.0;
 const LABEL_PADDING: f64 = 6.0;
 const FONT_SIZE: f64 = 14.0;
-
-/// Escape special XML characters for use in SVG text content
-fn escape_xml(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
-}
 
 /// Computed node position and dimensions
 #[derive(Debug, Clone)]

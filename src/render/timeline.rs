@@ -8,7 +8,7 @@
 
 use crate::diagrams::timeline::{TimelineDb, TimelineTask};
 use crate::error::Result;
-use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
+use crate::render::svg::{escape_xml, Attrs, RenderConfig, SvgDocument, SvgElement};
 
 // Mermaid-compatible layout constants
 const LEFT_MARGIN: f64 = 100.0; // Match reference (starts content at x=200 from viewBox x=100)
@@ -651,15 +651,6 @@ fn wrap_text(text: &str, cx: f64, cy: f64, max_width: f64) -> SvgElement {
             attrs: Attrs::new(),
         }
     }
-}
-
-/// Escape XML special characters
-fn escape_xml(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
 }
 
 /// Estimate text width in pixels using weighted character widths

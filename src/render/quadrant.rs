@@ -5,6 +5,7 @@
 
 use crate::diagrams::quadrant::QuadrantDb;
 use crate::error::Result;
+use crate::render::chart_utils::title_offset;
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 
 /// Default chart dimensions (matching mermaid.js defaults)
@@ -43,15 +44,11 @@ pub fn render_quadrant(db: &QuadrantDb, config: &RenderConfig) -> Result<String>
     }
 
     // Calculate layout areas
-    let title_offset = if !db.title.is_empty() {
-        TITLE_HEIGHT
-    } else {
-        0.0
-    };
+    let title_off = title_offset(&db.title, TITLE_HEIGHT);
 
     // Chart area (excluding title and axis labels)
     let chart_left = PADDING + AXIS_LABEL_PADDING;
-    let chart_top = PADDING + title_offset;
+    let chart_top = PADDING + title_off;
     let chart_right = width - PADDING - AXIS_LABEL_PADDING;
     let chart_bottom = height - PADDING - AXIS_LABEL_PADDING;
 

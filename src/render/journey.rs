@@ -5,7 +5,7 @@
 
 use crate::diagrams::journey::JourneyDb;
 use crate::error::Result;
-use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
+use crate::render::svg::{escape_xml, Attrs, RenderConfig, SvgDocument, SvgElement};
 
 // Layout configuration (matching mermaid.js defaults from config.schema.yaml)
 /// Margin on the left for actor legend
@@ -671,13 +671,4 @@ fn generate_journey_css(config: &RenderConfig) -> String {
         section_css = section_css,
         actor_css = actor_css
     )
-}
-
-/// Escape special XML characters
-fn escape_xml(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
 }
