@@ -135,7 +135,10 @@ fn render_actor_legend(
         let y_pos = start_y + (i as f64) * 25.0;
 
         // Get actor color
-        let (color, pos) = actor_colors.get(actor).map(|(c, p)| (c.as_str(), *p)).unwrap_or(("#8FBC8F", 0));
+        let (color, pos) = actor_colors
+            .get(actor)
+            .map(|(c, p)| (c.as_str(), *p))
+            .unwrap_or(("#8FBC8F", 0));
 
         // Draw colored circle
         let circle = SvgElement::Circle {
@@ -411,7 +414,12 @@ fn render_task(
     let label = SvgElement::Raw {
         content: format!(
             r#"<foreignObject x="{}" y="{}" width="{}" height="{}"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table;height:100%;width:100%;"><div class="label" style="display:table-cell;text-align:center;vertical-align:middle;color:{};">{}</div></div></foreignObject>"#,
-            x, y, width, height, color, escape_xml(&task.task)
+            x,
+            y,
+            width,
+            height,
+            color,
+            escape_xml(&task.task)
         ),
     };
     children.push(label);
@@ -480,7 +488,11 @@ fn render_face(cx: f64, cy: f64, score: i32) -> SvgElement {
         );
         SvgElement::Path {
             d: path,
-            attrs: Attrs::new().with_class("mouth").with_stroke("#666").with_stroke_width(2.0).with_fill("none"),
+            attrs: Attrs::new()
+                .with_class("mouth")
+                .with_stroke("#666")
+                .with_stroke_width(2.0)
+                .with_fill("none"),
         }
     } else if score < 3 {
         // Sad face - frown arc
@@ -497,7 +509,11 @@ fn render_face(cx: f64, cy: f64, score: i32) -> SvgElement {
         );
         SvgElement::Path {
             d: path,
-            attrs: Attrs::new().with_class("mouth").with_stroke("#666").with_stroke_width(2.0).with_fill("none"),
+            attrs: Attrs::new()
+                .with_class("mouth")
+                .with_stroke("#666")
+                .with_stroke_width(2.0)
+                .with_fill("none"),
         }
     } else {
         // Neutral face - straight line

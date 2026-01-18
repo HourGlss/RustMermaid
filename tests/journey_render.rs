@@ -336,10 +336,7 @@ section Test
     let doc = parse_svg(&svg);
 
     // Should have actor classes for coloring
-    assert!(
-        has_class(&doc, "actor-0"),
-        "Should have actor-0 class"
-    );
+    assert!(has_class(&doc, "actor-0"), "Should have actor-0 class");
 }
 
 // ============================================================================
