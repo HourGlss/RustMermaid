@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_calculate_range() {
-        let values = vec![1.0, 5.0, 3.0, 2.0];
+        let values = [1.0, 5.0, 3.0, 2.0];
         let (min, max) = calculate_range(values.iter()).unwrap();
         assert_eq!(min, 1.0);
         assert_eq!(max, 5.0);

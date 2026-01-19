@@ -1943,6 +1943,7 @@ mod tests {
             edge_geometry: EdgeGeometry::default(),
             font_analysis: FontAnalysis::default(),
             color_analysis: ColorAnalysis::default(),
+            raw_svg: String::new(),
         }
     }
 
