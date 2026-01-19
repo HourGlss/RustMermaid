@@ -2958,6 +2958,9 @@ fn test_state_multiple_composites_aligned() {
         let composite_start = svg.find(&composite_marker)?;
         let relevant_section = &svg[composite_start..composite_start.saturating_add(600)];
 
+        // Pre-compile regex outside the loop
+        let y_pattern = regex::Regex::new(r#"y="([0-9.]+)""#).ok()?;
+
         // Find line containing state-composite-outer
         let y_pattern = regex::Regex::new(r#"y="([0-9.]+)""#).ok()?;
         for line in relevant_section.lines() {
@@ -3058,6 +3061,10 @@ fn test_state_fork_parallel_order_matches_definition() {
         let state_start = svg.find(&state_marker)?;
         let relevant_section = &svg[state_start..state_start.saturating_add(500)];
 
+        // Pre-compile regex outside the loop
+        let x_pattern = regex::Regex::new(r#"x="([0-9.]+)""#).ok()?;
+        let w_pattern = regex::Regex::new(r#"width="([0-9.]+)""#).ok()?;
+
         // Find rect and extract x + width/2
         let x_pattern = regex::Regex::new(r#"x="([0-9.]+)""#).ok()?;
         let w_pattern = regex::Regex::new(r#"width="([0-9.]+)""#).ok()?;
@@ -3120,8 +3127,10 @@ fn test_state_nested_composite_centered_in_parent() {
         let composite_start = svg.find(&composite_marker)?;
         let relevant_section = &svg[composite_start..composite_start.saturating_add(600)];
 
+        // Pre-compile regex outside the loop
         let x_pattern = regex::Regex::new(r#"x="([0-9.]+)""#).ok()?;
         let w_pattern = regex::Regex::new(r#"width="([0-9.]+)""#).ok()?;
+
         for line in relevant_section.lines() {
             if line.contains("state-composite-outer") {
                 if let (Some(x_caps), Some(w_caps)) =
@@ -3196,8 +3205,10 @@ fn test_state_complex_executing_centered_in_processing() {
         let composite_start = svg.find(&composite_marker)?;
         let relevant_section = &svg[composite_start..composite_start.saturating_add(600)];
 
+        // Pre-compile regex outside the loop
         let x_pattern = regex::Regex::new(r#"x="([0-9.]+)""#).ok()?;
         let w_pattern = regex::Regex::new(r#"width="([0-9.]+)""#).ok()?;
+
         for line in relevant_section.lines() {
             if line.contains("state-composite-outer") {
                 if let (Some(x_caps), Some(w_caps)) =

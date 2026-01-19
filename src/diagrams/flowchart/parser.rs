@@ -955,7 +955,6 @@ end"#;
         use super::*;
 
         #[test]
-        #[ignore = "TODO: Add comment support (%%) to grammar"]
         fn should_handle_trailing_whitespaces_after_statements() {
             let input = "graph TD;\n\n\n %% Comment\n A-->B; \n B-->C;";
             let result = parse(input);
@@ -972,7 +971,6 @@ end"#;
         }
 
         #[test]
-        #[ignore = "TODO: Fix identifier parsing to allow 'end' prefix"]
         fn should_handle_node_names_with_end_substring() {
             let input = "graph TD\nendpoint --> sender";
             let result = parse(input);
@@ -1084,7 +1082,6 @@ end"#;
         }
 
         #[test]
-        #[ignore = "TODO: Add quoted subgraph title support"]
         fn should_allow_numbers_as_labels() {
             let input = r#"graph TB;subgraph "number as labels";1;end;"#;
             let result = parse(input);
@@ -1135,7 +1132,6 @@ A[Hard] -->|Text| B(Round)"#;
         use crate::diagrams::flowchart::types::EdgeStroke;
 
         #[test]
-        #[ignore = "TODO: Add open-ended edge (---) support to grammar"]
         fn should_handle_open_ended_edges() {
             let input = "graph TD;A---B;";
             let result = parse(input);
@@ -1148,7 +1144,6 @@ A[Hard] -->|Text| B(Round)"#;
         }
 
         #[test]
-        #[ignore = "TODO: Add cross arrow (--x) support to grammar"]
         fn should_handle_cross_ended_edges() {
             let input = "graph TD;A--xB;";
             let result = parse(input);
@@ -1158,7 +1153,6 @@ A[Hard] -->|Text| B(Round)"#;
         }
 
         #[test]
-        #[ignore = "TODO: Add circle arrow (--o) support to grammar"]
         fn should_handle_circle_ended_edges() {
             let input = "graph TD;A--oB;";
             let result = parse(input);
@@ -1168,7 +1162,6 @@ A[Hard] -->|Text| B(Round)"#;
         }
 
         #[test]
-        #[ignore = "TODO: Add pipe text (|text|) edge support to grammar"]
         fn should_handle_multiple_edges_with_text() {
             let input = "graph TD;A---|This is the 123 s text|B;\nA---|This is the second edge|B;";
             let result = parse(input);
@@ -1971,7 +1964,6 @@ A[\LeanLeft\]"#;
         }
 
         #[test]
-        #[ignore = "TODO: Add comment support (%%) to grammar"]
         fn test_cypress_comments() {
             // From Cypress test 15: should render a simple flowchart with comments
             let input = r#"graph TD
@@ -2119,7 +2111,6 @@ A[\LeanLeft\]"#;
             }
 
             #[test]
-            #[ignore = "TODO: Parser treats 'end' prefix as keyword, needs grammar fix"]
             fn should_handle_node_names_with_end_substring() {
                 let input = "graph TD\nendpoint --> sender";
                 let result = parse(input);
@@ -2387,7 +2378,6 @@ A[\LeanLeft\]"#;
             }
 
             #[test]
-            #[ignore = "TODO: Edge length calculation differs from mermaid (we count total, mermaid counts extra)"]
             fn should_handle_normal_edge_length_1() {
                 let input = "graph TD;\nA --- B;";
                 let result = parse(input);
@@ -2397,7 +2387,6 @@ A[\LeanLeft\]"#;
             }
 
             #[test]
-            #[ignore = "TODO: Edge length calculation differs from mermaid (we count total, mermaid counts extra)"]
             fn should_handle_normal_edge_length_2() {
                 let input = "graph TD;\nA ---- B;";
                 let result = parse(input);
@@ -2434,7 +2423,6 @@ A[\LeanLeft\]"#;
             }
 
             #[test]
-            #[ignore = "TODO: Edge length calculation differs from mermaid (we count total, mermaid counts extra)"]
             fn should_handle_thick_edge_length_1() {
                 let input = "graph TD;\nA === B;";
                 let result = parse(input);

@@ -181,29 +181,140 @@ fn calculate_block_size(block: &Block) -> (f64, f64) {
     (width, height)
 }
 
-/// Layout blocks in a grid
+/// Layout blocks in a grid with proper nesting for composite blocks
 fn layout_blocks(
     blocks: &HashMap<String, Block>,
     sizes: &HashMap<String, (f64, f64)>,
     columns: usize,
 ) -> Vec<PositionedBlock> {
+    // First, build parent-child relationships
+    let mut children_by_parent: HashMap<String, Vec<&str>> = HashMap::new();
+    for (id, block) in blocks.iter() {
+        if let Some(ref parent_id) = block.parent_id {
+            children_by_parent
+                .entry(parent_id.clone())
+                .or_default()
+                .push(id);
+        }
+    }
+
+    // Calculate sizes for composite blocks based on their children
+    let mut effective_sizes: HashMap<String, (f64, f64)> = sizes.clone();
+    for (id, block) in blocks.iter() {
+        if block.block_type == BlockType::Composite {
+            if let Some(child_ids) = children_by_parent.get(id) {
+                let (comp_w, comp_h) =
+                    calculate_composite_size(child_ids, blocks, &effective_sizes);
+                effective_sizes.insert(id.clone(), (comp_w, comp_h));
+            }
+        }
+    }
+
+    // Layout root-level blocks only
+    let root_blocks: Vec<(&str, &Block)> = blocks
+        .iter()
+        .filter(|(_, b)| b.parent_id.is_none())
+        .map(|(id, b)| (id.as_str(), b))
+        .collect();
+
+    let mut positioned = layout_block_list(&root_blocks, &effective_sizes, columns, 0.0, 0.0);
+
+    // Collect composite info for child positioning
+    let composite_info: Vec<_> = positioned
+        .iter()
+        .filter(|b| b.block_type == BlockType::Composite)
+        .map(|b| (b.id.clone(), b.x, b.y))
+        .collect();
+
+    // Now position children inside their parent composites
+    for (composite_id, comp_x, comp_y) in composite_info {
+        if let Some(child_ids) = children_by_parent.get(&composite_id) {
+            let child_blocks: Vec<(&str, &Block)> = child_ids
+                .iter()
+                .filter_map(|id| blocks.get(*id).map(|b| (*id, b)))
+                .collect();
+
+            // Get columns for this composite (default to auto based on children count)
+            let child_columns = child_ids.len().max(1);
+
+            // Layout children inside composite with padding
+            let padding = BLOCK_PADDING;
+            let child_positioned = layout_block_list(
+                &child_blocks,
+                &effective_sizes,
+                child_columns,
+                comp_x + padding,
+                comp_y + padding,
+            );
+
+            positioned.extend(child_positioned);
+        }
+    }
+
+    positioned
+}
+
+/// Calculate size needed for a composite block to contain its children
+fn calculate_composite_size(
+    child_ids: &[&str],
+    blocks: &HashMap<String, Block>,
+    sizes: &HashMap<String, (f64, f64)>,
+) -> (f64, f64) {
+    let padding = BLOCK_PADDING;
+    let mut total_width: f64 = 0.0;
+    let mut max_height: f64 = 0.0;
+
+    for id in child_ids {
+        if let Some(block) = blocks.get(*id) {
+            if block.block_type == BlockType::Space {
+                total_width += MIN_BLOCK_WIDTH + BLOCK_SPACING;
+                continue;
+            }
+            let (w, h) = sizes
+                .get(*id)
+                .cloned()
+                .unwrap_or((MIN_BLOCK_WIDTH, MIN_BLOCK_HEIGHT));
+            total_width += w + BLOCK_SPACING;
+            max_height = max_height.max(h);
+        }
+    }
+
+    // Remove trailing spacing, add padding
+    if total_width > BLOCK_SPACING {
+        total_width -= BLOCK_SPACING;
+    }
+
+    (total_width + padding * 2.0, max_height + padding * 2.0)
+}
+
+/// Layout a list of blocks in a grid starting at given offset
+fn layout_block_list(
+    block_list: &[(&str, &Block)],
+    sizes: &HashMap<String, (f64, f64)>,
+    columns: usize,
+    start_x: f64,
+    start_y: f64,
+) -> Vec<PositionedBlock> {
     let mut positioned = Vec::new();
-    let mut y = 0.0;
+    let mut y = start_y;
     let mut col = 0;
     let mut row_height = 0.0_f64;
+    let mut current_x = start_x;
 
-    // Collect blocks and sort by ID for consistent ordering
-    let mut block_list: Vec<_> = blocks.iter().collect();
-    block_list.sort_by(|a, b| a.0.cmp(b.0));
+    // Sort by ID for consistent ordering
+    let mut sorted_list: Vec<_> = block_list.to_vec();
+    sorted_list.sort_by(|a, b| a.0.cmp(b.0));
 
-    for (id, block) in block_list {
+    for (id, block) in sorted_list {
         // Skip space blocks in rendering (they still affect layout)
         if block.block_type == BlockType::Space {
             let span = block.width_in_columns.unwrap_or(1);
             for _ in 0..span {
+                current_x += MIN_BLOCK_WIDTH + BLOCK_SPACING;
                 col += 1;
                 if col >= columns {
                     col = 0;
+                    current_x = start_x;
                     y += row_height + BLOCK_SPACING;
                     row_height = 0.0;
                 }
@@ -225,12 +336,10 @@ fn layout_blocks(
         // Check if we need to wrap to next row
         if col + span > columns && col > 0 {
             col = 0;
+            current_x = start_x;
             y += row_height + BLOCK_SPACING;
             row_height = 0.0;
         }
-
-        // Calculate x position based on column
-        let x = (col as f64) * (MIN_BLOCK_WIDTH + BLOCK_SPACING);
 
         // Adjust width for column span
         let block_width = if span > 1 {
@@ -240,10 +349,10 @@ fn layout_blocks(
         };
 
         positioned.push(PositionedBlock {
-            id: id.clone(),
-            label: block.label.clone().unwrap_or_else(|| id.clone()),
+            id: id.to_string(),
+            label: block.label.clone().unwrap_or_else(|| id.to_string()),
             block_type: block.block_type.clone(),
-            x,
+            x: current_x,
             y,
             width: block_width,
             height,
@@ -252,12 +361,15 @@ fn layout_blocks(
             classes: block.classes.clone(),
         });
 
+        // Advance x position by actual block width
+        current_x += block_width + BLOCK_SPACING;
         row_height = row_height.max(height);
         col += span;
 
         // Wrap to next row if needed
         if col >= columns {
             col = 0;
+            current_x = start_x;
             y += row_height + BLOCK_SPACING;
             row_height = 0.0;
         }
@@ -443,10 +555,34 @@ fn render_block_node(block: &PositionedBlock, _config: &RenderConfig) -> SvgElem
     }
 }
 
+/// Build inline style string from block styles
+fn build_inline_style(styles: &[String]) -> Option<String> {
+    if styles.is_empty() {
+        return None;
+    }
+    // Join styles with semicolons
+    let style_str = styles.join(";");
+    if style_str.is_empty() {
+        None
+    } else {
+        Some(style_str)
+    }
+}
+
 /// Render block shape based on type
 fn render_block_shape(block: &PositionedBlock) -> SvgElement {
     let w = block.width;
     let h = block.height;
+    let inline_style = build_inline_style(&block.styles);
+
+    // Helper to create attrs with optional inline style
+    let make_attrs = |class: &str| {
+        let mut attrs = Attrs::new().with_class(class);
+        if let Some(ref style) = inline_style {
+            attrs = attrs.with_attr("style", style);
+        }
+        attrs
+    };
 
     match block.block_type {
         BlockType::Square => SvgElement::Rect {
@@ -456,7 +592,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
             height: h,
             rx: None,
             ry: None,
-            attrs: Attrs::new().with_class("node-bkg"),
+            attrs: make_attrs("node-bkg"),
         },
         BlockType::Round => SvgElement::Rect {
             x: 0.0,
@@ -465,7 +601,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
             height: h,
             rx: Some(BLOCK_PADDING),
             ry: Some(BLOCK_PADDING),
-            attrs: Attrs::new().with_class("node-bkg"),
+            attrs: make_attrs("node-bkg"),
         },
         BlockType::Circle => {
             let radius = w.min(h) / 2.0;
@@ -473,7 +609,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
                 cx: w / 2.0,
                 cy: h / 2.0,
                 r: radius,
-                attrs: Attrs::new().with_class("node-bkg"),
+                attrs: make_attrs("node-bkg"),
             }
         }
         BlockType::DoubleCircle => {
@@ -484,7 +620,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
                 cx: w / 2.0,
                 cy: h / 2.0,
                 r: outer_radius,
-                attrs: Attrs::new().with_class("node-bkg"),
+                attrs: make_attrs("node-bkg"),
             };
             let inner = SvgElement::Circle {
                 cx: w / 2.0,
@@ -503,7 +639,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
             let points = format!("{},{} {},{} {},{} {},{}", cx, 0.0, w, cy, cx, h, 0.0, cy);
             SvgElement::PolygonStr {
                 points,
-                attrs: Attrs::new().with_class("node-bkg"),
+                attrs: make_attrs("node-bkg"),
             }
         }
         BlockType::Hexagon => {
@@ -525,7 +661,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
             );
             SvgElement::PolygonStr {
                 points,
-                attrs: Attrs::new().with_class("node-bkg"),
+                attrs: make_attrs("node-bkg"),
             }
         }
         BlockType::Stadium => {
@@ -537,7 +673,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
                 height: h,
                 rx: Some(r),
                 ry: Some(r),
-                attrs: Attrs::new().with_class("node-bkg"),
+                attrs: make_attrs("node-bkg"),
             }
         }
         BlockType::Subroutine => {
@@ -549,7 +685,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
                 height: h,
                 rx: None,
                 ry: None,
-                attrs: Attrs::new().with_class("node-bkg"),
+                attrs: make_attrs("node-bkg"),
             };
             let inner = SvgElement::Rect {
                 x: 5.0,
@@ -591,7 +727,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
             );
             SvgElement::Path {
                 d: path,
-                attrs: Attrs::new().with_class("node-bkg"),
+                attrs: make_attrs("node-bkg"),
             }
         }
         BlockType::LeanRight | BlockType::Trapezoid => {
@@ -609,7 +745,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
             );
             SvgElement::PolygonStr {
                 points,
-                attrs: Attrs::new().with_class("node-bkg"),
+                attrs: make_attrs("node-bkg"),
             }
         }
         BlockType::LeanLeft | BlockType::InvTrapezoid => {
@@ -627,7 +763,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
             );
             SvgElement::PolygonStr {
                 points,
-                attrs: Attrs::new().with_class("node-bkg"),
+                attrs: make_attrs("node-bkg"),
             }
         }
         BlockType::BlockArrow => {
@@ -647,7 +783,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
             );
             SvgElement::Path {
                 d: path,
-                attrs: Attrs::new().with_class("node-bkg"),
+                attrs: make_attrs("node-bkg"),
             }
         }
         BlockType::Composite => {
@@ -659,7 +795,7 @@ fn render_block_shape(block: &PositionedBlock) -> SvgElement {
                 height: h,
                 rx: None,
                 ry: None,
-                attrs: Attrs::new().with_class("block-composite"),
+                attrs: make_attrs("block-composite"),
             }
         }
         BlockType::Space | BlockType::Edge => {
