@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fmt::Write;
 
 use crate::layout::Point;
+use crate::render::chart_utils;
 
 /// SVG attributes
 #[derive(Debug, Clone, Default)]
@@ -514,10 +515,7 @@ impl SvgElement {
                 content,
                 attrs,
             } => {
-                let normalized = content
-                    .replace("<br />", "\n")
-                    .replace("<br/>", "\n")
-                    .replace("<br>", "\n");
+                let normalized = chart_utils::normalize_br_tags(content);
                 if normalized.contains('\n') {
                     let lines: Vec<&str> = normalized.split('\n').collect();
                     let num_lines = lines.len();

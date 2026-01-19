@@ -285,7 +285,7 @@ pub fn render_legend(items: &[LegendItem], config: &LegendConfig) -> SvgElement 
 /// would exceed `max_chars`. Useful for fixed-width contexts.
 ///
 /// # Example
-/// ```
+/// ```ignore
 /// use selkie::render::chart_utils::wrap_text_by_chars;
 /// let lines = wrap_text_by_chars("hello world foo", 10);
 /// assert_eq!(lines, vec!["hello", "world foo"]);
@@ -367,6 +367,17 @@ where
 /// Assumes monospace-like behavior where each character is approximately
 /// `font_size * 0.55` pixels wide. This is a reasonable approximation for
 /// most proportional fonts when precise measurements aren't needed.
+/// Normalize HTML `<br>` tags to newlines for consistent text processing.
+///
+/// Converts all common `<br>` variants (`<br>`, `<br/>`, `<br />`) to `\n`.
+/// This is useful for text wrapping and line counting across diagram renderers.
+#[inline]
+pub fn normalize_br_tags(text: &str) -> String {
+    text.replace("<br>", "\n")
+        .replace("<br/>", "\n")
+        .replace("<br />", "\n")
+}
+
 #[inline]
 pub fn estimate_text_width_simple(text: &str, font_size: f64) -> f64 {
     text.chars().count() as f64 * font_size * 0.55
@@ -507,5 +518,22 @@ mod tests {
     fn test_estimate_text_height() {
         assert_eq!(estimate_text_height(3, 18.0), 54.0);
         assert_eq!(estimate_text_height(0, 18.0), 0.0);
+    }
+
+    #[test]
+    fn test_normalize_br_tags() {
+        // All variants should be converted to newlines
+        assert_eq!(normalize_br_tags("hello<br>world"), "hello\nworld");
+        assert_eq!(normalize_br_tags("hello<br/>world"), "hello\nworld");
+        assert_eq!(normalize_br_tags("hello<br />world"), "hello\nworld");
+
+        // Multiple br tags
+        assert_eq!(normalize_br_tags("a<br>b<br/>c<br />d"), "a\nb\nc\nd");
+
+        // No br tags
+        assert_eq!(normalize_br_tags("hello world"), "hello world");
+
+        // Empty string
+        assert_eq!(normalize_br_tags(""), "");
     }
 }

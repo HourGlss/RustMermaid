@@ -8,6 +8,7 @@
 
 use crate::diagrams::timeline::{TimelineDb, TimelineTask};
 use crate::error::Result;
+use crate::render::chart_utils;
 use crate::render::svg::markers::create_arrowhead_marker;
 use crate::render::svg::{escape_xml, Attrs, RenderConfig, SvgDocument, SvgElement};
 
@@ -180,10 +181,7 @@ fn calculate_layout(
 /// Estimate node height based on text content and wrapping
 fn estimate_node_height(text: &str, max_width: f64) -> f64 {
     // Split on <br> tags and whitespace to simulate wrap_text
-    let text = text
-        .replace("<br>", "\n")
-        .replace("<br/>", "\n")
-        .replace("<br />", "\n");
+    let text = chart_utils::normalize_br_tags(text);
     let words: Vec<&str> = text.split_whitespace().collect();
 
     if words.is_empty() {
@@ -546,10 +544,7 @@ fn render_timeline_line(doc: &mut SvgDocument, layout: &TimelineLayout) {
 /// Create wrapped text element
 fn wrap_text(text: &str, cx: f64, cy: f64, max_width: f64) -> SvgElement {
     // Split text on <br> and whitespace
-    let text = text
-        .replace("<br>", "\n")
-        .replace("<br/>", "\n")
-        .replace("<br />", "\n");
+    let text = chart_utils::normalize_br_tags(text);
     let words: Vec<&str> = text.split_whitespace().collect();
 
     if words.is_empty() {

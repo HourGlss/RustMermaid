@@ -2,6 +2,7 @@
 
 use super::adapter::{NodeSizeConfig, SizeEstimator};
 use super::types::NodeShape;
+use crate::render::chart_utils;
 
 /// Character-width based size estimator
 ///
@@ -51,10 +52,7 @@ impl SizeEstimator for CharacterSizeEstimator {
         }
 
         // Normalize <br> variants to newlines for proper line counting
-        let normalized = text
-            .replace("<br />", "\n")
-            .replace("<br/>", "\n")
-            .replace("<br>", "\n");
+        let normalized = chart_utils::normalize_br_tags(text);
 
         let lines: Vec<&str> = normalized.lines().collect();
         let max_chars = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);

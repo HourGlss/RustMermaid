@@ -2,6 +2,7 @@
 
 use crate::diagrams::sequence::{LineType, ParticipantType, SequenceDb};
 use crate::error::Result;
+use crate::render::chart_utils;
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 
 /// Render a sequence diagram to SVG
@@ -1097,10 +1098,7 @@ fn render_note(
     });
 
     // Note text - render each line as a separate text element (like mermaid.js)
-    let normalized = message
-        .replace("<br />", "\n")
-        .replace("<br/>", "\n")
-        .replace("<br>", "\n");
+    let normalized = chart_utils::normalize_br_tags(message);
     for (idx, line) in normalized.lines().enumerate() {
         let text_y = top_y + text_padding + font_size + (idx as f64 * line_height);
         children.push(SvgElement::Text {
@@ -1121,11 +1119,7 @@ fn render_note(
 }
 
 fn count_text_lines(message: &str) -> usize {
-    let normalized = message
-        .replace("<br />", "\n")
-        .replace("<br/>", "\n")
-        .replace("<br>", "\n");
-    normalized.lines().count().max(1)
+    chart_utils::normalize_br_tags(message).lines().count().max(1)
 }
 
 /// Create an arrow marker definition
