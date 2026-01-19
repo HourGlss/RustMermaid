@@ -276,6 +276,109 @@ pub fn render_legend(items: &[LegendItem], config: &LegendConfig) -> SvgElement 
 }
 
 // =============================================================================
+// Text Wrapping Utilities
+// =============================================================================
+
+/// Wrap text into lines based on a maximum character count per line.
+///
+/// Words are kept intact; a line break occurs when adding the next word
+/// would exceed `max_chars`. Useful for fixed-width contexts.
+///
+/// # Example
+/// ```
+/// use selkie::render::chart_utils::wrap_text_by_chars;
+/// let lines = wrap_text_by_chars("hello world foo", 10);
+/// assert_eq!(lines, vec!["hello", "world foo"]);
+/// ```
+pub fn wrap_text_by_chars(text: &str, max_chars: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current_line = String::new();
+
+    for word in text.split_whitespace() {
+        if current_line.is_empty() {
+            current_line.push_str(word);
+        } else if current_line.len() + 1 + word.len() <= max_chars {
+            current_line.push(' ');
+            current_line.push_str(word);
+        } else {
+            lines.push(current_line);
+            current_line = word.to_string();
+        }
+    }
+
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+
+    lines
+}
+
+/// Wrap text into lines based on estimated pixel width.
+///
+/// Uses a simple character width estimation (average character width = font_size * 0.55).
+/// For more accurate wrapping, use [`wrap_text_by_width_fn`] with a custom estimator.
+pub fn wrap_text_by_width(text: &str, max_width: f64, font_size: f64) -> Vec<String> {
+    wrap_text_by_width_fn(text, max_width, |s| estimate_text_width_simple(s, font_size))
+}
+
+/// Wrap text into lines using a custom width estimation function.
+///
+/// This is the most flexible text wrapping function, allowing callers to provide
+/// their own width estimation logic for different font metrics.
+pub fn wrap_text_by_width_fn<F>(text: &str, max_width: f64, estimate_width: F) -> Vec<String>
+where
+    F: Fn(&str) -> f64,
+{
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.is_empty() {
+        return vec![String::new()];
+    }
+
+    let mut lines = Vec::new();
+    let mut current_line = String::new();
+
+    for word in words {
+        if current_line.is_empty() {
+            current_line.push_str(word);
+        } else {
+            let potential = format!("{} {}", current_line, word);
+            if estimate_width(&potential) <= max_width {
+                current_line = potential;
+            } else {
+                lines.push(current_line);
+                current_line = word.to_string();
+            }
+        }
+    }
+
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+
+    lines
+}
+
+/// Estimate text width using a simple average character width.
+///
+/// Assumes monospace-like behavior where each character is approximately
+/// `font_size * 0.55` pixels wide. This is a reasonable approximation for
+/// most proportional fonts when precise measurements aren't needed.
+#[inline]
+pub fn estimate_text_width_simple(text: &str, font_size: f64) -> f64 {
+    text.chars().count() as f64 * font_size * 0.55
+}
+
+/// Estimate text height based on line count and line height.
+#[inline]
+pub fn estimate_text_height(line_count: usize, line_height: f64) -> f64 {
+    line_count as f64 * line_height
+}
+
+// =============================================================================
 // Utility Functions
 // =============================================================================
 
@@ -360,5 +463,49 @@ mod tests {
     fn test_truncate_label() {
         assert_eq!(truncate_label("short", 10), "short");
         assert_eq!(truncate_label("this is a very long label", 10), "this is...");
+    }
+
+    #[test]
+    fn test_wrap_text_by_chars() {
+        // Basic wrapping
+        let lines = wrap_text_by_chars("hello world foo bar", 12);
+        assert_eq!(lines, vec!["hello world", "foo bar"]);
+
+        // Single word longer than max
+        let lines = wrap_text_by_chars("superlongword short", 10);
+        assert_eq!(lines, vec!["superlongword", "short"]);
+
+        // Empty text
+        let lines = wrap_text_by_chars("", 10);
+        assert_eq!(lines, vec![""]);
+
+        // Fits in one line
+        let lines = wrap_text_by_chars("short", 20);
+        assert_eq!(lines, vec!["short"]);
+    }
+
+    #[test]
+    fn test_wrap_text_by_width() {
+        // With font_size=14, char width ~7.7px, so "hello world" ~85px
+        let lines = wrap_text_by_width("hello world foo", 90.0, 14.0);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0], "hello world");
+
+        // Empty text
+        let lines = wrap_text_by_width("", 100.0, 14.0);
+        assert_eq!(lines, vec![""]);
+    }
+
+    #[test]
+    fn test_estimate_text_width_simple() {
+        // 5 chars * 14 * 0.55 = 38.5
+        let width = estimate_text_width_simple("hello", 14.0);
+        assert!((width - 38.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_estimate_text_height() {
+        assert_eq!(estimate_text_height(3, 18.0), 54.0);
+        assert_eq!(estimate_text_height(0, 18.0), 0.0);
     }
 }

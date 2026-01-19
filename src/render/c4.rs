@@ -872,26 +872,9 @@ fn element_colors(shape_type: &C4ShapeType) -> (&'static str, &'static str, &'st
     }
 }
 
-/// Wrap text to fit within a character limit
+/// Wrap text to fit within a character limit, truncating to 3 lines max
 fn wrap_text(text: &str, max_chars: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut current_line = String::new();
-
-    for word in text.split_whitespace() {
-        if current_line.is_empty() {
-            current_line = word.to_string();
-        } else if current_line.len() + word.len() < max_chars {
-            current_line.push(' ');
-            current_line.push_str(word);
-        } else {
-            lines.push(current_line);
-            current_line = word.to_string();
-        }
-    }
-
-    if !current_line.is_empty() {
-        lines.push(current_line);
-    }
+    let mut lines = crate::render::chart_utils::wrap_text_by_chars(text, max_chars);
 
     // Limit to 3 lines to prevent overflow
     if lines.len() > 3 {
