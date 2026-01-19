@@ -3,11 +3,7 @@
 //! This module provides common functionality used across multiple chart types
 //! (pie, radar, quadrant, xychart, etc.) to reduce code duplication.
 
-// Allow dead code for utilities that are designed for future refactoring of other diagram types.
-// As more diagrams are refactored to use these utilities, the warnings will naturally resolve.
-#![allow(dead_code)]
-
-use crate::render::svg::{Attrs, SvgElement, Theme};
+use crate::render::svg::{Attrs, SvgElement};
 
 // =============================================================================
 // Common Chart Layout Constants
@@ -23,12 +19,6 @@ pub mod dimensions {
     pub const MARGIN_BOTTOM: f64 = 50.0;
     /// Default margin at left of chart
     pub const MARGIN_LEFT: f64 = 50.0;
-    /// Default padding around chart elements
-    pub const PADDING: f64 = 10.0;
-    /// Default height reserved for title
-    pub const TITLE_HEIGHT: f64 = 50.0;
-    /// Default padding for axis labels
-    pub const AXIS_LABEL_PADDING: f64 = 30.0;
 }
 
 /// Chart margins configuration
@@ -52,26 +42,6 @@ impl Default for ChartMargins {
 }
 
 impl ChartMargins {
-    /// Create new margins with all sides equal
-    pub fn uniform(margin: f64) -> Self {
-        Self {
-            top: margin,
-            right: margin,
-            bottom: margin,
-            left: margin,
-        }
-    }
-
-    /// Create new margins with vertical and horizontal values
-    pub fn symmetric(vertical: f64, horizontal: f64) -> Self {
-        Self {
-            top: vertical,
-            right: horizontal,
-            bottom: vertical,
-            left: horizontal,
-        }
-    }
-
     /// Total width added by margins
     pub fn horizontal_total(&self) -> f64 {
         self.left + self.right
@@ -104,11 +74,6 @@ pub fn get_chart_color(index: usize) -> &'static str {
     CHART_COLORS[index % CHART_COLORS.len()]
 }
 
-/// Get a color from a custom palette, cycling through if index exceeds palette size
-pub fn get_color_from_palette(palette: &[String], index: usize) -> &str {
-    &palette[index % palette.len()]
-}
-
 // =============================================================================
 // Title Rendering
 // =============================================================================
@@ -126,41 +91,6 @@ pub struct TitleConfig {
     pub class: String,
     /// Text anchor (start, middle, end)
     pub text_anchor: String,
-}
-
-impl Default for TitleConfig {
-    fn default() -> Self {
-        Self {
-            x: 0.0,
-            y: 25.0,
-            font_size: 20.0,
-            class: "chart-title".to_string(),
-            text_anchor: "middle".to_string(),
-        }
-    }
-}
-
-impl TitleConfig {
-    /// Create a centered title config
-    pub fn centered(width: f64, y: f64) -> Self {
-        Self {
-            x: width / 2.0,
-            y,
-            ..Default::default()
-        }
-    }
-
-    /// Set custom CSS class
-    pub fn with_class(mut self, class: &str) -> Self {
-        self.class = class.to_string();
-        self
-    }
-
-    /// Set font size
-    pub fn with_font_size(mut self, size: f64) -> Self {
-        self.font_size = size;
-        self
-    }
 }
 
 /// Render a chart title if present
@@ -346,130 +276,6 @@ pub fn render_legend(items: &[LegendItem], config: &LegendConfig) -> SvgElement 
 }
 
 // =============================================================================
-// Data Range Calculations
-// =============================================================================
-
-/// Calculate the min and max values from an iterator of f64 values
-pub fn calculate_range<'a>(values: impl Iterator<Item = &'a f64>) -> Option<(f64, f64)> {
-    let mut min = f64::MAX;
-    let mut max = f64::MIN;
-    let mut has_values = false;
-
-    for &value in values {
-        has_values = true;
-        min = min.min(value);
-        max = max.max(value);
-    }
-
-    if has_values {
-        Some((min, max))
-    } else {
-        None
-    }
-}
-
-/// Calculate the data range with optional padding and zero inclusion
-pub fn calculate_padded_range(
-    values: impl Iterator<Item = f64>,
-    padding_factor: f64,
-    include_zero: bool,
-) -> (f64, f64) {
-    let mut min = f64::MAX;
-    let mut max = f64::MIN;
-    let mut has_values = false;
-
-    for value in values {
-        has_values = true;
-        min = min.min(value);
-        max = max.max(value);
-    }
-
-    if !has_values {
-        return (0.0, 100.0); // Default range
-    }
-
-    // Calculate padding
-    let range = max - min;
-    let padding = if range > 0.0 {
-        range * padding_factor
-    } else {
-        1.0
-    };
-
-    // Include zero if all positive or configured
-    if include_zero && min >= 0.0 {
-        min = 0.0;
-    }
-
-    (min - padding.min(min.abs() * padding_factor), max + padding)
-}
-
-// =============================================================================
-// CSS Generation Helpers
-// =============================================================================
-
-/// Generate common chart CSS rules for a specific chart type
-///
-/// Returns CSS string with rules for background, title, and text elements.
-pub fn generate_base_chart_css(
-    theme: &Theme,
-    prefix: &str,
-) -> String {
-    format!(
-        r#"
-.{prefix}-background {{
-  fill: {background};
-}}
-
-.{prefix}-title {{
-  fill: {text_color};
-  font-family: {font_family};
-}}
-
-.{prefix}-text {{
-  fill: {text_color};
-  font-family: {font_family};
-}}
-"#,
-        prefix = prefix,
-        background = theme.background,
-        text_color = theme.primary_text_color,
-        font_family = theme.font_family,
-    )
-}
-
-/// Generate axis CSS rules common to charts with axes
-pub fn generate_axis_css(theme: &Theme, prefix: &str) -> String {
-    format!(
-        r#"
-.{prefix}-axis {{
-  stroke: {line_color};
-  stroke-width: 1px;
-}}
-
-.{prefix}-axis-title {{
-  fill: {text_color};
-  font-family: {font_family};
-}}
-
-.{prefix}-axis-label {{
-  fill: {text_color};
-  font-family: {font_family};
-}}
-
-.{prefix}-tick {{
-  stroke: {line_color};
-  stroke-width: 1px;
-}}
-"#,
-        prefix = prefix,
-        line_color = theme.line_color,
-        text_color = theme.primary_text_color,
-        font_family = theme.font_family,
-    )
-}
-
-// =============================================================================
 // Utility Functions
 // =============================================================================
 
@@ -523,15 +329,6 @@ mod tests {
     }
 
     #[test]
-    fn test_chart_margins_uniform() {
-        let margins = ChartMargins::uniform(20.0);
-        assert_eq!(margins.top, 20.0);
-        assert_eq!(margins.right, 20.0);
-        assert_eq!(margins.bottom, 20.0);
-        assert_eq!(margins.left, 20.0);
-    }
-
-    #[test]
     fn test_get_chart_color() {
         assert_eq!(get_chart_color(0), "#4C78A8");
         assert_eq!(get_chart_color(8), "#4C78A8"); // Should cycle
@@ -550,14 +347,6 @@ mod tests {
         assert_eq!(item.label, "Test");
         assert_eq!(item.color, "#FF0000");
         assert_eq!(item.extra, Some("42%".to_string()));
-    }
-
-    #[test]
-    fn test_calculate_range() {
-        let values = [1.0, 5.0, 3.0, 2.0];
-        let (min, max) = calculate_range(values.iter()).unwrap();
-        assert_eq!(min, 1.0);
-        assert_eq!(max, 5.0);
     }
 
     #[test]
