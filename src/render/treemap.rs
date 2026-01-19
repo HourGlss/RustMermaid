@@ -6,6 +6,7 @@
 
 use crate::diagrams::treemap::{TreemapDb, TreemapNode};
 use crate::error::Result;
+use crate::render::chart_utils;
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 
 /// Default inner padding between cells/sections (reserved for future use)
@@ -102,7 +103,7 @@ pub fn render_treemap(db: &TreemapDb, config: &RenderConfig) -> Result<String> {
 
     // Calculate dimensions
     let title = db.get_title();
-    let title_height = if title.is_empty() { 0.0 } else { 30.0 };
+    let title_height = chart_utils::title_offset(title, 30.0);
 
     let width = DEFAULT_WIDTH;
     let height = DEFAULT_HEIGHT;

@@ -5,6 +5,7 @@
 
 use crate::diagrams::journey::JourneyDb;
 use crate::error::Result;
+use crate::render::chart_utils;
 use crate::render::svg::markers::create_arrowhead_marker;
 use crate::render::svg::{escape_xml, Attrs, RenderConfig, SvgDocument, SvgElement};
 
@@ -72,8 +73,8 @@ pub fn render_journey(db: &JourneyDb, config: &RenderConfig) -> Result<String> {
         })
         .collect();
 
-    // Calculate title offset
-    let title_offset = if has_title { TITLE_HEIGHT } else { 0.0 };
+    // Calculate title offset using shared utility
+    let title_offset = chart_utils::title_offset(&db.title, TITLE_HEIGHT);
 
     // Render actor legend first (matching mermaid.js render order)
     let legend = render_actor_legend(&actors, &actor_colors, title_offset, config);

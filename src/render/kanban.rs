@@ -5,7 +5,7 @@
 
 use crate::diagrams::kanban::{KanbanDb, KanbanNode, Priority};
 use crate::error::Result;
-use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
+use crate::render::svg::{escape_xml, Attrs, RenderConfig, SvgDocument, SvgElement};
 
 // Layout configuration (matching mermaid.js defaults)
 /// Width of each section column
@@ -503,15 +503,6 @@ fn generate_kanban_css(config: &RenderConfig) -> String {
         text_color = theme.primary_text_color,
         section_css = section_css
     )
-}
-
-/// Escape XML special characters
-fn escape_xml(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
 }
 
 #[cfg(test)]
