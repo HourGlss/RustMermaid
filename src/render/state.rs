@@ -261,6 +261,62 @@ fn compute_level_layout(
         }
     }
 
+    // Handle cross-level edges: when a state at this level receives edges from
+    // or sends edges to states inside composites, add virtual edges to/from the
+    // outermost composite at this level. This ensures proper positioning.
+    let mut virtual_edge_count = 0;
+    for relation in relations.iter() {
+        let s1 = relation.state1.as_str();
+        let s2 = relation.state2.as_str();
+
+        let s1_at_level = level_state_ids.contains(s1);
+        let s2_at_level = level_state_ids.contains(s2);
+
+        // Skip if both at this level (already handled) or neither at this level
+        if s1_at_level == s2_at_level {
+            continue;
+        }
+
+        // Find which composite at this level contains the "other" state
+        let find_containing_composite = |state_id: &str| -> Option<&str> {
+            // Walk up the parent chain until we find a composite at this level
+            let mut current = states.get(state_id)?.parent.as_deref();
+            while let Some(p) = current {
+                if level_state_ids.contains(p) && composite_ids.contains(p) {
+                    return Some(p);
+                }
+                current = states.get(p)?.parent.as_deref();
+            }
+            None
+        };
+
+        if s1_at_level && !s2_at_level {
+            // Source at this level, target inside a composite
+            // Add virtual edge: source -> composite (to position source before composite)
+            if let Some(composite_id) = find_containing_composite(s2) {
+                let edge = LayoutEdge::new(
+                    format!("virtual_{}", virtual_edge_count),
+                    s1.to_string(),
+                    composite_id.to_string(),
+                );
+                graph.add_edge(edge);
+                virtual_edge_count += 1;
+            }
+        } else if !s1_at_level && s2_at_level {
+            // Source inside a composite, target at this level
+            // Add virtual edge: composite -> target (to position target after composite)
+            if let Some(composite_id) = find_containing_composite(s1) {
+                let edge = LayoutEdge::new(
+                    format!("virtual_{}", virtual_edge_count),
+                    composite_id.to_string(),
+                    s2.to_string(),
+                );
+                graph.add_edge(edge);
+                virtual_edge_count += 1;
+            }
+        }
+    }
+
     // Run layout
     let layout_result = layout(graph)?;
 
