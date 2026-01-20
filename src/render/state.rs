@@ -1305,12 +1305,18 @@ pub fn render_state(db: &StateDb, config: &RenderConfig) -> Result<String> {
         }
     }
 
-    // Include edge label positions (estimate label size)
+    // Include edge label positions (estimate label size based on typical label dimensions)
+    // Edge labels are positioned on edges which already fall within state bounds,
+    // so we only need minimal padding for the label text itself (not 50px!)
+    // Typical short labels (5 chars) at ~8px/char = ~40px, so half-width ~20px
+    // But since edges are between states, labels shouldn't extend much past them
+    let label_half_width = 15.0; // Conservative for most single-word labels
+    let label_half_height = 10.0;
     for pos in edge_label_positions.values() {
-        min_x = min_x.min(pos.x - 50.0); // Estimate label half-width
-        min_y = min_y.min(pos.y - 10.0); // Estimate label half-height
-        max_x = max_x.max(pos.x + 50.0);
-        max_y = max_y.max(pos.y + 10.0);
+        min_x = min_x.min(pos.x - label_half_width);
+        min_y = min_y.min(pos.y - label_half_height);
+        max_x = max_x.max(pos.x + label_half_width);
+        max_y = max_y.max(pos.y + label_half_height);
     }
 
     // Handle empty diagram case
