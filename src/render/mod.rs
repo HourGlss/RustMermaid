@@ -26,7 +26,9 @@ mod timeline;
 mod treemap;
 mod xychart;
 
-use crate::diagrams::{detect_init, detect_type, parse, remove_directives, Diagram};
+use crate::diagrams::{
+    detect_init, detect_positions, detect_type, parse, remove_directives, remove_positions, Diagram,
+};
 use crate::error::{MermaidError, Result};
 use crate::layout::{self, CharacterSizeEstimator, ToLayoutGraph};
 
@@ -42,9 +44,10 @@ pub fn render(diagram: &Diagram) -> Result<String> {
 /// This function:
 /// 1. Detects and parses `%%{init: ...}%%` directives
 /// 2. Extracts theme configuration from directives
-/// 3. Detects the diagram type
-/// 4. Parses the diagram
-/// 5. Renders with directive-derived theme configuration
+/// 3. Detects position overrides from `%% selkie:positions {...} %%` comments
+/// 4. Detects the diagram type
+/// 5. Parses the diagram
+/// 6. Renders with directive-derived theme configuration and position overrides
 ///
 /// # Example
 ///
@@ -61,19 +64,27 @@ pub fn render_text(text: &str) -> Result<String> {
     // Extract directive configuration
     let directive_config = detect_init(text);
 
-    // Build render config with directive theme and themeCSS
+    // Extract position overrides
+    let position_overrides = detect_positions(text);
+
+    // Build render config with directive theme, themeCSS, and position overrides
     let config = if let Some(ref dc) = directive_config {
         RenderConfig {
             theme: Theme::from_directive(dc),
             theme_css: dc.theme_css.clone(),
+            position_overrides,
             ..RenderConfig::default()
         }
     } else {
-        RenderConfig::default()
+        RenderConfig {
+            position_overrides,
+            ..RenderConfig::default()
+        }
     };
 
-    // Remove directives from text before parsing
+    // Remove directives and position comments from text before parsing
     let clean_text = remove_directives(text);
+    let clean_text = remove_positions(&clean_text);
 
     // Detect diagram type and parse
     let diagram_type = detect_type(&clean_text)?;
@@ -158,11 +169,31 @@ fn render_flowchart(
     let graph = db.to_layout_graph(&size_estimator)?;
 
     // Run layout algorithm
-    let graph = layout::layout(graph)?;
+    let mut graph = layout::layout(graph)?;
+
+    // Apply position overrides if present
+    if let Some(ref overrides) = config.position_overrides {
+        apply_position_overrides(&mut graph, overrides);
+    }
 
     // Render to SVG
     let renderer = SvgRenderer::new(config.clone());
     renderer.render_flowchart(db, &graph)
+}
+
+/// Apply position overrides to a layout graph
+fn apply_position_overrides(
+    graph: &mut crate::layout::LayoutGraph,
+    overrides: &crate::diagrams::PositionOverrides,
+) {
+    for node in &mut graph.nodes {
+        if let Some(pos) = overrides.get(&node.id) {
+            node.x = Some(pos.x);
+            node.y = Some(pos.y);
+        }
+    }
+    // Recompute bounds after position changes
+    graph.compute_bounds();
 }
 
 /// Render an architecture diagram

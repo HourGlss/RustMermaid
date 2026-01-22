@@ -247,6 +247,24 @@ main {
     border-color: var(--accent-hover);
 }
 
+#toggle-drag.active {
+    background: var(--success-text);
+    border-color: var(--success-text);
+    color: var(--bg-primary);
+}
+
+#toggle-drag:not(.active) {
+    background: var(--bg-tertiary);
+}
+
+#clear-positions {
+    color: var(--text-secondary);
+}
+
+#clear-positions:hover {
+    color: var(--text-primary);
+}
+
 /* Error display */
 #error-display {
     position: absolute;

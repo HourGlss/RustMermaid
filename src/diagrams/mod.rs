@@ -27,9 +27,14 @@ pub mod xychart;
 
 mod detect;
 pub mod directive;
+pub mod positions;
 
 pub use detect::{detect_type, DiagramType};
 pub use directive::{detect_init, remove_directives, DiagramConfig};
+pub use positions::{
+    detect_positions, encode_positions, remove_positions, update_positions, NodePosition,
+    PositionOverrides,
+};
 
 use crate::error::Result;
 

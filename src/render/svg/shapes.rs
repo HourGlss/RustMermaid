@@ -272,9 +272,15 @@ pub fn render_shape(
 
     // Wrap shape and label in a group with class="node"
     // This allows CSS selectors like ".node rect" to work correctly
+    // Add data attributes for drag support:
+    // - data-node-id: the node ID for identification
+    // - data-x, data-y: current position for JavaScript access
     let group_attrs = Attrs::new()
         .with_class("node")
-        .with_id(&format!("node-{}", node.id));
+        .with_id(&format!("node-{}", node.id))
+        .with_attr("data-node-id", &node.id)
+        .with_attr("data-x", &format!("{}", x))
+        .with_attr("data-y", &format!("{}", y));
 
     SvgElement::group(vec![shape, label]).with_attrs(group_attrs)
 }

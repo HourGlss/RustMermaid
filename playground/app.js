@@ -902,6 +902,7 @@ let currentZoom = 1;
 let currentTheme = 'default';
 let renderTimeout = null;
 let lastSvg = '';
+let dragEnabled = true; // Enable node dragging by default
 
 // Theme backgrounds (must match Rust theme definitions)
 const themeBackgrounds = {
@@ -939,13 +940,32 @@ async function init() {
 
 // Load Selkie WASM module
 async function loadSelkie() {
-    const { default: initWasm, initialize, parse, render, render_text } =
-        await import('./pkg/selkie.js');
+    const {
+        default: initWasm,
+        initialize,
+        parse,
+        render,
+        render_text,
+        update_node_position,
+        remove_node_position,
+        clear_positions,
+        get_positions_json,
+        set_positions_json
+    } = await import('./pkg/selkie.js');
 
     await initWasm();
     initialize({ startOnLoad: false });
 
-    selkie = { parse, render, render_text };
+    selkie = {
+        parse,
+        render,
+        render_text,
+        update_node_position,
+        remove_node_position,
+        clear_positions,
+        get_positions_json,
+        set_positions_json
+    };
 }
 
 // Set up event listeners
@@ -1005,12 +1025,18 @@ function setupEventListeners() {
     // Download SVG
     document.getElementById('download-svg').addEventListener('click', downloadSvg);
 
+    // Drag mode toggle
+    document.getElementById('toggle-drag').addEventListener('click', toggleDragMode);
+
+    // Clear positions
+    document.getElementById('clear-positions').addEventListener('click', clearAllPositions);
+
     // Resizable divider
     setupDividerDrag();
 }
 
 // Render the current diagram
-function renderDiagram() {
+function renderDiagram(skipDragSetup = false) {
     const input = editor.value.trim();
 
     if (!input) {
@@ -1043,6 +1069,11 @@ function renderDiagram() {
         renderTimeDisplay.textContent = `Rendered in ${renderTime}ms`;
 
         applyZoom();
+
+        // Setup drag handlers for nodes (unless skipped during drag)
+        if (dragEnabled && !skipDragSetup) {
+            setupNodeDragging();
+        }
     } catch (error) {
         errorDisplay.textContent = error.message || String(error);
         errorDisplay.classList.remove('hidden');
@@ -1158,6 +1189,162 @@ function loadFromUrl() {
     // Load default example
     editor.value = examples['flowchart-simple'];
     updatePreviewBackground();
+    renderDiagram();
+}
+
+// =============================================================================
+// Node Dragging Support
+// =============================================================================
+
+// State for drag operation
+let dragState = null;
+
+// Setup drag handlers for all nodes in the SVG
+function setupNodeDragging() {
+    const svg = preview.querySelector('svg');
+    if (!svg) return;
+
+    // Find all node groups with data-node-id attribute
+    const nodes = svg.querySelectorAll('[data-node-id]');
+
+    nodes.forEach(node => {
+        // Make nodes draggable
+        node.style.cursor = 'move';
+
+        node.addEventListener('mousedown', startNodeDrag);
+    });
+
+    // Global listeners for drag
+    svg.addEventListener('mousemove', onNodeDrag);
+    svg.addEventListener('mouseup', endNodeDrag);
+    svg.addEventListener('mouseleave', endNodeDrag);
+}
+
+function startNodeDrag(e) {
+    if (!dragEnabled) return;
+
+    const node = e.currentTarget;
+    const nodeId = node.getAttribute('data-node-id');
+    const startX = parseFloat(node.getAttribute('data-x')) || 0;
+    const startY = parseFloat(node.getAttribute('data-y')) || 0;
+
+    // Get SVG element and its transform matrix for coordinate conversion
+    const svg = preview.querySelector('svg');
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+
+    // Account for zoom transform on preview element
+    const ctm = svg.getScreenCTM();
+    if (ctm) {
+        const svgPoint = pt.matrixTransform(ctm.inverse());
+
+        dragState = {
+            node,
+            nodeId,
+            startX,
+            startY,
+            offsetX: svgPoint.x - startX,
+            offsetY: svgPoint.y - startY,
+            svg
+        };
+
+        // Visual feedback
+        node.style.opacity = '0.7';
+        document.body.style.userSelect = 'none';
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+function onNodeDrag(e) {
+    if (!dragState) return;
+
+    const { svg, node, offsetX, offsetY } = dragState;
+
+    // Convert mouse position to SVG coordinates
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+
+    const ctm = svg.getScreenCTM();
+    if (ctm) {
+        const svgPoint = pt.matrixTransform(ctm.inverse());
+        const newX = svgPoint.x - offsetX;
+        const newY = svgPoint.y - offsetY;
+
+        // Update the transform of the node to move it visually
+        // Find all elements in the node and translate them
+        const currentX = parseFloat(node.getAttribute('data-x')) || 0;
+        const currentY = parseFloat(node.getAttribute('data-y')) || 0;
+        const dx = newX - currentX;
+        const dy = newY - currentY;
+
+        // Apply transform to move the group
+        node.setAttribute('transform', `translate(${dx}, ${dy})`);
+
+        // Store the new position
+        dragState.currentX = newX;
+        dragState.currentY = newY;
+    }
+
+    e.preventDefault();
+}
+
+function endNodeDrag(e) {
+    if (!dragState) return;
+
+    const { node, nodeId, currentX, currentY } = dragState;
+
+    // Reset visual feedback
+    node.style.opacity = '';
+    document.body.style.userSelect = '';
+
+    // If we moved the node, update the source
+    if (currentX !== undefined && currentY !== undefined) {
+        // Update the source with the new position
+        const newSource = selkie.update_node_position(
+            editor.value,
+            nodeId,
+            Math.round(currentX),
+            Math.round(currentY)
+        );
+
+        // Update the editor without triggering a full re-render
+        editor.value = newSource;
+        updateUrl();
+
+        // Re-render to get the correct layout with the new position
+        // Use a small delay to batch multiple drag operations
+        clearTimeout(renderTimeout);
+        renderTimeout = setTimeout(() => {
+            renderDiagram();
+        }, 100);
+    }
+
+    dragState = null;
+}
+
+// Toggle drag mode
+function toggleDragMode() {
+    dragEnabled = !dragEnabled;
+    const btn = document.getElementById('toggle-drag');
+    if (btn) {
+        btn.textContent = dragEnabled ? 'Drag: ON' : 'Drag: OFF';
+        btn.classList.toggle('active', dragEnabled);
+    }
+    // Re-render to update cursors
+    if (preview.querySelector('svg')) {
+        setupNodeDragging();
+    }
+}
+
+// Clear all position overrides
+function clearAllPositions() {
+    const newSource = selkie.clear_positions(editor.value);
+    editor.value = newSource;
+    updateUrl();
     renderDiagram();
 }
 

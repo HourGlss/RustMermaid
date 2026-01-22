@@ -17,6 +17,7 @@ pub use theme::{Theme, ThemeBuilder};
 
 use crate::diagrams::architecture::{ArchitectureDb, ArchitectureDirection, ArchitectureService};
 use crate::diagrams::flowchart::{FlowSubGraph, FlowchartDb};
+use crate::diagrams::positions::PositionOverrides;
 use crate::error::Result;
 use crate::layout::{LayoutGraph, LayoutNode, Point};
 use crate::render::architecture::{
@@ -49,6 +50,11 @@ pub struct RenderConfig {
     /// };
     /// ```
     pub theme_css: Option<String>,
+    /// Position overrides for nodes (from selkie:positions comment)
+    ///
+    /// When set, these positions will be applied after automatic layout,
+    /// allowing manual positioning of specific nodes.
+    pub position_overrides: Option<PositionOverrides>,
 }
 
 impl Default for RenderConfig {
@@ -59,6 +65,7 @@ impl Default for RenderConfig {
             padding: 8.0,
             embed_css: true,
             theme_css: None,
+            position_overrides: None,
         }
     }
 }
