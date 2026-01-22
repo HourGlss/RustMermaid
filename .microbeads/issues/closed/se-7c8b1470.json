@@ -1,0 +1,14 @@
+{
+  "closed_at": "2026-01-22T16:41:13Z",
+  "closed_reason": "Implemented fontdue-based text measurement. Structural similarity improved from 94.4% to 95.2%.",
+  "created_at": "2026-01-22T16:10:00Z",
+  "dependencies": [],
+  "description": "## Summary\n\nReplace character-based text width estimates with actual font metrics to match mermaid's `getBBox()` behavior.\n\n## Background\n\nMermaid uses the browser's `getBBox()` DOM API to measure actual rendered SVG dimensions, including text with proper font metrics. Selkie currently uses character-based estimates (e.g., `char_count * font_size * 0.6`) which are typically 40-70% narrower than actual rendered widths.\n\nThis causes composite state sizing differences:\n- Processing: reference 191x673, selkie 128x529 (33% width diff)\n\n## Proposed Solution\n\nUse a Rust font metrics library like `fontdue` or `rusttype` to calculate actual text dimensions:\n\n```rust\nuse fontdue::{Font, FontSettings};\n\nfn measure_text_width(text: &str, font_size: f32) -> f32 {\n    let font = Font::from_bytes(FONT_DATA, FontSettings::default()).unwrap();\n    text.chars()\n        .map(|c| font.metrics(c, font_size).advance_width)\n        .sum()\n}\n```\n\n## Implementation Steps\n\n1. Add `fontdue` or `rusttype` dependency\n2. Bundle default font (e.g., \"Trebuchet MS\" or similar to mermaid's default)\n3. Create `FontMetrics` trait/struct for text measurement\n4. Replace `estimate_node_size()` character-based logic with font metrics\n5. Update composite sizing to use accurate measurements\n6. Remove the 1.5x leaf composite expansion hack\n\n## Libraries to Evaluate\n\n- `fontdue` - Pure Rust, fast, simple API\n- `rusttype` - More mature, widely used\n- `ab_glyph` - Modern alternative to rusttype\n\n## Benefits\n\n- Accurate text sizing matching browser rendering\n- Removes need for expansion heuristics\n- Better visual parity with mermaid reference\n\n## Related Issues\n\n- se-94ba2f8f (State diagram composite sizing differs from mermaid reference)",
+  "id": "se-7c8b1470",
+  "labels": [],
+  "priority": 2,
+  "status": "closed",
+  "title": "Use font metrics library for accurate text dimension measurement",
+  "type": "feature",
+  "updated_at": "2026-01-22T16:41:13Z"
+}
