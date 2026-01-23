@@ -1,0 +1,27 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-22T20:02:27Z",
+  "closed_reason": "",
+  "created_at": "2026-01-22T19:57:26Z",
+  "dependencies": [
+    "se-1335057e"
+  ],
+  "description": "Modify the layout system to check for position overrides and use them instead of calculated positions when available.",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-22T20:02:27Z",
+      "field": "status",
+      "new": "closed",
+      "old": "open"
+    }
+  ],
+  "id": "se-61fde242",
+  "labels": [],
+  "notes": "",
+  "priority": 2,
+  "status": "closed",
+  "title": "Apply position overrides during layout",
+  "type": "feature",
+  "updated_at": "2026-01-22T20:02:27Z"
+}
