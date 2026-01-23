@@ -1,0 +1,20 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-23T14:34:47Z",
+  "dependencies": [],
+  "description": "gantt_complex sample shows warnings:\n- edge_count: expected 33, got 0\n- node_count: expected 33, got 0\n- path count: expected 11, got 0\n- text count: expected 49, got 8\n\nVisual similarity: 29.8%, structural: 71.9%. Task bars and their labels are largely missing. Check src/diagrams/gantt/ against reference.",
+  "design": "",
+  "id": "se-0921d01f",
+  "labels": [
+    "eval",
+    "renderer"
+  ],
+  "notes": "",
+  "priority": 2,
+  "status": "open",
+  "title": "gantt: Missing nodes, edges, paths and text",
+  "type": "bug",
+  "updated_at": "2026-01-23T14:34:47Z"
+}

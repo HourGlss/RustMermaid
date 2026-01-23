@@ -1,0 +1,20 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-23T14:35:41Z",
+  "dependencies": [],
+  "description": "Both state samples show warnings:\n- state: path count (7 vs 9), 22% difference\n- state_complex: dimensions differ (650x479 vs 1068x847), path count (12 vs 21), 43% missing\n\nVisual similarity: 31.4% to 55.2%. State boxes may render but transitions (paths) are incomplete. Check src/diagrams/state/ against reference.",
+  "design": "",
+  "id": "se-4b71d71d",
+  "labels": [
+    "eval",
+    "renderer"
+  ],
+  "notes": "",
+  "priority": 2,
+  "status": "open",
+  "title": "state: Missing paths and dimension issues",
+  "type": "bug",
+  "updated_at": "2026-01-23T14:35:41Z"
+}

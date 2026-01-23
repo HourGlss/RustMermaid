@@ -1,0 +1,20 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-23T14:34:41Z",
+  "dependencies": [],
+  "description": "er_complex sample shows warning:\n- path count: expected 27, got 0 (100% difference)\n\nVisual similarity: 32.5%, structural: 87.9%. Entity boxes render correctly but relationship lines between entities are completely missing. Check src/diagrams/er/ against reference.",
+  "design": "",
+  "id": "se-d5e8ba7f",
+  "labels": [
+    "eval",
+    "renderer"
+  ],
+  "notes": "",
+  "priority": 2,
+  "status": "open",
+  "title": "er: Missing relationship lines (paths)",
+  "type": "bug",
+  "updated_at": "2026-01-23T14:34:41Z"
+}

@@ -1,0 +1,20 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-23T14:33:38Z",
+  "dependencies": [],
+  "description": "The git diagram type fails to parse the basic git diagram sample. Eval reports: 'Parse failure: Expected git diagram at position 0:1'. Check src/diagrams/git/parser.rs against reference-implementations/mermaid/packages/mermaid/src/diagrams/git/",
+  "design": "",
+  "id": "se-8517fed6",
+  "labels": [
+    "eval",
+    "parser"
+  ],
+  "notes": "",
+  "priority": 0,
+  "status": "open",
+  "title": "git: Parse failure on basic git diagram",
+  "type": "bug",
+  "updated_at": "2026-01-23T14:33:38Z"
+}

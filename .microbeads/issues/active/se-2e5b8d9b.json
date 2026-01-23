@@ -1,0 +1,20 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-23T14:34:31Z",
+  "dependencies": [],
+  "description": "architecture_complex sample shows warnings:\n- rect count differs: expected 20, got 18\n- z_order: text elements rendered before shapes (may be hidden behind)\n\nVisual similarity: 70.3%, structural: 70.9%. Check src/diagrams/architecture/ against reference.",
+  "design": "",
+  "id": "se-2e5b8d9b",
+  "labels": [
+    "eval",
+    "renderer"
+  ],
+  "notes": "",
+  "priority": 2,
+  "status": "open",
+  "title": "architecture: Rect count mismatch and z-order issue",
+  "type": "bug",
+  "updated_at": "2026-01-23T14:34:31Z"
+}
