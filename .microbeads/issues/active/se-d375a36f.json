@@ -1,0 +1,20 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-23T14:33:43Z",
+  "dependencies": [],
+  "description": "The treemap diagram type fails to parse the basic treemap diagram sample. Eval reports: 'Parse failure: Expected treemap keyword at position 0:1'. Check src/diagrams/treemap/parser.rs against reference-implementations/mermaid/packages/mermaid/src/diagrams/treemap/",
+  "design": "",
+  "id": "se-d375a36f",
+  "labels": [
+    "eval",
+    "parser"
+  ],
+  "notes": "",
+  "priority": 0,
+  "status": "open",
+  "title": "treemap: Parse failure on basic treemap diagram",
+  "type": "bug",
+  "updated_at": "2026-01-23T14:33:43Z"
+}

@@ -1,0 +1,20 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-23T14:35:14Z",
+  "dependencies": [],
+  "description": "Both mindmap samples show warnings:\n- mindmap: text count (5 vs 6), path count (0 vs 4)\n- mindmap_complex: text count (9 vs 10), path count differs, z_order issue\n\nVisual similarity: 52.1% to 65.9%. Some text labels missing and z-order issue in complex sample. Check src/diagrams/mindmap/ against reference.",
+  "design": "",
+  "id": "se-d473f92d",
+  "labels": [
+    "eval",
+    "renderer"
+  ],
+  "notes": "",
+  "priority": 2,
+  "status": "open",
+  "title": "mindmap: Missing text elements and z-order issues",
+  "type": "bug",
+  "updated_at": "2026-01-23T14:35:14Z"
+}

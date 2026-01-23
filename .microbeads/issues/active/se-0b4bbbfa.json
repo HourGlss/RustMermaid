@@ -1,0 +1,20 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-23T14:35:21Z",
+  "dependencies": [],
+  "description": "pie_complex sample shows multiple warnings:\n- dimensions: SVG size differs (850x500 vs 814x450)\n- edge_count: expected 0, got 5\n- labels_missing: Title, percentages not shown\n- path count: expected 5, got 0 (pie slices missing)\n- text count: expected 12, got 0\n\nVisual similarity: 3.3%, structural: 60.9%. Pie slices and labels are not rendering. Check src/diagrams/pie/ against reference.",
+  "design": "",
+  "id": "se-0b4bbbfa",
+  "labels": [
+    "eval",
+    "renderer"
+  ],
+  "notes": "",
+  "priority": 2,
+  "status": "open",
+  "title": "pie: Multiple rendering issues in complex sample",
+  "type": "bug",
+  "updated_at": "2026-01-23T14:35:21Z"
+}

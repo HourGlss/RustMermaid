@@ -1,0 +1,20 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-23T14:34:36Z",
+  "dependencies": [],
+  "description": "c4_complex sample shows warnings:\n- dimensions: SVG size differs significantly (1083x768 vs 1640x960)\n- rect count: expected 24, got 6 (75% difference)\n- z_order: text elements rendered before shapes\n\nVisual similarity: 31.5%, structural: 67.4%. Check src/diagrams/c4/ against reference.",
+  "design": "",
+  "id": "se-04443a47",
+  "labels": [
+    "eval",
+    "renderer"
+  ],
+  "notes": "",
+  "priority": 2,
+  "status": "open",
+  "title": "c4: Dimensions, rect count, and z-order issues",
+  "type": "bug",
+  "updated_at": "2026-01-23T14:34:36Z"
+}
