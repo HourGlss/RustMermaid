@@ -30,6 +30,12 @@
       "field": "description",
       "new": "(changed)",
       "old": "(changed)"
+    },
+    {
+      "at": "2026-01-23T15:53:38Z",
+      "field": "notes",
+      "new": "(changed)",
+      "old": "(changed)"
     }
   ],
   "id": "se-131a2f1a",
@@ -37,10 +43,10 @@
     "eval",
     "parser"
   ],
-  "notes": "UPDATE: Parsing now works. Class diagram no longer has parse failure. Issue is now in structural analysis - edge detection reports 0 edges but 4 edges ARE rendered in SVG (verified by grep). This is a structural analysis detection issue, not a rendering issue.",
+  "notes": "Z-order fix applied. Remaining issue is edge detection in structural analysis (edges ARE rendered but not detected).",
   "priority": 2,
   "status": "in_progress",
   "title": "class: Parse failure on basic class diagram",
   "type": "bug",
-  "updated_at": "2026-01-23T15:40:30Z"
+  "updated_at": "2026-01-23T15:53:38Z"
 }
