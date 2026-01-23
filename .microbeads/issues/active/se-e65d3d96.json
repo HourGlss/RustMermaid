@@ -6,15 +6,35 @@
   "dependencies": [],
   "description": "All 4 flowchart samples show warnings:\n- flowchart: edge_count (3 vs 8), labels_missing (A, B, C), node_count (3 vs 8)\n- flowchart_complex: edge_count (0 vs 24), labels_missing (many), node_count mismatch\n- flowchart_subgraph: edge_count (0 vs 9), labels_missing, node_count mismatch\n- flowchart_all_shapes: labels_missing (many shapes missing), node_count (0 vs 24)\n\nVisual similarity ranges from 1.9% to 26.6%. Nodes and edges are not being rendered correctly. Check src/diagrams/flowchart/ against reference-implementations/mermaid/packages/mermaid/src/diagrams/flowchart/",
   "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T15:54:09Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    },
+    {
+      "at": "2026-01-23T15:54:44Z",
+      "field": "status",
+      "new": "open",
+      "old": "in_progress"
+    },
+    {
+      "at": "2026-01-23T15:54:44Z",
+      "field": "notes",
+      "new": "(changed)",
+      "old": "(changed)"
+    }
+  ],
   "id": "se-e65d3d96",
   "labels": [
     "eval",
     "renderer"
   ],
-  "notes": "",
+  "notes": "Layout algorithm produces completely different node positions than mermaid reference. Edge positions off by 500-1000+ pixels. This is a deep layout issue requiring dagre/elk investigation. Visual similarity only 8%.",
   "priority": 1,
   "status": "open",
   "title": "flowchart: Missing nodes, edges, and labels across all samples",
   "type": "bug",
-  "updated_at": "2026-01-23T14:34:00Z"
+  "updated_at": "2026-01-23T15:54:44Z"
 }
