@@ -4,17 +4,37 @@
   "closed_reason": null,
   "created_at": "2026-01-23T14:33:43Z",
   "dependencies": [],
-  "description": "The treemap diagram type fails to parse the basic treemap diagram sample. Eval reports: 'Parse failure: Expected treemap keyword at position 0:1'. Check src/diagrams/treemap/parser.rs against reference-implementations/mermaid/packages/mermaid/src/diagrams/treemap/",
+  "description": "Treemap rendering issues. Parsing works with treemap-beta keyword. Wrong rect count (8 vs 17), wrong dimensions, no colors applied. Visual similarity 22%.",
   "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T15:40:09Z",
+      "field": "notes",
+      "new": "(changed)",
+      "old": "(changed)"
+    },
+    {
+      "at": "2026-01-23T15:40:31Z",
+      "field": "priority",
+      "new": 2,
+      "old": 0
+    },
+    {
+      "at": "2026-01-23T15:40:31Z",
+      "field": "description",
+      "new": "(changed)",
+      "old": "(changed)"
+    }
+  ],
   "id": "se-d375a36f",
   "labels": [
     "eval",
     "parser"
   ],
-  "notes": "",
-  "priority": 0,
+  "notes": "UPDATE: Parsing now works with treemap-beta keyword. Issues are now rendering: wrong rect count (8 vs 17), wrong dimensions (height 500 vs 371), no colors. Visual similarity 22%.",
+  "priority": 2,
   "status": "open",
   "title": "treemap: Parse failure on basic treemap diagram",
   "type": "bug",
-  "updated_at": "2026-01-23T14:33:43Z"
+  "updated_at": "2026-01-23T15:40:31Z"
 }
