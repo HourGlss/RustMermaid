@@ -1,0 +1,28 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-23T14:33:33Z",
+  "dependencies": [],
+  "description": "The class diagram type fails to parse the basic class diagram sample. Eval reports: 'Parse failure: Expected class diagram keyword at position 0:1'. Check src/diagrams/class/parser.rs against reference-implementations/mermaid/packages/mermaid/src/diagrams/class/",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T15:43:27Z",
+      "field": "status",
+      "new": "closed",
+      "old": "open"
+    }
+  ],
+  "id": "se-131a2f1a",
+  "labels": [
+    "eval",
+    "parser"
+  ],
+  "notes": "",
+  "priority": 0,
+  "status": "closed",
+  "title": "class: Parse failure on basic class diagram",
+  "type": "bug",
+  "updated_at": "2026-01-23T15:43:27Z"
+}
