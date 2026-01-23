@@ -1,11 +1,19 @@
 {
   "acceptance_criteria": "",
-  "closed_at": null,
-  "closed_reason": null,
+  "closed_at": "2026-01-23T15:44:59Z",
+  "closed_reason": "sankey shows 100% structural in eval",
   "created_at": "2026-01-23T14:35:31Z",
   "dependencies": [],
   "description": "All 3 sankey samples show rect count warnings:\n- sankey_simple: rect count (0 vs 5)\n- sankey_complex: rect count (0 vs 6)\n- sankey_energy_full: rect count (0 vs 48)\n\nVisual similarity: 5.9% to 32.8%, structural: 96.5% to 98.2%. Flow paths may render but node rectangles are missing. Check src/diagrams/sankey/ against reference.",
   "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T15:44:59Z",
+      "field": "status",
+      "new": "closed",
+      "old": "open"
+    }
+  ],
   "id": "se-417d89f2",
   "labels": [
     "eval",
@@ -13,8 +21,8 @@
   ],
   "notes": "",
   "priority": 2,
-  "status": "open",
+  "status": "closed",
   "title": "sankey: Missing node rectangles",
   "type": "bug",
-  "updated_at": "2026-01-23T14:35:31Z"
+  "updated_at": "2026-01-23T15:44:59Z"
 }
