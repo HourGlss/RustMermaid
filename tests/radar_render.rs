@@ -234,10 +234,11 @@ fn test_radar_legend_hidden() {
     let svg = render(&diagram).expect("Failed to render radar");
 
     assert_valid_svg(&svg);
-    // Legend should not be present
+    // Legend elements should not be present (rect elements with legend class)
+    // Note: CSS may contain radarLegendBox but no actual elements should exist
     assert!(
-        !svg.contains("radarLegendBox"),
-        "Should not have legend when showLegend is false"
+        !svg.contains(r#"class="radarLegendBox"#),
+        "Should not have legend rect elements when showLegend is false"
     );
 }
 
@@ -364,4 +365,76 @@ fn test_radar_decimal_values() {
     let svg = render(&diagram).expect("Failed to render radar");
 
     assert_valid_svg(&svg);
+}
+
+// ============================================================================
+// Visual parity tests - matching mermaid.js reference implementation
+// ============================================================================
+
+#[test]
+fn test_radar_dimensions_match_reference() {
+    // Mermaid.js default dimensions: width=600, height=600, margins=50 each
+    // Total: 700x700
+    let input = r#"radar-beta
+                axis A,B,C
+                curve c{1,2,3}"#;
+
+    let diagram = parse(input).expect("Failed to parse radar");
+    let svg = render(&diagram).expect("Failed to render radar");
+
+    assert_valid_svg(&svg);
+    // Check viewBox and dimensions match reference (700x700)
+    assert!(
+        svg.contains(r#"width="700""#),
+        "Width should be 700 (600 chart + 50*2 margins)"
+    );
+    assert!(
+        svg.contains(r#"height="700""#),
+        "Height should be 700 (600 chart + 50*2 margins)"
+    );
+    assert!(
+        svg.contains(r#"viewBox="0 0 700 700""#),
+        "ViewBox should be 0 0 700 700"
+    );
+}
+
+#[test]
+fn test_radar_axis_scale_matches_reference() {
+    // Mermaid.js uses axisScaleFactor=1.0 (axes extend to full radius)
+    // and axisLabelFactor=1.05 (labels just outside the chart)
+    let input = r#"radar-beta
+                axis A,B,C
+                curve c{1,2,3}"#;
+
+    let diagram = parse(input).expect("Failed to parse radar");
+    let svg = render(&diagram).expect("Failed to render radar");
+
+    assert_valid_svg(&svg);
+    // With width/height=600 and margins=50, center is at (350,350), radius=300
+    // First axis (top) should extend to y = -300 (axisScaleFactor=1.0)
+    // First axis label should be at y = -315 (radius * 1.05)
+    // Check that axes extend to full radius (within the graticule)
+    // The axis line for the first axis (pointing up) should have y2 close to -300
+    assert!(
+        svg.contains("y2=\"-300\"") || svg.contains("y2=\"-299"),
+        "Axis lines should extend to full radius (300)"
+    );
+}
+
+#[test]
+fn test_radar_fill_opacity_matches_reference() {
+    // Mermaid.js uses fill-opacity=0.5 for curves
+    let input = r#"radar-beta
+                axis A,B,C
+                curve c{1,2,3}"#;
+
+    let diagram = parse(input).expect("Failed to parse radar");
+    let svg = render(&diagram).expect("Failed to render radar");
+
+    assert_valid_svg(&svg);
+    // Curves should have fill-opacity of 0.5 (via CSS or inline)
+    assert!(
+        svg.contains("fill-opacity: 0.5") || svg.contains(r#"fill-opacity="0.5""#),
+        "Curve fill-opacity should be 0.5"
+    );
 }

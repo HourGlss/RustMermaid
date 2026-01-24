@@ -10,30 +10,34 @@ use crate::error::Result;
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 
 /// Default radar chart dimensions (matching mermaid.js defaults)
-const DEFAULT_WIDTH: f64 = 400.0;
-const DEFAULT_HEIGHT: f64 = 400.0;
+/// Mermaid uses width=600, height=600 with margins of 50 each = 700x700 total
+const DEFAULT_WIDTH: f64 = 600.0;
+const DEFAULT_HEIGHT: f64 = 600.0;
 const MARGIN_TOP: f64 = 50.0;
 const MARGIN_RIGHT: f64 = 50.0;
 const MARGIN_BOTTOM: f64 = 50.0;
 const MARGIN_LEFT: f64 = 50.0;
 
-/// Axis scale and label factors
-const AXIS_SCALE_FACTOR: f64 = 0.85;
-const AXIS_LABEL_FACTOR: f64 = 1.1;
+/// Axis scale and label factors (matching mermaid.js defaults)
+/// axisScaleFactor=1.0: axes extend to full radius
+/// axisLabelFactor=1.05: labels positioned just outside the chart
+const AXIS_SCALE_FACTOR: f64 = 1.0;
+const AXIS_LABEL_FACTOR: f64 = 1.05;
 
 /// Curve tension for smooth curves (Catmull-Rom spline)
 const CURVE_TENSION: f64 = 0.167;
 
-/// Radar colors (matching mermaid.js theme)
+/// Radar colors (matching mermaid.js default theme - pastel cScale colors)
+/// Mermaid uses HSL colors with ~76% lightness for a pastel look
 const RADAR_COLORS: &[&str] = &[
-    "#4C78A8", // Blue
-    "#F58518", // Orange
-    "#E45756", // Red
-    "#72B7B2", // Teal
-    "#54A24B", // Green
-    "#EECA3B", // Yellow
-    "#B279A2", // Purple
-    "#FF9DA6", // Pink
+    "#8686FF", // hsl(240, 100%, 76%) - Light blue/lavender
+    "#FFFF78", // hsl(60, 100%, 73%) - Light yellow
+    "#9FFF9F", // hsl(120, 100%, 76%) - Light green
+    "#C986FF", // hsl(270, 100%, 76%) - Light purple
+    "#FF86FF", // hsl(300, 100%, 76%) - Light magenta
+    "#FF86C9", // hsl(330, 100%, 76%) - Light pink
+    "#FF8686", // hsl(0, 100%, 76%) - Light red
+    "#FFC986", // hsl(30, 100%, 76%) - Light orange
 ];
 
 /// Render a radar chart to SVG
@@ -107,10 +111,11 @@ pub fn render_radar(db: &RadarDb, config: &RenderConfig) -> Result<String> {
     if !title.is_empty() {
         let title_elem = SvgElement::Text {
             x: 0.0,
-            y: -(chart_height / 2.0) - MARGIN_TOP + 20.0,
+            y: -(chart_height / 2.0) - MARGIN_TOP,
             content: title.to_string(),
             attrs: Attrs::new()
                 .with_attr("text-anchor", "middle")
+                .with_attr("dominant-baseline", "hanging")
                 .with_class("radarTitle")
                 .with_attr("font-size", "16")
                 .with_attr("font-weight", "bold")
@@ -150,10 +155,10 @@ fn draw_graticule(
                     cy: 0.0,
                     r,
                     attrs: Attrs::new()
-                        .with_fill("none")
-                        .with_stroke("#999999")
+                        .with_fill("#DEDEDE")
+                        .with_attr("fill-opacity", "0.3")
+                        .with_stroke("#DEDEDE")
                         .with_stroke_width(1.0)
-                        .with_attr("stroke-opacity", "0.3")
                         .with_class("radarGraticule"),
                 };
                 children.push(circle);
@@ -176,10 +181,10 @@ fn draw_graticule(
                 let polygon = SvgElement::PolygonStr {
                     points,
                     attrs: Attrs::new()
-                        .with_fill("none")
-                        .with_stroke("#999999")
+                        .with_fill("#DEDEDE")
+                        .with_attr("fill-opacity", "0.3")
+                        .with_stroke("#DEDEDE")
                         .with_stroke_width(1.0)
-                        .with_attr("stroke-opacity", "0.3")
                         .with_class("radarGraticule"),
                 };
                 children.push(polygon);
@@ -273,9 +278,7 @@ fn draw_curves(
                     d: path_d,
                     attrs: Attrs::new()
                         .with_fill(color)
-                        .with_attr("fill-opacity", "0.3")
                         .with_stroke(color)
-                        .with_stroke_width(2.0)
                         .with_class(&format!("radarCurve-{}", index)),
                 };
                 children.push(path);
@@ -291,9 +294,7 @@ fn draw_curves(
                     points: points_str,
                     attrs: Attrs::new()
                         .with_fill(color)
-                        .with_attr("fill-opacity", "0.3")
                         .with_stroke(color)
-                        .with_stroke_width(2.0)
                         .with_class(&format!("radarCurve-{}", index)),
                 };
                 children.push(polygon);
@@ -389,20 +390,41 @@ fn draw_legend(
     }
 }
 
+/// Generate CSS for curve colors
+fn generate_curve_color_css() -> String {
+    let mut css = String::new();
+    for (i, color) in RADAR_COLORS.iter().enumerate() {
+        css.push_str(&format!(
+            r#".radarCurve-{i} {{
+    fill: {color};
+    stroke: {color};
+}}
+.radarLegendBox-{i} {{
+    fill: {color};
+    stroke: {color};
+}}
+"#,
+            i = i,
+            color = color
+        ));
+    }
+    css
+}
+
 /// Generate radar-specific CSS
 fn generate_radar_css(theme: &crate::render::svg::Theme) -> String {
     format!(
         r#"
 .radarGraticule {{
-    fill: none;
-    stroke: #999999;
+    fill: #DEDEDE;
+    fill-opacity: 0.3;
+    stroke: #DEDEDE;
     stroke-width: 1px;
-    stroke-opacity: 0.3;
 }}
 
 .radarAxisLine {{
     stroke: #333333;
-    stroke-width: 1px;
+    stroke-width: 2px;
 }}
 
 .radarAxisLabel {{
@@ -425,11 +447,14 @@ fn generate_radar_css(theme: &crate::render::svg::Theme) -> String {
 }}
 
 [class^="radarCurve-"] {{
-    fill-opacity: 0.3;
+    fill-opacity: 0.5;
     stroke-width: 2px;
 }}
+
+{curve_colors}
 "#,
         font_family = theme.font_family,
         text_color = theme.primary_text_color,
+        curve_colors = generate_curve_color_css(),
     )
 }
