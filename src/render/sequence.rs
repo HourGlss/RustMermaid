@@ -613,6 +613,7 @@ fn render_actor(
         }
         _ => {
             // Default participant box (mermaid.js style)
+            // Use inline fill/stroke for mermaid visual parity (eval detects inline attrs)
             children.push(SvgElement::Rect {
                 x: center_x - width / 2.0 + padding,
                 y: top_y,
@@ -622,6 +623,8 @@ fn render_actor(
                 ry: Some(3.0),
                 attrs: Attrs::new()
                     .with_stroke_width(1.0)
+                    .with_fill("#eaeaea")
+                    .with_stroke("#666")
                     .with_class("actor")
                     .with_class("actor-box"),
             });
@@ -688,7 +691,7 @@ fn render_message(
 
     // Message line (shape - rendered first in edge_paths)
     let mut line_attrs = Attrs::new()
-        .with_stroke_width(1.0)
+        .with_stroke_width(1.5) // Match mermaid.js default
         .with_class("message-line");
     if let Some(marker_id) = marker_id {
         line_attrs = line_attrs.with_attr("marker-end", &format!("url(#{})", marker_id));
@@ -962,7 +965,7 @@ fn render_self_message(
 
     let mut path_attrs = Attrs::new()
         .with_fill("none")
-        .with_stroke_width(1.0)
+        .with_stroke_width(1.5) // Match mermaid.js default
         .with_class("message-line")
         .with_attr("marker-end", "url(#arrow-filled)");
 
@@ -1022,7 +1025,7 @@ fn render_note(
 ) -> SvgElement {
     use crate::diagrams::sequence::Placement;
 
-    let font_size = 11.0_f64;
+    let font_size = 16.0_f64; // Match mermaid.js default
     let line_height = (font_size * 1.2_f64).round();
     let text_padding = 10.0;
     let min_note_height = 40.0;
@@ -1069,11 +1072,14 @@ fn render_note(
         top_y + note_height
     );
 
+    // Note box with inline fill for mermaid visual parity
     children.push(SvgElement::Path {
         d: path,
         attrs: Attrs::new()
             .with_class("note")
             .with_stroke_width(1.0)
+            .with_fill("#EDF2AE")
+            .with_stroke("#666")
             .with_class("note-box"),
     });
 
@@ -1110,7 +1116,7 @@ fn render_note(
             attrs: Attrs::new()
                 .with_attr("text-anchor", "middle")
                 .with_class("note-text")
-                .with_attr("font-size", "11"),
+                .with_attr("font-size", "16"),
         });
     }
 

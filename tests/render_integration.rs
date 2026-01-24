@@ -3608,3 +3608,52 @@ fn test_fork_edges_are_curved() {
         paths.len()
     );
 }
+
+// ============================================================================
+// Sequence Diagram Visual Parity Tests (mermaid compatibility)
+// ============================================================================
+
+/// Test: Sequence diagram actors should have inline fill for mermaid parity
+#[test]
+fn test_sequence_actors_have_inline_fill() {
+    let input = r#"sequenceDiagram
+    participant Alice
+    participant Bob
+    Alice->>Bob: Hello"#;
+
+    let diagram = parse(input).expect("Failed to parse sequence diagram");
+    let svg = render_with_config(&diagram, &RenderConfig::default())
+        .expect("Failed to render sequence diagram");
+
+    // Actor boxes should have inline fill="#eaeaea" to match mermaid
+    assert!(
+        svg.contains("fill=\"#eaeaea\"") || svg.contains("fill=\"#EAEAEA\""),
+        "Actor boxes should have inline fill=#eaeaea for mermaid visual parity.\nSVG snippet: {}",
+        &svg[..svg.len().min(2000)]
+    );
+}
+
+/// Test: Sequence diagram notes should have inline fill for mermaid parity
+#[test]
+fn test_sequence_notes_have_inline_fill() {
+    let input = r#"sequenceDiagram
+    participant Alice
+    Note right of Alice: A note"#;
+
+    let diagram = parse(input).expect("Failed to parse sequence diagram");
+    let svg = render_with_config(&diagram, &RenderConfig::default())
+        .expect("Failed to render sequence diagram");
+
+    // Notes should have inline fill for mermaid visual parity
+    // Mermaid uses #EDF2AE or #fff5ad depending on theme
+    let has_note_fill = svg.contains("fill=\"#EDF2AE\"")
+        || svg.contains("fill=\"#edf2ae\"")
+        || svg.contains("fill=\"#fff5ad\"")
+        || svg.contains("fill=\"#FFF5AD\"");
+
+    assert!(
+        has_note_fill,
+        "Notes should have inline fill for mermaid visual parity.\nSVG snippet: {}",
+        &svg[..svg.len().min(2000)]
+    );
+}
