@@ -6,6 +6,7 @@
 
 use crate::diagrams::treemap::{TreemapDb, TreemapNode};
 use crate::error::Result;
+use crate::render::svg::color::{Color, darken};
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 
 /// Default inner padding between cells/sections (reserved for future use)
@@ -21,8 +22,8 @@ const SECTION_PADDING: f64 = 10.0;
 /// Maximum number of color sections (matches mermaid.js cScale)
 const MAX_SECTIONS: usize = 12;
 
-/// Font size for leaf labels
-const LEAF_FONT_SIZE: f64 = 14.0;
+/// Font size for leaf labels (matches mermaid.js default of 38px)
+const LEAF_FONT_SIZE: f64 = 38.0;
 
 /// Font size for section labels
 const SECTION_FONT_SIZE: f64 = 12.0;
@@ -154,14 +155,19 @@ pub fn render_treemap(db: &TreemapDb, config: &RenderConfig) -> Result<String> {
 
     // Render sections (branch nodes with children)
     let mut section_elements = Vec::new();
-    for rect in ctx.positioned.iter().filter(|r| !r.is_leaf && r.depth > 0) {
-        section_elements.push(render_section(rect, config));
+    for (idx, rect) in ctx
+        .positioned
+        .iter()
+        .filter(|r| !r.is_leaf && r.depth > 0)
+        .enumerate()
+    {
+        section_elements.push(render_section(rect, idx, config));
     }
 
     // Render leaf nodes
     let mut leaf_elements = Vec::new();
-    for rect in ctx.positioned.iter().filter(|r| r.is_leaf) {
-        leaf_elements.push(render_leaf(rect, config));
+    for (idx, rect) in ctx.positioned.iter().filter(|r| r.is_leaf).enumerate() {
+        leaf_elements.push(render_leaf(rect, idx, config));
     }
 
     // Add sections group
@@ -439,12 +445,60 @@ fn find_best_split(areas: &[f64]) -> (Vec<f64>, Vec<f64>, f64) {
     (left_areas, right_areas, split_ratio)
 }
 
+/// Parse an HSL string like "hsl(240, 100%, 96%)" into (h, s, l) components
+fn parse_hsl_string(hsl: &str) -> Option<(f64, f64, f64)> {
+    let trimmed = hsl.trim();
+    if !trimmed.starts_with("hsl(") || !trimmed.ends_with(')') {
+        return None;
+    }
+    let inner = &trimmed[4..trimmed.len() - 1];
+    let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let h: f64 = parts[0].parse().ok()?;
+    let s: f64 = parts[1].trim_end_matches('%').parse().ok()?;
+    let l: f64 = parts[2].trim_end_matches('%').parse().ok()?;
+    Some((h, s, l))
+}
+
+/// Get the fill color for a section index from the theme
+/// Darkens the color to match mermaid.js cScale behavior (darker than pie colors)
+fn get_section_fill_color(section: usize, config: &RenderConfig) -> String {
+    let base_color = config
+        .theme
+        .pie_colors
+        .get(section)
+        .cloned()
+        .unwrap_or_else(|| "#ECECFF".to_string());
+
+    // Darken the color by 20% to match mermaid.js cScale darkening
+    // mermaid applies darken(cScale, 10) but starts with different base colors
+    // Our pie_colors are lighter, so we darken more to compensate
+
+    // Try parsing as HSL string first (e.g., "hsl(240, 100%, 96%)")
+    if let Some((h, s, l)) = parse_hsl_string(&base_color) {
+        let color = Color::from_hsl(h, s, l);
+        return darken(&color, 20.0).to_hsl_string();
+    }
+
+    // Fall back to hex parsing
+    if let Some(color) = Color::from_hex(&base_color) {
+        darken(&color, 20.0).to_hsl_string()
+    } else {
+        base_color
+    }
+}
+
 /// Render a section (branch node with header)
-fn render_section(rect: &TreemapRect, _config: &RenderConfig) -> SvgElement {
+fn render_section(rect: &TreemapRect, index: usize, config: &RenderConfig) -> SvgElement {
     let mut children = Vec::new();
 
     // Section color class
     let section_class = format!("section-{}", rect.section);
+
+    // Get the inline fill color for this section
+    let fill_color = get_section_fill_color(rect.section, config);
 
     // Build style string from classDef
     let style_str = if rect.styles.is_empty() {
@@ -453,7 +507,7 @@ fn render_section(rect: &TreemapRect, _config: &RenderConfig) -> SvgElement {
         rect.styles.join(";")
     };
 
-    // Section background rect
+    // Section background rect with inline fill color
     children.push(SvgElement::Rect {
         x: rect.x,
         y: rect.y,
@@ -463,6 +517,8 @@ fn render_section(rect: &TreemapRect, _config: &RenderConfig) -> SvgElement {
         ry: None,
         attrs: Attrs::new()
             .with_class(&format!("treemapSection {}", section_class))
+            .with_fill(&fill_color)
+            .with_stroke(&fill_color)
             .with_attr("fill-opacity", "0.6")
             .with_attr("stroke-opacity", "0.4")
             .with_attr("stroke-width", "2")
@@ -481,6 +537,16 @@ fn render_section(rect: &TreemapRect, _config: &RenderConfig) -> SvgElement {
             .with_class("treemapSectionHeader")
             .with_attr("fill", "none")
             .with_attr("stroke-width", "0"),
+    });
+
+    // ClipPath for section header text overflow handling
+    let clip_id = format!("clip-section-{}", index);
+    let clip_width = (rect.width - 12.0).max(0.0); // 6px padding on each side
+    children.push(SvgElement::Raw {
+        content: format!(
+            "<clipPath id=\"{}\"><rect width=\"{}\" height=\"{}\"/></clipPath>",
+            clip_id, clip_width, SECTION_HEADER_HEIGHT
+        ),
     });
 
     // Section label (left-aligned)
@@ -531,11 +597,14 @@ fn render_section(rect: &TreemapRect, _config: &RenderConfig) -> SvgElement {
 }
 
 /// Render a leaf node
-fn render_leaf(rect: &TreemapRect, _config: &RenderConfig) -> SvgElement {
+fn render_leaf(rect: &TreemapRect, index: usize, config: &RenderConfig) -> SvgElement {
     let mut children = Vec::new();
 
     // Section color class (inherited from parent)
     let section_class = format!("section-{}", rect.section);
+
+    // Get the inline fill color for this leaf (inherits from parent section)
+    let fill_color = get_section_fill_color(rect.section, config);
 
     // Build style string from classDef
     let style_str = if rect.styles.is_empty() {
@@ -544,7 +613,7 @@ fn render_leaf(rect: &TreemapRect, _config: &RenderConfig) -> SvgElement {
         rect.styles.join(";")
     };
 
-    // Leaf background rect
+    // Leaf background rect with inline fill color
     children.push(SvgElement::Rect {
         x: rect.x,
         y: rect.y,
@@ -554,9 +623,22 @@ fn render_leaf(rect: &TreemapRect, _config: &RenderConfig) -> SvgElement {
         ry: None,
         attrs: Attrs::new()
             .with_class(&format!("treemapLeaf {}", section_class))
+            .with_fill(&fill_color)
+            .with_stroke(&fill_color)
             .with_attr("fill-opacity", "0.3")
             .with_attr("stroke-width", "3")
             .with_style_if(!style_str.is_empty(), &style_str),
+    });
+
+    // ClipPath for text overflow handling (matching mermaid.js)
+    let clip_id = format!("clip-leaf-{}", index);
+    let clip_width = (rect.width - 4.0).max(0.0);
+    let clip_height = (rect.height - 4.0).max(0.0);
+    children.push(SvgElement::Raw {
+        content: format!(
+            "<clipPath id=\"{}\"><rect width=\"{}\" height=\"{}\"/></clipPath>",
+            clip_id, clip_width, clip_height
+        ),
     });
 
     // Calculate center position for labels
@@ -594,7 +676,7 @@ fn render_leaf(rect: &TreemapRect, _config: &RenderConfig) -> SvgElement {
     // Only show text if there's enough space
     let min_display_size = 20.0;
     if rect.width >= min_display_size && rect.height >= min_display_size {
-        // Leaf label (centered)
+        // Leaf label (centered) with clip-path reference
         children.push(SvgElement::Text {
             x: center_x,
             y: center_y - value_font_size / 2.0,
@@ -604,10 +686,11 @@ fn render_leaf(rect: &TreemapRect, _config: &RenderConfig) -> SvgElement {
                 .with_attr("text-anchor", "middle")
                 .with_attr("dominant-baseline", "middle")
                 .with_attr("font-size", &format!("{}px", label_font_size))
+                .with_attr("clip-path", &format!("url(#{})", clip_id))
                 .with_style_if(!text_style.is_empty(), &text_style),
         });
 
-        // Leaf value (below label)
+        // Leaf value (below label) with clip-path reference
         if let Some(value) = rect.value {
             children.push(SvgElement::Text {
                 x: center_x,
@@ -618,6 +701,7 @@ fn render_leaf(rect: &TreemapRect, _config: &RenderConfig) -> SvgElement {
                     .with_attr("text-anchor", "middle")
                     .with_attr("dominant-baseline", "hanging")
                     .with_attr("font-size", &format!("{}px", value_font_size))
+                    .with_attr("clip-path", &format!("url(#{})", clip_id))
                     .with_style_if(!text_style.is_empty(), &text_style),
             });
         }

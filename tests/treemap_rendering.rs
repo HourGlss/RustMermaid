@@ -603,3 +603,177 @@ fn treemap_section_only() {
         "Should have treemapContainer"
     );
 }
+
+// ============================================================================
+// Visual Parity Tests - ensuring selkie matches mermaid.js output
+// ============================================================================
+
+/// Extract font-size from a text element's style or attribute
+fn get_font_size(doc: &Document<'_>, class_name: &str) -> Option<f64> {
+    for node in doc.descendants() {
+        if let Some(class) = node.attribute("class") {
+            if class.split_whitespace().any(|c| c == class_name) {
+                // Check font-size attribute
+                if let Some(size) = node.attribute("font-size") {
+                    return size.trim_end_matches("px").parse().ok();
+                }
+                // Check style attribute for font-size
+                if let Some(style) = node.attribute("style") {
+                    for part in style.split(';') {
+                        let part = part.trim();
+                        if part.starts_with("font-size:") {
+                            let size_str = part.trim_start_matches("font-size:").trim();
+                            return size_str.trim_end_matches("px").parse().ok();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Count rect elements in the SVG (including clipPath rects)
+fn count_all_rects(doc: &Document<'_>) -> usize {
+    doc.descendants()
+        .filter(|node| node.tag_name().name() == "rect")
+        .count()
+}
+
+/// Check if SVG has clipPath elements
+fn has_clip_paths(doc: &Document<'_>) -> bool {
+    doc.descendants()
+        .any(|node| node.tag_name().name() == "clipPath")
+}
+
+/// Get viewBox height from SVG
+fn get_viewbox_height(doc: &Document<'_>) -> Option<f64> {
+    let svg_root = doc.root_element();
+    if let Some(viewbox) = svg_root.attribute("viewBox") {
+        let parts: Vec<&str> = viewbox.split_whitespace().collect();
+        if parts.len() >= 4 {
+            return parts[3].parse().ok();
+        }
+    }
+    None
+}
+
+/// Check if an element has an inline fill attribute
+fn has_inline_fill(doc: &Document<'_>, class_name: &str) -> bool {
+    doc.descendants()
+        .filter(|node| {
+            node.attribute("class")
+                .map(|class| class.split_whitespace().any(|c| c == class_name))
+                .unwrap_or(false)
+        })
+        .any(|node| node.attribute("fill").is_some())
+}
+
+#[test]
+fn treemap_visual_parity_leaf_font_size() {
+    // Test: Leaf labels should use 38px font size (matching mermaid.js)
+    let input = r#"treemap-beta
+"Category A"
+    "Item A1": 10
+    "Item A2": 20
+"Category B"
+    "Item B1": 15
+    "Item B2": 25
+"#;
+    let svg = render_treemap_svg(input);
+    let doc = parse_svg(&svg);
+
+    // Get font size from treemapLabel elements
+    let font_size = get_font_size(&doc, "treemapLabel");
+    assert!(
+        font_size.is_some(),
+        "treemapLabel should have a font-size"
+    );
+
+    // Allow some tolerance but it should be close to 38px (mermaid's default)
+    // The reference uses 38px, we should use at least 30px for visual parity
+    let size = font_size.unwrap();
+    assert!(
+        size >= 30.0,
+        "treemapLabel font-size should be at least 30px for visual parity (got {}px)",
+        size
+    );
+}
+
+#[test]
+fn treemap_visual_parity_clip_paths() {
+    // Test: Should have clipPath elements for text overflow handling
+    let input = r#"treemap-beta
+"Category A"
+    "Item A1": 10
+    "Item A2": 20
+"Category B"
+    "Item B1": 15
+    "Item B2": 25
+"#;
+    let svg = render_treemap_svg(input);
+    let doc = parse_svg(&svg);
+
+    // Mermaid.js creates clipPath elements for each leaf node to handle text overflow
+    assert!(
+        has_clip_paths(&doc),
+        "SVG should have clipPath elements for text overflow handling"
+    );
+}
+
+#[test]
+fn treemap_visual_parity_rect_count() {
+    // Test: Basic treemap should have correct number of rect elements
+    // For 2 sections and 4 leaves:
+    // - 2 section header rects (treemapSectionHeader)
+    // - 2 section background rects (treemapSection)
+    // - 4 leaf rects (treemapLeaf)
+    // - clipPath rects (4 for leaves + 2 for sections = 6)
+    // Total: 2 + 2 + 4 + 6 = 14 minimum (mermaid has 17 with root section)
+    let input = r#"treemap-beta
+"Category A"
+    "Item A1": 10
+    "Item A2": 20
+"Category B"
+    "Item B1": 15
+    "Item B2": 25
+"#;
+    let svg = render_treemap_svg(input);
+    let doc = parse_svg(&svg);
+
+    let rect_count = count_all_rects(&doc);
+    // Should have at least 12 rects (4 leaves + 4 sections + 4 clipPath minimum)
+    assert!(
+        rect_count >= 12,
+        "Should have at least 12 rect elements (got {})",
+        rect_count
+    );
+}
+
+#[test]
+fn treemap_visual_parity_inline_colors() {
+    // Test: Leaf and section rects should have inline fill colors
+    // (not just relying on CSS classes for colors)
+    let input = r#"treemap-beta
+"Category A"
+    "Item A1": 10
+    "Item A2": 20
+"Category B"
+    "Item B1": 15
+    "Item B2": 25
+"#;
+    let svg = render_treemap_svg(input);
+    let doc = parse_svg(&svg);
+
+    // Check that treemapLeaf elements have inline fill attribute
+    assert!(
+        has_inline_fill(&doc, "treemapLeaf"),
+        "treemapLeaf elements should have inline fill attribute"
+    );
+
+    // Check that treemapSection elements have inline fill attribute
+    assert!(
+        has_inline_fill(&doc, "treemapSection"),
+        "treemapSection elements should have inline fill attribute"
+    );
+}
