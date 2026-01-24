@@ -202,7 +202,7 @@ pub fn render_class(db: &ClassDb, config: &RenderConfig) -> Result<String> {
     // Add marker definitions for relations
     doc.add_defs(create_class_markers());
 
-    // Render relations FIRST so they appear behind class nodes
+    // Render relations - edges go to edgePaths, labels go to edgeLabels
     for relation in &db.relations {
         let key = (relation.id1.clone(), relation.id2.clone());
 
@@ -221,7 +221,7 @@ pub fn render_class(db: &ClassDb, config: &RenderConfig) -> Result<String> {
 
             let bend_points = edge_points.get(&key);
 
-            let relation_elem = render_relation(
+            let (edge_path, edge_labels) = render_relation_separated(
                 x1,
                 y1,
                 h1,
@@ -239,11 +239,14 @@ pub fn render_class(db: &ClassDb, config: &RenderConfig) -> Result<String> {
                 bend_points,
                 &size_estimator,
             );
-            doc.add_element(relation_elem);
+            doc.add_edge_path(edge_path);
+            for label in edge_labels {
+                doc.add_edge_label(label);
+            }
         }
     }
 
-    // Render class nodes AFTER relations so they appear on top
+    // Render class nodes in nodes container (on top of edges)
     for class in &classes {
         if let Some(&(x, y)) = class_positions.get(&class.id) {
             let (width, height) = class_dimensions
@@ -265,11 +268,11 @@ pub fn render_class(db: &ClassDb, config: &RenderConfig) -> Result<String> {
                 member_font_size,
                 &size_estimator,
             );
-            doc.add_element(class_elem);
+            doc.add_node(class_elem);
         }
     }
 
-    // Render notes
+    // Render notes in nodes container
     for note in db.notes.values() {
         if let Some(&(x, y)) = class_positions.get(&note.class) {
             let (width, _) = class_dimensions
@@ -277,7 +280,7 @@ pub fn render_class(db: &ClassDb, config: &RenderConfig) -> Result<String> {
                 .copied()
                 .unwrap_or((180.0, 60.0));
             let note_elem = render_note(x + width + 20.0, y, &note.text);
-            doc.add_element(note_elem);
+            doc.add_node(note_elem);
         }
     }
 
@@ -300,18 +303,21 @@ fn render_class_box(
     member_font_size: f64,
     _size_estimator: &dyn SizeEstimator,
 ) -> SvgElement {
-    let mut children = Vec::new();
+    // Collect shapes and text separately for correct z-order
+    // In SVG, later elements render on top, so we emit shapes first, then text
+    let mut shapes = Vec::new();
+    let mut text_elements = Vec::new();
 
     // Background shape (path to match mermaid structure)
     let box_path = rounded_rect_path(x, y, width, height, 3.0, 3.0);
-    children.push(SvgElement::Path {
+    shapes.push(SvgElement::Path {
         d: box_path.clone(),
         attrs: Attrs::new()
             .with_fill("#ECECFF")
             .with_stroke("none")
             .with_class("class-box-bg"),
     });
-    children.push(SvgElement::Path {
+    shapes.push(SvgElement::Path {
         d: box_path,
         attrs: Attrs::new()
             .with_fill("none")
@@ -333,12 +339,37 @@ fn render_class_box(
     let num_header_lines = class.annotations.len() + 1; // annotations + class name
     let header_line_spacing = actual_header_height / (num_header_lines as f64 + 1.0);
 
+    // First divider is after the header section (annotations + name)
+    let divider1_y = y + actual_header_height;
+    let members_section_height = (class.members.len().max(1) as f64) * member_height + padding;
+    let divider2_y = divider1_y + members_section_height;
+
+    // Add dividers to shapes (before text for correct z-order)
+    // Divider after name (always present)
+    shapes.push(SvgElement::Path {
+        d: line_path(x, divider1_y, x + width, divider1_y),
+        attrs: Attrs::new()
+            .with_stroke("#333333")
+            .with_stroke_width(1.0)
+            .with_class("class-divider"),
+    });
+
+    // Divider between attributes and methods (always present)
+    shapes.push(SvgElement::Path {
+        d: line_path(x, divider2_y, x + width, divider2_y),
+        attrs: Attrs::new()
+            .with_stroke("#333333")
+            .with_stroke_width(1.0)
+            .with_class("class-divider"),
+    });
+
+    // Now add all text elements (rendered after shapes)
     let mut header_y = y + header_line_spacing;
 
     // Annotations (e.g. «interface», «abstract») - centered in header
     for annotation in &class.annotations {
         let annotation_text = format!("«{}»", annotation);
-        children.push(SvgElement::Text {
+        text_elements.push(SvgElement::Text {
             x: center_x,
             y: header_y,
             content: annotation_text,
@@ -364,7 +395,7 @@ fn render_class_box(
     };
 
     let class_text = format!("{}{}", class_label, type_suffix);
-    children.push(SvgElement::Text {
+    text_elements.push(SvgElement::Text {
         x: center_x,
         y: header_y,
         content: class_text,
@@ -375,29 +406,14 @@ fn render_class_box(
             .with_attr("font-weight", "bold"),
     });
 
-    // First divider is after the header section (annotations + name)
-    let divider1_y = y + actual_header_height;
-    let members_section_height = (class.members.len().max(1) as f64) * member_height + padding;
-    let divider2_y = divider1_y + members_section_height;
-    let mut current_y; // For positioning members and methods
-
-    // Divider after name (always present)
-    children.push(SvgElement::Path {
-        d: line_path(x, divider1_y, x + width, divider1_y),
-        attrs: Attrs::new()
-            .with_stroke("#333333")
-            .with_stroke_width(1.0)
-            .with_class("class-divider"),
-    });
-
     // Attributes section (left-aligned)
     // Position text centered within each row
     if !class.members.is_empty() {
-        current_y = divider1_y;
+        let mut current_y = divider1_y;
         for member in &class.members {
             current_y += member_height / 2.0; // Move to center of row
             let display = member.get_display_details();
-            children.push(SvgElement::Text {
+            text_elements.push(SvgElement::Text {
                 x: left_x,
                 y: current_y,
                 content: display.display_text,
@@ -409,24 +425,15 @@ fn render_class_box(
             current_y += member_height / 2.0; // Move to end of row
         }
     }
-
-    // Divider between attributes and methods (always present)
-    children.push(SvgElement::Path {
-        d: line_path(x, divider2_y, x + width, divider2_y),
-        attrs: Attrs::new()
-            .with_stroke("#333333")
-            .with_stroke_width(1.0)
-            .with_class("class-divider"),
-    });
 
     // Methods section (left-aligned)
     // Position text centered within each row
     if !class.methods.is_empty() {
-        current_y = divider2_y;
+        let mut current_y = divider2_y;
         for method in &class.methods {
             current_y += member_height / 2.0; // Move to center of row
             let display = method.get_display_details();
-            children.push(SvgElement::Text {
+            text_elements.push(SvgElement::Text {
                 x: left_x,
                 y: current_y,
                 content: display.display_text,
@@ -438,6 +445,10 @@ fn render_class_box(
             current_y += member_height / 2.0; // Move to end of row
         }
     }
+
+    // Combine shapes first, then text (correct z-order)
+    let mut children = shapes;
+    children.extend(text_elements);
 
     SvgElement::Group {
         children,
@@ -482,8 +493,9 @@ fn rounded_rect_path(x: f64, y: f64, width: f64, height: f64, rx: f64, ry: f64) 
 }
 
 /// Render a relation between two classes using dagre bend points
+/// Returns (edge_path, edge_labels) for proper SVG container placement
 #[allow(clippy::too_many_arguments)]
-fn render_relation(
+fn render_relation_separated(
     x1: f64,
     y1: f64,
     h1: f64,
@@ -500,8 +512,8 @@ fn render_relation(
     line_type: LineType,
     bend_points: Option<&Vec<Point>>,
     _size_estimator: &dyn SizeEstimator,
-) -> SvgElement {
-    let mut children = Vec::new();
+) -> (SvgElement, Vec<SvgElement>) {
+    let mut label_elements = Vec::new();
 
     // No marker offset needed - refX is now at the arrow tip, so path endpoints
     // should be exactly at node boundaries
@@ -593,7 +605,7 @@ fn render_relation(
         .with_stroke("#333333")
         .with_stroke_width(1.0)
         .with_fill("none")
-        .with_class("relation-line");
+        .with_class("relation relation-line");
 
     if line_type == LineType::Dotted {
         path_attrs = path_attrs.with_stroke_dasharray("5,5");
@@ -606,10 +618,10 @@ fn render_relation(
         path_attrs = path_attrs.with_attr("marker-end", marker);
     }
 
-    children.push(SvgElement::Path {
+    let path_element = SvgElement::Path {
         d: path_d.clone(),
         attrs: path_attrs,
-    });
+    };
 
     // Calculate label positions based on bend points or direct line
     let (start_x, start_y, end_x, end_y) = if let Some(points) = bend_points {
@@ -648,7 +660,7 @@ fn render_relation(
             0.0
         };
 
-        children.push(SvgElement::Text {
+        label_elements.push(SvgElement::Text {
             x: start_x + offset_x + perp_x,
             y: start_y + offset_y + perp_y,
             content: cardinality1.to_string(),
@@ -680,7 +692,7 @@ fn render_relation(
             0.0
         };
 
-        children.push(SvgElement::Text {
+        label_elements.push(SvgElement::Text {
             x: end_x - offset_x + perp_x,
             y: end_y - offset_y + perp_y,
             content: cardinality2.to_string(),
@@ -695,7 +707,7 @@ fn render_relation(
     if !label.is_empty() {
         let mid_x = (start_x + end_x) / 2.0;
         let mid_y = (start_y + end_y) / 2.0;
-        children.push(SvgElement::Text {
+        label_elements.push(SvgElement::Text {
             x: mid_x,
             y: mid_y,
             content: label.to_string(),
@@ -707,10 +719,7 @@ fn render_relation(
         });
     }
 
-    SvgElement::Group {
-        children,
-        attrs: Attrs::new().with_class("relation"),
-    }
+    (path_element, label_elements)
 }
 
 /// Offset a point toward a target by a given distance

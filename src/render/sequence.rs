@@ -1119,7 +1119,10 @@ fn render_note(
 }
 
 fn count_text_lines(message: &str) -> usize {
-    chart_utils::normalize_br_tags(message).lines().count().max(1)
+    chart_utils::normalize_br_tags(message)
+        .lines()
+        .count()
+        .max(1)
 }
 
 /// Create an arrow marker definition

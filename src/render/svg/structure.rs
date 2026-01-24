@@ -336,6 +336,12 @@ fn count_visible_paths(doc: &roxmltree::Document) -> usize {
     doc.descendants()
         .filter(|n| n.tag_name().name() == "path")
         .filter(|n| {
+            // Exclude label backgrounds (not structural elements)
+            let class = n.attribute("class").unwrap_or("");
+            if class.contains("label-bg") {
+                return false;
+            }
+
             let stroke = n.attribute("stroke");
             if stroke == Some("none") {
                 return false;
@@ -358,13 +364,14 @@ fn count_nodes_and_edges(doc: &roxmltree::Document) -> (usize, usize) {
 
     // Node class patterns used by different diagram types in selkie and mermaid.js
     const NODE_CLASSES: &[&str] = &[
-        "node",             // flowchart (selkie)
+        "node",             // flowchart (selkie), mindmap (mermaid.js)
         "flowchart-node",   // flowchart (mermaid.js)
         "class-node",       // class diagram (selkie)
         "state-node",       // state diagram (selkie)
         "entity-node",      // ER diagram (selkie)
         "requirement-node", // requirement diagram (selkie)
         "element-node",     // requirement diagram elements (selkie)
+        "mindmap-node",     // mindmap (selkie)
         "architecture-service",
         "architecture-junction",
     ];
@@ -849,8 +856,13 @@ fn analyze_edge_geometry(doc: &roxmltree::Document) -> EdgeGeometry {
     for node in doc.descendants() {
         if node.tag_name().name() == "path" {
             let class = node.attribute("class").unwrap_or("");
-            // Look for relationship/edge paths
+            // Look for relationship/edge paths, but skip label backgrounds
+            // Label backgrounds have class like "transition-label-bg" which contains "transition"
+            if class.contains("label-bg") {
+                continue;
+            }
             if class.contains("relationship")
+                || class.contains("relation")
                 || class.contains("edge")
                 || class.contains("link")
                 || class.contains("transition")

@@ -52,7 +52,12 @@ pub fn render_xychart(db: &XYChartDb, config: &RenderConfig) -> Result<String> {
     let plot_height = plot_bottom - plot_top;
 
     // Render background using shared utility
-    let bg = chart_utils::render_background(width, height, &config.theme.background, "xychart-background");
+    let bg = chart_utils::render_background(
+        width,
+        height,
+        &config.theme.background,
+        "xychart-background",
+    );
     doc.add_element(bg);
 
     // Render title if present

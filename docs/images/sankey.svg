@@ -118,22 +118,22 @@ marker path {
 
     </g>
     <g class="nodes">
-      <g class="node" x="0" y="15.375" transform="translate(0,15.375)" id="node-1">
+      <g class="node" transform="translate(0,15.375)" x="0" id="node-1" y="15.375">
         <rect x="0" y="0" width="10" height="300" class="sankey-node" fill="#4e79a7"/>
       </g>
-      <g class="node" transform="translate(590,0)" x="590" id="node-2" y="0">
+      <g class="node" id="node-2" transform="translate(590,0)" x="590" y="0">
         <rect x="0" y="0" width="10" height="120" class="sankey-node" fill="#f28e2c"/>
       </g>
-      <g class="node" x="590" transform="translate(590,145)" id="node-3" y="145">
+      <g class="node" id="node-3" x="590" transform="translate(590,145)" y="145">
         <rect x="0" y="0" width="10" height="75" class="sankey-node" fill="#e15759"/>
       </g>
       <g class="node" id="node-4" x="590" y="245" transform="translate(590,245)">
         <rect x="0" y="0" width="10" height="45" class="sankey-node" fill="#76b7b2"/>
       </g>
-      <g class="node" transform="translate(590,315)" x="590" id="node-5" y="315">
+      <g class="node" id="node-5" y="315" x="590" transform="translate(590,315)">
         <rect x="0" y="0" width="10" height="36" class="sankey-node" fill="#59a14f"/>
       </g>
-      <g class="node" x="590" y="376" id="node-6" transform="translate(590,376)">
+      <g class="node" x="590" transform="translate(590,376)" y="376" id="node-6">
         <rect x="0" y="0" width="10" height="24" class="sankey-node" fill="#edc949"/>
       </g>
     </g>
@@ -165,7 +165,7 @@ marker path {
         <path d="M10,273.375 C300,273.375 300,333 590,333" stroke-width="36" stroke="url(#linearGradient-4)"/>
       </g>
       <g class="link" style="mix-blend-mode: multiply">
-        <path d="M10,303.375 C300,303.375 300,388 590,388" stroke="url(#linearGradient-5)" stroke-width="24"/>
+        <path d="M10,303.375 C300,303.375 300,388 590,388" stroke-width="24" stroke="url(#linearGradient-5)"/>
       </g>
     </g>
   </g>

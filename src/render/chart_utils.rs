@@ -96,11 +96,7 @@ pub struct TitleConfig {
 /// Render a chart title if present
 ///
 /// Returns `Some(SvgElement)` if title is non-empty, `None` otherwise.
-pub fn render_title(
-    title: &str,
-    config: &TitleConfig,
-    fill_color: &str,
-) -> Option<SvgElement> {
+pub fn render_title(title: &str, config: &TitleConfig, fill_color: &str) -> Option<SvgElement> {
     if title.is_empty() {
         return None;
     }
@@ -322,7 +318,9 @@ pub fn wrap_text_by_chars(text: &str, max_chars: usize) -> Vec<String> {
 /// Uses a simple character width estimation (average character width = font_size * 0.55).
 /// For more accurate wrapping, use [`wrap_text_by_width_fn`] with a custom estimator.
 pub fn wrap_text_by_width(text: &str, max_width: f64, font_size: f64) -> Vec<String> {
-    wrap_text_by_width_fn(text, max_width, |s| estimate_text_width_simple(s, font_size))
+    wrap_text_by_width_fn(text, max_width, |s| {
+        estimate_text_width_simple(s, font_size)
+    })
 }
 
 /// Wrap text into lines using a custom width estimation function.
@@ -439,7 +437,10 @@ mod tests {
     fn test_chart_margins_default() {
         let margins = ChartMargins::default();
         assert_eq!(margins.top, dimensions::MARGIN_TOP);
-        assert_eq!(margins.horizontal_total(), dimensions::MARGIN_LEFT + dimensions::MARGIN_RIGHT);
+        assert_eq!(
+            margins.horizontal_total(),
+            dimensions::MARGIN_LEFT + dimensions::MARGIN_RIGHT
+        );
     }
 
     #[test]
@@ -456,8 +457,7 @@ mod tests {
 
     #[test]
     fn test_legend_item() {
-        let item = LegendItem::new("Test", "#FF0000")
-            .with_extra("42%");
+        let item = LegendItem::new("Test", "#FF0000").with_extra("42%");
         assert_eq!(item.label, "Test");
         assert_eq!(item.color, "#FF0000");
         assert_eq!(item.extra, Some("42%".to_string()));
@@ -473,7 +473,10 @@ mod tests {
     #[test]
     fn test_truncate_label() {
         assert_eq!(truncate_label("short", 10), "short");
-        assert_eq!(truncate_label("this is a very long label", 10), "this is...");
+        assert_eq!(
+            truncate_label("this is a very long label", 10),
+            "this is..."
+        );
     }
 
     #[test]

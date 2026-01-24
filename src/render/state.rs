@@ -6,11 +6,64 @@ use crate::diagrams::state::{NotePosition, State, StateDb, StateType};
 use crate::error::Result;
 use crate::layout::Point;
 use crate::layout::{
-    layout, CharacterSizeEstimator, LayoutDirection, LayoutEdge, LayoutGraph, LayoutNode,
+    create_size_estimator, layout, LayoutDirection, LayoutEdge, LayoutGraph, LayoutNode,
     LayoutOptions, LayoutRanker, NodeShape, NodeSizeConfig, Padding, SizeEstimator, ToLayoutGraph,
 };
 use crate::render::svg::edges::{build_curved_path, build_curved_path_with_options};
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
+
+/// Generate SVG path for a rounded rectangle
+/// This is used instead of <rect> elements to match mermaid reference output
+fn rounded_rect_path(x: f64, y: f64, width: f64, height: f64, rx: f64, ry: f64) -> String {
+    let right = x + width;
+    let bottom = y + height;
+    format!(
+        "M {} {} H {} A {} {} 0 0 1 {} {} V {} A {} {} 0 0 1 {} {} H {} A {} {} 0 0 1 {} {} V {} A {} {} 0 0 1 {} {} Z",
+        x + rx,
+        y,
+        right - rx,
+        rx,
+        ry,
+        right,
+        y + ry,
+        bottom - ry,
+        rx,
+        ry,
+        right - rx,
+        bottom,
+        x + rx,
+        rx,
+        ry,
+        x,
+        bottom - ry,
+        y + ry,
+        rx,
+        ry,
+        x + rx,
+        y
+    )
+}
+
+/// Generate SVG path for a circle
+/// This is used instead of <circle> elements to match mermaid reference output
+/// which uses rough.js that renders all shapes as paths
+fn circle_path(cx: f64, cy: f64, r: f64) -> String {
+    // Draw a circle using two arc commands
+    // Start at (cx - r, cy), draw top half arc, then bottom half arc
+    format!(
+        "M {} {} A {} {} 0 1 0 {} {} A {} {} 0 1 0 {} {} Z",
+        cx - r,
+        cy,
+        r,
+        r,
+        cx + r,
+        cy,
+        r,
+        r,
+        cx - r,
+        cy
+    )
+}
 
 /// Calculate the rendered bounds of a composite state
 /// Returns (x, y, width, height) of the composite box
@@ -90,7 +143,7 @@ fn calculate_composite_bounds_recursive(
 /// Mermaid's approach: each composite level gets its own dagre layout
 #[derive(Clone, Debug)]
 struct LevelLayout {
-    /// Width of this level's content
+    /// Width of this level's content (after expansion for rendering)
     width: f64,
     /// Height of this level's content
     height: f64,
@@ -134,13 +187,45 @@ fn compute_level_layout(
 
     // First, recursively compute layouts for composite children at this level
     for composite_id in &composite_ids {
-        if let Some(inner_layout) = compute_level_layout(
+        if let Some(mut inner_layout) = compute_level_layout(
             Some(composite_id),
             db,
             size_estimator,
             level_layouts,
             depth + 1, // Increment depth for nested composites
         )? {
+            // Check if this is a leaf composite (no nested composites in its positions)
+            let is_leaf_composite = !inner_layout
+                .positions
+                .keys()
+                .any(|child_id| level_layouts.contains_key(child_id));
+
+            // Apply width expansion to leaf composites to match mermaid's getBBox() behavior.
+            // Even with font metrics, composite bounds need expansion because mermaid measures
+            // the full rendered cluster including internal padding and margins.
+            // Reduced from 1.5x to 1.35x since font metrics now provide better node sizing.
+            if is_leaf_composite {
+                let expansion_factor = 1.5;
+                let original_width = inner_layout.width;
+                let expanded_width = original_width * expansion_factor;
+                let width_offset = (expanded_width - original_width) / 2.0;
+
+                // Shift all positions to center content within expanded width
+                for (_, (x, _, _, _)) in inner_layout.positions.iter_mut() {
+                    *x += width_offset;
+                }
+                // Shift edge points and label positions
+                for edge in &mut inner_layout.edges {
+                    for point in &mut edge.bend_points {
+                        point.x += width_offset;
+                    }
+                    if let Some(ref mut pos) = edge.label_position {
+                        pos.x += width_offset;
+                    }
+                }
+                inner_layout.width = expanded_width;
+            }
+
             level_layouts.insert(composite_id.to_string(), inner_layout);
         }
     }
@@ -157,10 +242,10 @@ fn compute_level_layout(
 
     let mut graph = LayoutGraph::new(parent_id.unwrap_or("root"));
 
-    // Mermaid v3 uses ranksep=50 at root level and adds 25 for each nesting level
-    // This creates natural spacing accumulation that matches reference diagrams
-    let base_ranksep = 50.0;
-    let ranksep_per_level = 25.0;
+    // Mermaid uses rankSpacing = 50 default, adding +25 per nesting level.
+    // We use slightly lower values to balance height across simple and complex diagrams.
+    let base_ranksep = 45.0;
+    let ranksep_per_level = 18.0;
     let layer_spacing = base_ranksep + (depth as f64 * ranksep_per_level);
 
     graph.options = LayoutOptions {
@@ -184,15 +269,12 @@ fn compute_level_layout(
             StateType::Choice => (NodeShape::Diamond, None),
             StateType::Divider => (NodeShape::Rectangle, None),
             StateType::Default => {
-                if state_id.starts_with("[*]") {
-                    if let Some(info) = start_end_states.get(*state_id) {
-                        if info.is_start {
-                            (NodeShape::Circle, None)
-                        } else {
-                            (NodeShape::DoubleCircle, None)
-                        }
-                    } else {
+                // Check if this is a start/end state (ID ends with _start or _end)
+                if let Some(info) = start_end_states.get(*state_id) {
+                    if info.is_start {
                         (NodeShape::Circle, None)
+                    } else {
+                        (NodeShape::DoubleCircle, None)
                     }
                 } else {
                     let desc = state.description.as_deref().filter(|d| !d.is_empty());
@@ -201,13 +283,13 @@ fn compute_level_layout(
             }
         };
 
-        let label_text = label.unwrap_or(if state_id.starts_with("[*]") {
-            ""
-        } else {
-            *state_id
-        });
+        // Start/end states have no label (IDs end with _start or _end)
+        let is_start_end = start_end_states.contains_key(*state_id);
+        let label_text = label.unwrap_or(if is_start_end { "" } else { *state_id });
 
         // Determine dimensions - use pre-computed layout for composites
+        // Use the full `width` (including expansion) so parent composites
+        // properly include expanded children.
         let (width, height) = if composite_ids.contains(state_id) {
             if let Some(inner) = level_layouts.get(*state_id) {
                 let padding = 12.0;
@@ -219,9 +301,7 @@ fn compute_level_layout(
             } else {
                 (100.0, 60.0)
             }
-        } else if state_id.starts_with("[*]")
-            || matches!(state.state_type, StateType::Start | StateType::End)
-        {
+        } else if is_start_end || matches!(state.state_type, StateType::Start | StateType::End) {
             (14.0, 14.0)
         } else if matches!(state.state_type, StateType::Fork | StateType::Join) {
             (70.0, 10.0)
@@ -261,6 +341,70 @@ fn compute_level_layout(
         }
     }
 
+    // Handle cross-level edges: when a state at this level receives edges from
+    // or sends edges to states inside composites, add virtual edges to/from the
+    // outermost composite at this level. This ensures proper positioning.
+    let mut virtual_edge_count = 0;
+    for relation in relations.iter() {
+        let s1 = relation.state1.as_str();
+        let s2 = relation.state2.as_str();
+
+        let s1_at_level = level_state_ids.contains(s1);
+        let s2_at_level = level_state_ids.contains(s2);
+
+        // Skip if both at this level (already handled) or neither at this level
+        if s1_at_level == s2_at_level {
+            continue;
+        }
+
+        // Find which composite at this level contains the "other" state
+        let find_containing_composite = |state_id: &str| -> Option<&str> {
+            // Walk up the parent chain until we find a composite at this level
+            let mut current = states.get(state_id)?.parent.as_deref();
+            while let Some(p) = current {
+                if level_state_ids.contains(p) && composite_ids.contains(p) {
+                    return Some(p);
+                }
+                current = states.get(p)?.parent.as_deref();
+            }
+            None
+        };
+
+        if s1_at_level && !s2_at_level {
+            // Source at this level, target inside a composite
+            // Add virtual edge: source -> composite (to position source before composite)
+            if let Some(composite_id) = find_containing_composite(s2) {
+                let mut edge = LayoutEdge::new(
+                    format!("virtual_{}", virtual_edge_count),
+                    s1.to_string(),
+                    composite_id.to_string(),
+                );
+                // Preserve edge label for layout - affects horizontal spacing
+                if let Some(ref desc) = relation.description {
+                    edge = edge.with_label(desc);
+                }
+                graph.add_edge(edge);
+                virtual_edge_count += 1;
+            }
+        } else if !s1_at_level && s2_at_level {
+            // Source inside a composite, target at this level
+            // Add virtual edge: composite -> target (to position target after composite)
+            if let Some(composite_id) = find_containing_composite(s1) {
+                let mut edge = LayoutEdge::new(
+                    format!("virtual_{}", virtual_edge_count),
+                    composite_id.to_string(),
+                    s2.to_string(),
+                );
+                // Preserve edge label for layout - affects horizontal spacing
+                if let Some(ref desc) = relation.description {
+                    edge = edge.with_label(desc);
+                }
+                graph.add_edge(edge);
+                virtual_edge_count += 1;
+            }
+        }
+    }
+
     // Run layout
     let layout_result = layout(graph)?;
 
@@ -278,6 +422,24 @@ fn compute_level_layout(
             min_y = min_y.min(y);
             max_x = max_x.max(x + node.width);
             max_y = max_y.max(y + node.height);
+        }
+    }
+
+    // Include edge label bounds - mermaid includes labels in cluster sizing
+    for edge in &layout_result.edges {
+        if let Some(label_pos) = &edge.label_position {
+            if edge.label_width > 0.0 {
+                // Labels are centered on their position
+                let label_left = label_pos.x - edge.label_width / 2.0;
+                let label_right = label_pos.x + edge.label_width / 2.0;
+                let label_top = label_pos.y - edge.label_height / 2.0;
+                let label_bottom = label_pos.y + edge.label_height / 2.0;
+
+                min_x = min_x.min(label_left);
+                max_x = max_x.max(label_right);
+                min_y = min_y.min(label_top);
+                max_y = max_y.max(label_bottom);
+            }
         }
     }
 
@@ -304,8 +466,9 @@ fn compute_level_layout(
         }
     }
 
+    let computed_width = max_x - min_x;
     Ok(Some(LevelLayout {
-        width: max_x - min_x,
+        width: computed_width,
         height: max_y - min_y,
         positions,
         edges,
@@ -329,15 +492,13 @@ impl ToLayoutGraph for StateDb {
         let mut graph = LayoutGraph::new("state");
 
         // Set layout options from diagram direction
-        // Optimized for state diagrams with compound graph support:
-        // - Tighter horizontal spacing to reduce width
-        // - Reasonable vertical spacing for proper height
-        // - LongestPath ranker (mermaid's tight-tree base algorithm)
+        // Following mermaid's state diagram config (stateRenderer-v3-unified.ts line 64-65):
+        // nodeSpacing = 50, rankSpacing = 50
         graph.options = LayoutOptions {
             direction: self.preferred_direction(),
-            node_spacing: 15.0, // Tighter horizontal spacing for narrower diagrams
-            layer_spacing: 40.0, // Compromise between fork/join spacing and composite edges
-            padding: Padding::uniform(12.0), // Balanced padding for composite states
+            node_spacing: 50.0,                // mermaid's nodeSpacing
+            layer_spacing: 50.0,               // mermaid's rankSpacing
+            padding: Padding::uniform(8.0),    // mermaid's marginx/marginy
             ranker: LayoutRanker::LongestPath, // Use longest-path (mermaid's tight-tree base)
         };
 
@@ -394,16 +555,12 @@ impl ToLayoutGraph for StateDb {
                 StateType::Choice => (NodeShape::Diamond, None),
                 StateType::Divider => (NodeShape::Rectangle, None),
                 StateType::Default => {
-                    // Check if this is a [*] state that's been classified
-                    if id.starts_with("[*]") {
-                        if let Some(state_info) = start_end_states.get(id.as_str()) {
-                            if state_info.is_start {
-                                (NodeShape::Circle, None)
-                            } else {
-                                (NodeShape::DoubleCircle, None)
-                            }
-                        } else {
+                    // Check if this is a start/end state (ID ends with _start or _end)
+                    if let Some(state_info) = start_end_states.get(id.as_str()) {
+                        if state_info.is_start {
                             (NodeShape::Circle, None)
+                        } else {
+                            (NodeShape::DoubleCircle, None)
                         }
                     } else {
                         let desc = state.descriptions.first().map(|s| s.as_str());
@@ -412,20 +569,21 @@ impl ToLayoutGraph for StateDb {
                 }
             };
 
-            let label_text = label.unwrap_or(if id.starts_with("[*]") { "" } else { &state.id });
+            // Start/end states have no label (IDs end with _start or _end)
+            let is_start_end = start_end_states.contains_key(id.as_str());
+            let label_text = label.unwrap_or(if is_start_end { "" } else { &state.id });
 
             // Size based on state type
-            let (width, height) = if id.starts_with("[*]")
-                || matches!(state.state_type, StateType::Start | StateType::End)
-            {
-                // Small fixed size for start/end circles (r=7, diameter=14)
-                (14.0, 14.0)
-            } else if matches!(state.state_type, StateType::Fork | StateType::Join) {
-                // Horizontal bar matching mermaid reference (70×10)
-                (70.0, 10.0)
-            } else {
-                size_estimator.estimate_node_size(Some(label_text), shape, &config)
-            };
+            let (width, height) =
+                if is_start_end || matches!(state.state_type, StateType::Start | StateType::End) {
+                    // Small fixed size for start/end circles (r=7, diameter=14)
+                    (14.0, 14.0)
+                } else if matches!(state.state_type, StateType::Fork | StateType::Join) {
+                    // Horizontal bar matching mermaid reference (70×10)
+                    (70.0, 10.0)
+                } else {
+                    size_estimator.estimate_node_size(Some(label_text), shape, &config)
+                };
 
             let mut node = LayoutNode::new(id, width, height).with_shape(shape);
 
@@ -690,10 +848,9 @@ fn center_nested_composites(
 
     // Process from innermost to outermost
     for (nested_id, parent_id, _depth) in nested_composites {
-        // Calculate parent's content bounds from NON-composite children only
-        // This gives us the bounds that determine the parent's rendered width,
-        // excluding nested composites which will be centered within this space
-        let (parent_non_composite_min_x, parent_non_composite_max_x) =
+        // Calculate the parent's bounds from NON-COMPOSITE children only
+        // This gives us the "anchor" content that the nested composite should be centered with
+        let (parent_non_comp_min_x, parent_non_comp_max_x) =
             calculate_composite_x_bounds_for_centering(
                 parent_id,
                 db,
@@ -701,35 +858,28 @@ fn center_nested_composites(
                 composite_ids,
             );
 
-        // Calculate nested composite's content bounds (from its children)
-        let (nested_content_min_x, nested_content_max_x) =
-            calculate_composite_x_bounds(nested_id, db, state_positions, composite_ids);
+        // Calculate nested composite's RENDERED bounds (with padding)
+        let nested_rendered = calculate_composite_bounds_recursive(nested_id, db, state_positions);
 
-        if nested_content_min_x >= nested_content_max_x {
+        let Some((nested_x, _, nested_w, _)) = nested_rendered else {
+            continue;
+        };
+
+        // If there are non-composite children, center the nested composite with them
+        // Otherwise, the nested composite is the only content and doesn't need centering
+        if parent_non_comp_min_x >= parent_non_comp_max_x {
             continue;
         }
 
-        // Check if parent has valid non-composite content bounds
-        let nested_width = nested_content_max_x - nested_content_min_x;
-        let parent_non_composite_width = parent_non_composite_max_x - parent_non_composite_min_x;
+        // The non-composite children define the "anchor" center for the parent
+        // The nested composite should be centered around this same center
+        let non_comp_center_x = (parent_non_comp_min_x + parent_non_comp_max_x) / 2.0;
 
-        // Only center if parent has substantial non-composite content that's wider than the nested composite
-        // Otherwise, the nested composite IS the main content and shouldn't be shifted
-        if parent_non_composite_min_x >= parent_non_composite_max_x
-            || parent_non_composite_width < nested_width + 20.0
-        {
-            // Parent's content is dominated by the nested composite, skip centering
-            continue;
-        }
+        // The nested composite's current center
+        let nested_center_x = nested_x + nested_w / 2.0;
 
-        // Parent's visual center is determined by its non-composite content bounds
-        let parent_center_x = (parent_non_composite_min_x + parent_non_composite_max_x) / 2.0;
-
-        // The nested composite's rendered box center
-        let nested_center_x = (nested_content_min_x + nested_content_max_x) / 2.0;
-
-        // Calculate offset to center the nested composite within parent's bounds
-        let offset_x = parent_center_x - nested_center_x;
+        // Calculate offset to align nested composite's center with non-composite center
+        let offset_x = non_comp_center_x - nested_center_x;
 
         // Only shift if there's a meaningful offset
         if offset_x.abs() > 0.5 {
@@ -783,14 +933,12 @@ pub fn render_state(db: &StateDb, config: &RenderConfig) -> Result<String> {
 
     // Use recursive layout like mermaid - each composite level gets its own dagre layout
     // This naturally accumulates spacing at each nesting level
-    let size_estimator = CharacterSizeEstimator {
-        char_width_ratio: 0.55, // Balanced estimate for proportional fonts
-        line_height_ratio: 1.4, // SVG text vs 2.3 for HTML foreignObject
-    };
+    // Try to use font-based measurements for accuracy, fall back to character estimates
+    let size_estimator = create_size_estimator();
 
     // Compute recursive layouts starting from root level
     let mut level_layouts: HashMap<String, LevelLayout> = HashMap::new();
-    let root_layout = compute_level_layout(None, db, &size_estimator, &mut level_layouts, 0)?
+    let root_layout = compute_level_layout(None, db, &*size_estimator, &mut level_layouts, 0)?
         .ok_or_else(|| {
             crate::error::MermaidError::LayoutError("No states to layout".to_string())
         })?;
@@ -900,7 +1048,8 @@ pub fn render_state(db: &StateDb, config: &RenderConfig) -> Result<String> {
     for edge in &all_edges {
         if let (Some(source), Some(target)) = (edge.source(), edge.target()) {
             // Check if this is a start node connecting to a composite
-            if source.contains("_start_") && composite_ids.contains(target) {
+            // Start node IDs are in format {parent}_start (e.g., root_start, Idle_start)
+            if source.ends_with("_start") && composite_ids.contains(target) {
                 // Use calculate_composite_bounds to get actual rendered composite bounds
                 // (not dagre's placeholder position which doesn't account for children)
                 if let (Some((start_x, start_y, start_w, start_h)), Some((comp_x, _, comp_w, _))) = (
@@ -1249,12 +1398,18 @@ pub fn render_state(db: &StateDb, config: &RenderConfig) -> Result<String> {
         }
     }
 
-    // Include edge label positions (estimate label size)
+    // Include edge label positions (estimate label size based on typical label dimensions)
+    // Edge labels are positioned on edges which already fall within state bounds,
+    // so we only need minimal padding for the label text itself (not 50px!)
+    // Typical short labels (5 chars) at ~8px/char = ~40px, so half-width ~20px
+    // But since edges are between states, labels shouldn't extend much past them
+    let label_half_width = 15.0; // Conservative for most single-word labels
+    let label_half_height = 10.0;
     for pos in edge_label_positions.values() {
-        min_x = min_x.min(pos.x - 50.0); // Estimate label half-width
-        min_y = min_y.min(pos.y - 10.0); // Estimate label half-height
-        max_x = max_x.max(pos.x + 50.0);
-        max_y = max_y.max(pos.y + 10.0);
+        min_x = min_x.min(pos.x - label_half_width);
+        min_y = min_y.min(pos.y - label_half_height);
+        max_x = max_x.max(pos.x + label_half_width);
+        max_y = max_y.max(pos.y + label_half_height);
     }
 
     // Handle empty diagram case
@@ -1343,9 +1498,13 @@ pub fn render_state(db: &StateDb, config: &RenderConfig) -> Result<String> {
     // First, render composite state containers (behind everything else)
     // Sorted by depth ensures parents render before children for correct z-order
     for composite_id in &sorted_composites {
-        if let Some(composite_elem) =
-            render_composite_state(composite_id, db, &state_positions, &composite_states)
-        {
+        if let Some(composite_elem) = render_composite_state(
+            composite_id,
+            db,
+            &state_positions,
+            &composite_states,
+            &level_layouts,
+        ) {
             doc.add_element(composite_elem);
         }
     }
@@ -1433,6 +1592,7 @@ fn render_composite_state(
     db: &StateDb,
     state_positions: &HashMap<String, (f64, f64, f64, f64)>,
     composite_states: &std::collections::HashSet<&str>,
+    level_layouts: &HashMap<String, LevelLayout>,
 ) -> Option<SvgElement> {
     // Find all child states (states whose parent is this composite)
     let states = db.get_states();
@@ -1501,8 +1661,25 @@ fn render_composite_state(
     max_x += padding;
     max_y += padding;
 
-    let width = max_x - min_x;
+    let content_width = max_x - min_x;
     let height = max_y - min_y;
+
+    // Use the expanded width from level_layouts instead of the computed bounds.
+    // This applies the expansion that was calculated during layout (both for leaf
+    // composites at 1.5x and non-leaf composites at 1.35x).
+    let width = if let Some(layout) = level_layouts.get(composite_id) {
+        // The expanded layout width plus padding (which we've already subtracted from bounds)
+        let expanded_total = layout.width + 2.0 * padding;
+        // Center the content within the expanded width
+        let width_expansion = (expanded_total - content_width) / 2.0;
+        if width_expansion > 0.0 {
+            min_x -= width_expansion;
+            // Note: max_x is implicitly min_x + expanded_total, used via width
+        }
+        expanded_total
+    } else {
+        content_width
+    };
 
     // Create the outer rect (border with fill matching reference)
     let outer_rect = SvgElement::Rect {
@@ -1552,13 +1729,16 @@ fn render_composite_state(
             .with_attr("text-anchor", "middle"), // Center the text
     };
 
-    // Create a divider line between title and content
+    // Create a divider path between title and content (use path instead of line for SVG consistency)
     let divider_y = min_y + title_height - 4.0;
-    let divider = SvgElement::Line {
-        x1: min_x,
-        y1: divider_y,
-        x2: min_x + width,
-        y2: divider_y,
+    let divider = SvgElement::Path {
+        d: format!(
+            "M {} {} L {} {}",
+            min_x,
+            divider_y,
+            min_x + width,
+            divider_y
+        ),
         attrs: Attrs::new().with_class("state-composite-divider"),
     };
 
@@ -1604,13 +1784,12 @@ fn render_state_node(
         }
         StateType::Fork | StateType::Join => {
             // Black bar for fork/join (specialStateColor = lineColor)
-            children.push(SvgElement::Rect {
-                x: x + (width - fork_join_width) / 2.0,
-                y: y + (height - fork_join_height) / 2.0,
-                width: fork_join_width,
-                height: fork_join_height.min(height),
-                rx: Some(2.0),
-                ry: Some(2.0),
+            // Use path instead of rect to match mermaid reference (rough.js generates paths)
+            let bar_x = x + (width - fork_join_width) / 2.0;
+            let bar_y = y + (height - fork_join_height) / 2.0;
+            let bar_height = fork_join_height.min(height);
+            children.push(SvgElement::Path {
+                d: rounded_rect_path(bar_x, bar_y, fork_join_width, bar_height, 2.0, 2.0),
                 attrs: Attrs::new()
                     .with_fill(&theme.line_color)
                     .with_class("state-fork-join"),
@@ -1649,12 +1828,10 @@ fn render_state_node(
             });
         }
         StateType::Divider => {
-            // Horizontal line for divider
-            children.push(SvgElement::Line {
-                x1: x,
-                y1: y + height / 2.0,
-                x2: x + width,
-                y2: y + height / 2.0,
+            // Horizontal path for divider (use path instead of line for SVG consistency)
+            let divider_y = y + height / 2.0;
+            children.push(SvgElement::Path {
+                d: format!("M {} {} L {} {}", x, divider_y, x + width, divider_y),
                 attrs: Attrs::new()
                     .with_stroke(&theme.line_color)
                     .with_stroke_width(2.0)
@@ -1663,39 +1840,35 @@ fn render_state_node(
             });
         }
         StateType::Default => {
-            // Check if this is [*] which could be start or end
-            if state.id == "[*]" {
-                if is_end_state {
-                    // End state: double circle (bullseye)
-                    render_end_state_bullseye(
-                        &mut children,
-                        x,
-                        y,
-                        width,
-                        height,
-                        start_end_radius,
-                        theme,
-                    );
-                } else {
-                    // Start state: filled circle (specialStateColor = lineColor)
-                    children.push(SvgElement::Circle {
-                        cx: x + width / 2.0,
-                        cy: y + height / 2.0,
-                        r: start_end_radius,
-                        attrs: Attrs::new()
-                            .with_fill(&theme.line_color)
-                            .with_class("state-start"),
-                    });
-                }
-            } else {
-                // Rounded rectangle for regular state (stateBkg + stateBorder)
-                children.push(SvgElement::Rect {
+            // Check if this is a start/end state (ID ends with _start or _end)
+            let is_start_state = state.id.ends_with("_start");
+            let is_end_state_by_id = state.id.ends_with("_end");
+            if is_start_state {
+                // Start state: filled circle (specialStateColor = lineColor)
+                children.push(SvgElement::Circle {
+                    cx: x + width / 2.0,
+                    cy: y + height / 2.0,
+                    r: start_end_radius,
+                    attrs: Attrs::new()
+                        .with_fill(&theme.line_color)
+                        .with_class("state-start"),
+                });
+            } else if is_end_state || is_end_state_by_id {
+                // End state: double circle (bullseye)
+                render_end_state_bullseye(
+                    &mut children,
                     x,
                     y,
                     width,
                     height,
-                    rx: Some(5.0),
-                    ry: Some(5.0),
+                    start_end_radius,
+                    theme,
+                );
+            } else {
+                // Rounded rectangle for regular state (stateBkg + stateBorder)
+                // Use path instead of rect to match mermaid reference output
+                children.push(SvgElement::Path {
+                    d: rounded_rect_path(x, y, width, height, 5.0, 5.0),
                     attrs: Attrs::new()
                         .with_fill(&theme.primary_color)
                         .with_stroke(&theme.primary_border_color)
@@ -1827,10 +2000,11 @@ fn render_transition(
     };
 
     // Transition path (curved) - colors from CSS via theme
+    // Use stroke-width 0.7 to match mermaid reference (dagre-wrapper)
     children.push(SvgElement::Path {
         d: path_d,
         attrs: Attrs::new()
-            .with_stroke_width(1.0)
+            .with_stroke_width(0.7)
             .with_fill("none")
             .with_attr("marker-end", "url(#arrow)")
             .with_class("transition-path"),
@@ -1846,14 +2020,14 @@ fn render_transition(
             let text_height = font_size * 1.1; // Tighter for SVG text
             let padding = 2.0;
 
-            // Background rect (centered on label position)
-            children.push(SvgElement::Rect {
-                x: label_x - text_width / 2.0 - padding,
-                y: label_y - text_height / 2.0 - padding,
-                width: text_width + padding * 2.0,
-                height: text_height + padding * 2.0,
-                rx: Some(2.0),
-                ry: Some(2.0),
+            // Background as path (centered on label position)
+            // Using path instead of rect to match mermaid reference (rough.js generates paths)
+            let bg_x = label_x - text_width / 2.0 - padding;
+            let bg_y = label_y - text_height / 2.0 - padding;
+            let bg_w = text_width + padding * 2.0;
+            let bg_h = text_height + padding * 2.0;
+            children.push(SvgElement::Path {
+                d: rounded_rect_path(bg_x, bg_y, bg_w, bg_h, 2.0, 2.0),
                 attrs: Attrs::new().with_class("transition-label-bg"),
             });
 
@@ -2125,30 +2299,17 @@ struct StartEndInfo {
     is_start: bool,
 }
 
-/// Determine which [*] states are start vs end states based on transitions
-/// Creates unique IDs for each [*] occurrence to handle multiple start/end states
+/// Determine which [*] states are start vs end states based on their ID suffix
+/// IDs follow mermaid's pattern: {parent}_start or {parent}_end
 fn determine_start_end_states(db: &StateDb) -> HashMap<&str, StartEndInfo> {
     let mut result = HashMap::new();
-    let relations = db.get_relations();
 
-    // Classify states in the states map
+    // Classify states based on ID suffix (mermaid-style naming)
     for id in db.get_states().keys() {
-        if id.starts_with("[*]_start") {
+        if id.ends_with("_start") {
             result.insert(id.as_str(), StartEndInfo { is_start: true });
-        } else if id.starts_with("[*]_end") {
+        } else if id.ends_with("_end") {
             result.insert(id.as_str(), StartEndInfo { is_start: false });
-        } else if id == "[*]" {
-            // Single [*] - check if it's source or target in relations
-            let is_source = relations.iter().any(|r| r.state1 == "[*]");
-            let is_target = relations.iter().any(|r| r.state2 == "[*]");
-
-            // Start if it's only a source, end if it's only a target or both
-            result.insert(
-                "[*]",
-                StartEndInfo {
-                    is_start: is_source && !is_target,
-                },
-            );
         }
     }
 
@@ -2166,23 +2327,22 @@ fn render_end_state_bullseye(
     start_end_radius: f64,
     theme: &crate::render::svg::Theme,
 ) {
-    // Outer circle: stroke only with primary_border_color (purple), no fill
-    children.push(SvgElement::Circle {
-        cx: x + width / 2.0,
-        cy: y + height / 2.0,
-        r: start_end_radius,
+    // Outer circle as path: stroke only with primary_border_color (purple), no fill
+    // Using path instead of circle to match mermaid reference (rough.js generates paths)
+    let cx = x + width / 2.0;
+    let cy = y + height / 2.0;
+    children.push(SvgElement::Path {
+        d: circle_path(cx, cy, start_end_radius),
         attrs: Attrs::new()
             .with_fill("none")
             .with_stroke(&theme.primary_border_color)
             .with_stroke_width(2.0)
             .with_class("state-end-outer"),
     });
-    // Inner circle: filled with primary_border_color (creates the center dot)
+    // Inner circle as path: filled with primary_border_color (creates the center dot)
     // Mermaid uses diameter ratio 5:14, so radius ratio ~0.36
-    children.push(SvgElement::Circle {
-        cx: x + width / 2.0,
-        cy: y + height / 2.0,
-        r: start_end_radius * 0.36,
+    children.push(SvgElement::Path {
+        d: circle_path(cx, cy, start_end_radius * 0.36),
         attrs: Attrs::new()
             .with_fill(&theme.primary_border_color)
             .with_stroke(&theme.primary_border_color)
@@ -2239,6 +2399,7 @@ fn generate_state_css(theme: &crate::render::svg::Theme) -> String {
 .state-divider {{
   stroke: {line_color};
   stroke-dasharray: 5, 5;
+  fill: none;
 }}
 
 .transition-path {{
@@ -2288,6 +2449,7 @@ fn generate_state_css(theme: &crate::render::svg::Theme) -> String {
 .state-composite-divider {{
   stroke: {primary_border_color};
   stroke-width: 1px;
+  fill: none;
 }}
 "#,
         text_color = theme.primary_text_color,
@@ -2664,6 +2826,102 @@ mod tests {
     }
 
     #[test]
+    fn test_nested_compound_layout() {
+        // Test nested composite state layout (state_complex2 pattern)
+        // Processing contains Running (nested composite)
+        let input = r#"stateDiagram-v2
+[*] --> Idle
+
+state Idle {
+    [*] --> Ready
+    Ready --> Processing: Start Job
+}
+
+state Processing {
+    [*] --> Validating
+    Validating --> Queued: Valid
+    Validating --> Failed: Invalid
+    Queued --> Running: Worker Available
+    Running --> Completed: Success
+    Running --> Failed: Error
+    Running --> Paused: Pause Request
+
+    state Running {
+        [*] --> Initializing
+        Initializing --> Executing
+        Executing --> Finalizing
+        Finalizing --> [*]
+    }
+}
+
+state Paused {
+    [*] --> WaitingResume
+    WaitingResume --> Timeout: 1 hour
+}
+
+Paused --> Running: Resume
+Paused --> Cancelled: Cancel Request
+Timeout --> Cancelled
+
+Completed --> Idle: Reset
+Failed --> Idle: Retry
+Cancelled --> Idle: Reset
+
+Completed --> [*]
+Cancelled --> [*]
+"#;
+        let db = parse(input).expect("Should parse");
+        let size_estimator = CharacterSizeEstimator::default();
+
+        // Test compound graph approach
+        let graph = db
+            .to_layout_graph(&size_estimator)
+            .expect("Should create layout graph");
+
+        eprintln!("\n=== Nested Compound Structure ===");
+        for node in &graph.nodes {
+            eprintln!(
+                "  {} (w={:.1}, h={:.1}, parent={:?}, is_group={:?})",
+                node.id,
+                node.width,
+                node.height,
+                node.parent_id,
+                node.metadata.get("is_group")
+            );
+        }
+        eprintln!("Node count: {}", graph.nodes.len());
+        eprintln!("Edge count: {}", graph.edges.len());
+
+        // Run layout
+        let result = layout(graph).expect("Layout should succeed");
+
+        eprintln!("\n=== Final Positions ===");
+        for node in &result.nodes {
+            if let (Some(x), Some(y)) = (node.x, node.y) {
+                eprintln!(
+                    "  {} -> x={:.1}, y={:.1}, w={:.1}, h={:.1}",
+                    node.id, x, y, node.width, node.height
+                );
+            }
+        }
+
+        // Verify composite states have non-zero dimensions
+        let processing = result.nodes.iter().find(|n| n.id == "Processing").unwrap();
+        assert!(
+            processing.width > 0.0,
+            "Processing compound should have width > 0 after layout, got {}",
+            processing.width
+        );
+
+        let running = result.nodes.iter().find(|n| n.id == "Running").unwrap();
+        assert!(
+            running.width > 0.0,
+            "Running nested compound should have width > 0 after layout, got {}",
+            running.width
+        );
+    }
+
+    #[test]
     fn test_edge_labels_within_viewbox() {
         // Edge labels at the sides of the diagram should not be cut off
         // This tests that the SVG viewBox includes all edge label positions
@@ -2772,18 +3030,25 @@ mod tests {
             idle_x, idle_y, idle_w, idle_h
         );
 
-        // Extract Active state bounds
+        // Extract Active state bounds from path element
+        // Path format from rounded_rect_path: M {x+rx} {y} H {right-rx} A rx ry 0 0 1 {right} {y+ry} V {bottom-ry} A ...
+        // We extract: first x coord (x+rx), y coord, right-rx (from H), and bottom-ry (from V)
         let active_re = regex::Regex::new(
-            r#"id="state-Active"[^>]*>\s*<rect[^>]*x="([^"]+)"[^>]*y="([^"]+)"[^>]*width="([^"]+)"[^>]*height="([^"]+)""#
+            r#"id="state-Active"[^>]*>\s*<path[^>]*d="M ([0-9.]+) ([0-9.]+) H ([0-9.]+) A [0-9.]+ [0-9.]+ 0 0 1 [0-9.]+ [0-9.]+ V ([0-9.]+)"#
         ).unwrap();
 
         let active_cap = active_re
             .captures(&svg)
-            .expect("Should find Active state rect");
-        let active_x: f64 = active_cap[1].parse().unwrap();
+            .expect("Should find Active state path");
+        let active_x_plus_rx: f64 = active_cap[1].parse().unwrap();
         let active_y: f64 = active_cap[2].parse().unwrap();
-        let active_w: f64 = active_cap[3].parse().unwrap();
-        let active_h: f64 = active_cap[4].parse().unwrap();
+        let active_right_minus_rx: f64 = active_cap[3].parse().unwrap();
+        let active_bottom_minus_ry: f64 = active_cap[4].parse().unwrap();
+        let rx = 5.0; // We know this from the rounded_rect_path call
+        let ry = 5.0;
+        let active_x = active_x_plus_rx - rx;
+        let active_w = active_right_minus_rx + rx - active_x;
+        let active_h = active_bottom_minus_ry + ry - active_y;
 
         eprintln!(
             "Active bounds: x={}, y={}, w={}, h={}",

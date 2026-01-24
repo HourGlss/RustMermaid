@@ -192,53 +192,53 @@ marker path {
       <rect x="61.19999999999999" y="124" width="92" height="20" rx="3" ry="3" class="relationship-label-bg"/>
       <text x="107.19999999999999" y="138" class="relationship-label" font-size="11" text-anchor="middle">&lt;&lt;verifies&gt;&gt;</text>
     </g>
-    <g class="requirement-node" id="test_req3">
-      <rect x="234.39999999999998" y="374" width="214.39999999999998" height="135" rx="0" ry="0" class="requirement-box" stroke-width="2"/>
-      <rect x="234.39999999999998" y="374" width="214.39999999999998" height="25" rx="0" ry="0" class="requirement-header"/>
-      <line x1="234.39999999999998" y1="399" x2="448.79999999999995" y2="399" class="divider" stroke-width="1"/>
-      <text x="341.59999999999997" y="391.5" class="requirement-type" font-size="14" text-anchor="middle">&lt;&lt;Performance Requirement&gt;&gt;</text>
-      <text x="244.39999999999998" y="422" class="requirement-name" font-size="12" font-weight="bold" text-anchor="start">test_req3</text>
-      <text x="244.39999999999998" y="440" class="requirement-attr" font-size="12" text-anchor="start">ID: 1.2</text>
-      <text x="244.39999999999998" y="458" class="requirement-attr" text-anchor="start" font-size="12">Text: the third test text.</text>
-      <text x="244.39999999999998" y="476" class="requirement-attr" text-anchor="start" font-size="12">Risk: Medium</text>
-      <text x="244.39999999999998" y="494" class="requirement-attr" text-anchor="start" font-size="12">Verification: Demonstration</text>
+    <g class="requirement-node" id="test_req">
+      <rect x="25.19999999999999" y="169" width="164" height="135" rx="0" ry="0" class="requirement-box" stroke-width="2"/>
+      <rect x="25.19999999999999" y="169" width="164" height="25" rx="0" ry="0" class="requirement-header"/>
+      <line x1="25.19999999999999" y1="194" x2="189.2" y2="194" class="divider" stroke-width="1"/>
+      <text x="107.19999999999999" y="186.5" class="requirement-type" font-size="14" text-anchor="middle">&lt;&lt;Requirement&gt;&gt;</text>
+      <text x="35.19999999999999" y="217" class="requirement-name" text-anchor="start" font-size="12" font-weight="bold">test_req</text>
+      <text x="35.19999999999999" y="235" class="requirement-attr" text-anchor="start" font-size="12">ID: 1</text>
+      <text x="35.19999999999999" y="253" class="requirement-attr" font-size="12" text-anchor="start">Text: the test text.</text>
+      <text x="35.19999999999999" y="271" class="requirement-attr" text-anchor="start" font-size="12">Risk: High</text>
+      <text x="35.19999999999999" y="289" class="requirement-attr" font-size="12" text-anchor="start">Verification: Test</text>
     </g>
     <g class="requirement-node" id="test_req2">
       <rect x="0" y="374" width="214.39999999999998" height="135" rx="0" ry="0" class="requirement-box" stroke-width="2"/>
       <rect x="0" y="374" width="214.39999999999998" height="25" rx="0" ry="0" class="requirement-header"/>
       <line x1="0" y1="399" x2="214.39999999999998" y2="399" class="divider" stroke-width="1"/>
       <text x="107.19999999999999" y="391.5" class="requirement-type" text-anchor="middle" font-size="14">&lt;&lt;Functional Requirement&gt;&gt;</text>
-      <text x="10" y="422" class="requirement-name" font-size="12" font-weight="bold" text-anchor="start">test_req2</text>
-      <text x="10" y="440" class="requirement-attr" font-size="12" text-anchor="start">ID: 1.1</text>
+      <text x="10" y="422" class="requirement-name" text-anchor="start" font-size="12" font-weight="bold">test_req2</text>
+      <text x="10" y="440" class="requirement-attr" text-anchor="start" font-size="12">ID: 1.1</text>
       <text x="10" y="458" class="requirement-attr" text-anchor="start" font-size="12">Text: the second test text.</text>
-      <text x="10" y="476" class="requirement-attr" font-size="12" text-anchor="start">Risk: Low</text>
-      <text x="10" y="494" class="requirement-attr" font-size="12" text-anchor="start">Verification: Inspection</text>
+      <text x="10" y="476" class="requirement-attr" text-anchor="start" font-size="12">Risk: Low</text>
+      <text x="10" y="494" class="requirement-attr" text-anchor="start" font-size="12">Verification: Inspection</text>
     </g>
-    <g class="requirement-node" id="test_req">
-      <rect x="25.19999999999999" y="169" width="164" height="135" rx="0" ry="0" class="requirement-box" stroke-width="2"/>
-      <rect x="25.19999999999999" y="169" width="164" height="25" rx="0" ry="0" class="requirement-header"/>
-      <line x1="25.19999999999999" y1="194" x2="189.2" y2="194" class="divider" stroke-width="1"/>
-      <text x="107.19999999999999" y="186.5" class="requirement-type" font-size="14" text-anchor="middle">&lt;&lt;Requirement&gt;&gt;</text>
-      <text x="35.19999999999999" y="217" class="requirement-name" font-weight="bold" font-size="12" text-anchor="start">test_req</text>
-      <text x="35.19999999999999" y="235" class="requirement-attr" text-anchor="start" font-size="12">ID: 1</text>
-      <text x="35.19999999999999" y="253" class="requirement-attr" text-anchor="start" font-size="12">Text: the test text.</text>
-      <text x="35.19999999999999" y="271" class="requirement-attr" text-anchor="start" font-size="12">Risk: High</text>
-      <text x="35.19999999999999" y="289" class="requirement-attr" text-anchor="start" font-size="12">Verification: Test</text>
+    <g class="requirement-node" id="test_req3">
+      <rect x="234.39999999999998" y="374" width="214.39999999999998" height="135" rx="0" ry="0" class="requirement-box" stroke-width="2"/>
+      <rect x="234.39999999999998" y="374" width="214.39999999999998" height="25" rx="0" ry="0" class="requirement-header"/>
+      <line x1="234.39999999999998" y1="399" x2="448.79999999999995" y2="399" class="divider" stroke-width="1"/>
+      <text x="341.59999999999997" y="391.5" class="requirement-type" text-anchor="middle" font-size="14">&lt;&lt;Performance Requirement&gt;&gt;</text>
+      <text x="244.39999999999998" y="422" class="requirement-name" text-anchor="start" font-size="12" font-weight="bold">test_req3</text>
+      <text x="244.39999999999998" y="440" class="requirement-attr" text-anchor="start" font-size="12">ID: 1.2</text>
+      <text x="244.39999999999998" y="458" class="requirement-attr" text-anchor="start" font-size="12">Text: the third test text.</text>
+      <text x="244.39999999999998" y="476" class="requirement-attr" text-anchor="start" font-size="12">Risk: Medium</text>
+      <text x="244.39999999999998" y="494" class="requirement-attr" font-size="12" text-anchor="start">Verification: Demonstration</text>
     </g>
     <g class="element-node" id="test_entity2">
       <rect x="7.200000000000003" y="0" width="199.99999999999997" height="99" rx="0" ry="0" class="element-box" stroke-width="2"/>
       <rect x="7.200000000000003" y="0" width="199.99999999999997" height="25" rx="0" ry="0" class="element-header"/>
       <line x1="7.200000000000003" y1="25" x2="207.2" y2="25" class="divider" stroke-width="1"/>
-      <text x="107.19999999999999" y="17.5" class="element-type" text-anchor="middle" font-size="14">&lt;&lt;Element&gt;&gt;</text>
-      <text x="17.200000000000003" y="48" class="element-name" font-weight="bold" text-anchor="start" font-size="12">test_entity2</text>
-      <text x="17.200000000000003" y="66" class="element-attr" font-size="12" text-anchor="start">Type: word doc</text>
-      <text x="17.200000000000003" y="84" class="element-attr" text-anchor="start" font-size="12">Doc Ref: reqs/test_entity</text>
+      <text x="107.19999999999999" y="17.5" class="element-type" font-size="14" text-anchor="middle">&lt;&lt;Element&gt;&gt;</text>
+      <text x="17.200000000000003" y="48" class="element-name" text-anchor="start" font-size="12" font-weight="bold">test_entity2</text>
+      <text x="17.200000000000003" y="66" class="element-attr" text-anchor="start" font-size="12">Type: word doc</text>
+      <text x="17.200000000000003" y="84" class="element-attr" font-size="12" text-anchor="start">Doc Ref: reqs/test_entity</text>
     </g>
     <g class="element-node" id="test_entity">
       <rect x="417.59999999999997" y="196" width="140" height="81" rx="0" ry="0" class="element-box" stroke-width="2"/>
       <rect x="417.59999999999997" y="196" width="140" height="25" rx="0" ry="0" class="element-header"/>
       <line x1="417.59999999999997" y1="221" x2="557.5999999999999" y2="221" class="divider" stroke-width="1"/>
-      <text x="487.59999999999997" y="213.5" class="element-type" font-size="14" text-anchor="middle">&lt;&lt;Element&gt;&gt;</text>
+      <text x="487.59999999999997" y="213.5" class="element-type" text-anchor="middle" font-size="14">&lt;&lt;Element&gt;&gt;</text>
       <text x="427.59999999999997" y="244" class="element-name" text-anchor="start" font-size="12" font-weight="bold">test_entity</text>
       <text x="427.59999999999997" y="262" class="element-attr" font-size="12" text-anchor="start">Type: simulation</text>
     </g>

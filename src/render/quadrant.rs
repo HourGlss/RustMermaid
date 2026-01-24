@@ -60,7 +60,12 @@ pub fn render_quadrant(db: &QuadrantDb, config: &RenderConfig) -> Result<String>
     let quadrant_height = chart_height / 2.0;
 
     // Render background using shared utility
-    let bg = chart_utils::render_background(width, height, &config.theme.background, "quadrant-background");
+    let bg = chart_utils::render_background(
+        width,
+        height,
+        &config.theme.background,
+        "quadrant-background",
+    );
     doc.add_element(bg);
 
     // Render title if present

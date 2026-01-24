@@ -211,17 +211,17 @@ fn process_state_def(
                         Rule::state_id => {
                             state_id = body_inner.as_str().to_string();
                             db.add_state(&state_id);
-                            if let Some(p) = parent {
-                                db.set_parent(&state_id, p);
-                            }
+                            // ALWAYS set parent for explicit state blocks (even if None)
+                            // This ensures explicit `state X { }` declarations take precedence
+                            // over implicit state creation from transitions
+                            db.set_or_clear_parent(&state_id, parent);
                         }
                         Rule::quoted_string => {
                             let s = body_inner.as_str();
                             state_id = s[1..s.len() - 1].to_string(); // Remove quotes
                             db.add_state(&state_id);
-                            if let Some(p) = parent {
-                                db.set_parent(&state_id, p);
-                            }
+                            // ALWAYS set parent for explicit state blocks (even if None)
+                            db.set_or_clear_parent(&state_id, parent);
                         }
                         Rule::document => {
                             // Process nested document with this state as parent
@@ -966,6 +966,149 @@ mod tests {
     Crash --> [*]"#;
             let result = parse(input);
             assert!(result.is_ok(), "Failed to parse: {:?}", result);
+        }
+
+        #[test]
+        fn test_complex_nested_composite_states() {
+            // Complex diagram with deeply nested composite states
+            let input = r#"stateDiagram-v2
+[*] --> Idle
+
+state Idle {
+    [*] --> Ready
+    Ready --> Processing: Start Job
+}
+
+state Processing {
+    [*] --> Validating
+    Validating --> Queued: Valid
+    Validating --> Failed: Invalid
+    Queued --> Running: Worker Available
+    Running --> Completed: Success
+    Running --> Failed: Error
+    Running --> Paused: Pause Request
+
+    state Running {
+        [*] --> Initializing
+        Initializing --> Executing
+        Executing --> Finalizing
+        Finalizing --> [*]
+    }
+}
+
+state Paused {
+    [*] --> WaitingResume
+    WaitingResume --> Timeout: 1 hour
+}
+
+Paused --> Running: Resume
+Paused --> Cancelled: Cancel Request
+Timeout --> Cancelled
+
+Completed --> Idle: Reset
+Failed --> Idle: Retry
+Cancelled --> Idle: Reset
+
+Completed --> [*]
+Cancelled --> [*]"#;
+            let result = parse(input);
+            assert!(result.is_ok(), "Failed to parse: {:?}", result);
+            let db = result.unwrap();
+
+            // Verify state count - should have many states
+            let states = db.get_states();
+            assert!(
+                states.len() >= 10,
+                "Expected at least 10 states, got {}",
+                states.len()
+            );
+
+            // Verify parent relationships for key states
+            // Ready should be inside Idle
+            let ready = states.get("Ready").expect("Ready state should exist");
+            assert_eq!(
+                ready.parent.as_deref(),
+                Some("Idle"),
+                "Ready should have parent Idle"
+            );
+
+            // Processing is referenced from inside Idle via `Ready --> Processing`.
+            // In mermaid, first assignment wins: the transition sets parent=Idle,
+            // and the later `state Processing { }` at root level doesn't change it.
+            let processing = states
+                .get("Processing")
+                .expect("Processing state should exist");
+            assert_eq!(
+                processing.parent.as_deref(),
+                Some("Idle"),
+                "Processing should have parent Idle (first assignment wins)"
+            );
+
+            // Validating should be inside Processing
+            let validating = states
+                .get("Validating")
+                .expect("Validating state should exist");
+            assert_eq!(
+                validating.parent.as_deref(),
+                Some("Processing"),
+                "Validating should have parent Processing"
+            );
+
+            // Running should be inside Processing
+            let running = states.get("Running").expect("Running state should exist");
+            assert_eq!(
+                running.parent.as_deref(),
+                Some("Processing"),
+                "Running should have parent Processing"
+            );
+
+            // Initializing should be inside Running (nested 3 levels deep)
+            let initializing = states
+                .get("Initializing")
+                .expect("Initializing state should exist");
+            assert_eq!(
+                initializing.parent.as_deref(),
+                Some("Running"),
+                "Initializing should have parent Running"
+            );
+
+            // Paused is referenced from inside Processing via `Running --> Paused`.
+            // In mermaid, first assignment wins: the transition sets parent=Processing,
+            // and the later `state Paused { }` at root level doesn't change it.
+            let paused = states.get("Paused").expect("Paused state should exist");
+            assert_eq!(
+                paused.parent.as_deref(),
+                Some("Processing"),
+                "Paused should have parent Processing (first assignment wins)"
+            );
+
+            // WaitingResume should be inside Paused
+            let waiting = states
+                .get("WaitingResume")
+                .expect("WaitingResume state should exist");
+            assert_eq!(
+                waiting.parent.as_deref(),
+                Some("Paused"),
+                "WaitingResume should have parent Paused"
+            );
+
+            // Cancelled should be at root level (defined in root transitions)
+            let cancelled = states
+                .get("Cancelled")
+                .expect("Cancelled state should exist");
+            assert_eq!(
+                cancelled.parent.as_deref(),
+                None,
+                "Cancelled should be at root level"
+            );
+
+            // Verify relations count
+            let relations = db.get_relations();
+            assert!(
+                relations.len() >= 15,
+                "Expected at least 15 relations, got {}",
+                relations.len()
+            );
         }
     }
 }

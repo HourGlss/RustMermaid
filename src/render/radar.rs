@@ -98,7 +98,9 @@ pub fn render_radar(db: &RadarDb, config: &RenderConfig) -> Result<String> {
             class: "radarTitle".to_string(),
             text_anchor: "middle".to_string(),
         };
-        if let Some(title_elem) = chart_utils::render_title(title, &title_config, &config.theme.primary_text_color) {
+        if let Some(title_elem) =
+            chart_utils::render_title(title, &title_config, &config.theme.primary_text_color)
+        {
             main_group_children.push(title_elem);
         }
     }
@@ -346,7 +348,10 @@ fn draw_legend(
         .iter()
         .enumerate()
         .map(|(index, curve)| {
-            LegendItem::new(curve.label.clone(), chart_utils::get_chart_color(index).to_string())
+            LegendItem::new(
+                curve.label.clone(),
+                chart_utils::get_chart_color(index).to_string(),
+            )
         })
         .collect();
 
