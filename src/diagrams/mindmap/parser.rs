@@ -31,7 +31,8 @@ static NODE_BANG_RE: LazyLock<Regex> =
 static NODE_HEXAGON_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(\w+)?\{\{([^}]+)\}\}$").unwrap());
 
-static ICON_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^::icon\((\w+)\)$").unwrap());
+// Icon classes can contain multiple space-separated words with hyphens (e.g., "fa fa-book")
+static ICON_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^::icon\(([^)]+)\)$").unwrap());
 
 static CLASS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^:::(.+)$").unwrap());
 

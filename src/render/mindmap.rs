@@ -451,9 +451,9 @@ fn render_node(node: &PositionedNode, _config: &RenderConfig) -> SvgElement {
         classes.push(class.clone());
     }
 
-    // Render shape based on node type
-    let shape = render_node_shape(node);
-    node_children.push(shape);
+    // Render shape based on node type (may include multiple elements like path + line)
+    let shapes = render_node_shape(node);
+    node_children.extend(shapes);
 
     // Render icon if present
     if let Some(ref icon) = node.icon {
@@ -476,10 +476,11 @@ fn render_node(node: &PositionedNode, _config: &RenderConfig) -> SvgElement {
 }
 
 /// Render node shape based on type
-fn render_node_shape(node: &PositionedNode) -> SvgElement {
+/// Returns a vector of SVG elements (some shapes like Default include multiple elements)
+fn render_node_shape(node: &PositionedNode) -> Vec<SvgElement> {
     match node.node_type {
         NodeType::Default => {
-            // Default shape: rounded rectangle with bottom line
+            // Default shape: rounded rectangle with decorative bottom line (mermaid.js style)
             let rd = 5.0;
             let path = format!(
                 "M0 {} v{} q0,-5 5,-5 h{} q5,0 5,5 v{} H0 Z",
@@ -488,14 +489,32 @@ fn render_node_shape(node: &PositionedNode) -> SvgElement {
                 node.width - 2.0 * rd,
                 node.height - rd
             );
-            SvgElement::Path {
-                d: path,
-                attrs: Attrs::new().with_class("node-bkg node-default"),
-            }
+
+            // Line class uses the section number for color coordination
+            let line_class = if node.section >= 0 {
+                format!("node-line-{}", node.section % (MAX_SECTIONS as i32 - 1))
+            } else {
+                "node-line-root".to_string()
+            };
+
+            vec![
+                SvgElement::Path {
+                    d: path,
+                    attrs: Attrs::new().with_class("node-bkg node-default"),
+                },
+                // Decorative line at the bottom of the node (matches mermaid.js)
+                SvgElement::Line {
+                    x1: 0.0,
+                    y1: node.height,
+                    x2: node.width,
+                    y2: node.height,
+                    attrs: Attrs::new().with_class(&line_class),
+                },
+            ]
         }
         NodeType::Rect => {
             // Square/rectangle
-            SvgElement::Rect {
+            vec![SvgElement::Rect {
                 x: 0.0,
                 y: 0.0,
                 width: node.width,
@@ -503,11 +522,11 @@ fn render_node_shape(node: &PositionedNode) -> SvgElement {
                 rx: None,
                 ry: None,
                 attrs: Attrs::new().with_class("node-bkg node-rect"),
-            }
+            }]
         }
         NodeType::RoundedRect => {
             // Rounded rectangle
-            SvgElement::Rect {
+            vec![SvgElement::Rect {
                 x: 0.0,
                 y: 0.0,
                 width: node.width,
@@ -515,17 +534,17 @@ fn render_node_shape(node: &PositionedNode) -> SvgElement {
                 rx: Some(NODE_PADDING),
                 ry: Some(NODE_PADDING),
                 attrs: Attrs::new().with_class("node-bkg node-rounded"),
-            }
+            }]
         }
         NodeType::Circle => {
             // Circle - centered in the node box
             let radius = node.width.min(node.height) / 2.0;
-            SvgElement::Circle {
+            vec![SvgElement::Circle {
                 cx: node.width / 2.0,
                 cy: node.height / 2.0,
                 r: radius,
                 attrs: Attrs::new().with_class("node-bkg node-circle"),
-            }
+            }]
         }
         NodeType::Cloud => {
             // Cloud shape using arcs
@@ -566,10 +585,10 @@ fn render_node_shape(node: &PositionedNode) -> SvgElement {
                 r4 = r4
             );
 
-            SvgElement::Path {
+            vec![SvgElement::Path {
                 d: path,
                 attrs: Attrs::new().with_class("node-bkg node-cloud"),
-            }
+            }]
         }
         NodeType::Bang => {
             // Bang/explosion shape
@@ -599,10 +618,10 @@ fn render_node_shape(node: &PositionedNode) -> SvgElement {
                 r = r
             );
 
-            SvgElement::Path {
+            vec![SvgElement::Path {
                 d: path,
                 attrs: Attrs::new().with_class("node-bkg node-bang"),
-            }
+            }]
         }
         NodeType::Hexagon => {
             // Hexagon shape
@@ -625,10 +644,10 @@ fn render_node_shape(node: &PositionedNode) -> SvgElement {
                 h / 2.0
             );
 
-            SvgElement::PolygonStr {
+            vec![SvgElement::PolygonStr {
                 points,
                 attrs: Attrs::new().with_class("node-bkg node-hexagon"),
-            }
+            }]
         }
     }
 }

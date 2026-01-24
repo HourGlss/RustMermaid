@@ -448,3 +448,71 @@ fn mindmap_with_children_deep_hierarchy() {
         "Should have mindmap-node class"
     );
 }
+
+// ============================================================================
+// Visual Parity Tests (for mermaid compatibility)
+// ============================================================================
+
+fn count_elements_by_tag(doc: &Document<'_>, tag_name: &str) -> usize {
+    doc.descendants()
+        .filter(|node| node.tag_name().name() == tag_name)
+        .count()
+}
+
+#[test]
+fn mindmap_icon_with_multiple_classes_not_parsed_as_node() {
+    // Bug: Icons with multiple classes (e.g., "fa fa-book") were being parsed as nodes
+    // because the regex only matched single-word icon classes.
+    // This caused an extra node to appear in diagrams.
+    let input = r#"mindmap
+root((mindmap))
+    Origins
+        Long history
+        ::icon(fa fa-book)
+        Popularisation"#;
+    let svg = render_mindmap_svg(input);
+    let doc = parse_svg(&svg);
+
+    // Should have exactly 4 nodes: root, Origins, Long history, Popularisation
+    // NOT 5 nodes (with icon line as a node)
+    let node_count = count_elements_with_class(&doc, "mindmap-node");
+    assert_eq!(
+        node_count, 4,
+        "Icon line should not be parsed as a node. \
+         Expected 4 nodes (root, Origins, Long history, Popularisation), got {}",
+        node_count
+    );
+}
+
+#[test]
+fn mindmap_default_nodes_have_bottom_lines() {
+    // Default-style nodes in mermaid have a decorative line at the bottom
+    // This test verifies that Selkie renders these lines to match mermaid output
+    let input = r#"mindmap
+root((mindmap))
+    Origins
+        Long history
+    Research
+        On effectiveness
+        On Automatic creation
+    Tools
+        Pen and paper
+        Mermaid"#;
+    let svg = render_mindmap_svg(input);
+    let doc = parse_svg(&svg);
+
+    // Count default nodes (nodes that aren't root - root is a circle)
+    // We expect: Origins, Long history, Research, On effectiveness,
+    // On Automatic creation, Tools, Pen and paper, Mermaid = 8 default nodes
+    let default_node_count = 8;
+
+    // Each default node should have one <line> element at the bottom
+    let line_count = count_elements_by_tag(&doc, "line");
+
+    assert_eq!(
+        line_count, default_node_count,
+        "Each default-style node should have a decorative bottom line. \
+         Expected {} lines for {} default nodes, but found {}",
+        default_node_count, default_node_count, line_count
+    );
+}
