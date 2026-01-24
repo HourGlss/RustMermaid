@@ -117,20 +117,20 @@ marker path {
 
     </g>
     <g class="nodes">
-      <g class="node" y="4.3224283843291005" transform="translate(0,4.3224283843291005)" id="node-1" x="0">
-        <rect x="0" y="0" width="10" height="325" class="sankey-node" fill="#4e79a7"/>
+      <g class="node" x="0" id="node-1" y="4.3224283843291005" transform="translate(0,4.3224283843291005)">
+        <rect x="0" y="0" width="10" height="325" class="sankey-node" style="fill: #4e79a7"/>
       </g>
-      <g class="node" transform="translate(590,399)" y="399" x="590" id="node-2">
-        <rect x="0" y="0" width="10" height="1" class="sankey-node" fill="#f28e2c"/>
+      <g class="node" x="590" id="node-2" transform="translate(590,399)" y="399">
+        <rect x="0" y="0" width="10" height="1" class="sankey-node" style="fill: #f28e2c"/>
       </g>
-      <g class="node" transform="translate(590,351.55312720961626)" y="351.55312720961626" x="590" id="node-3">
-        <rect x="0" y="0" width="10" height="22.446872790383736" class="sankey-node" fill="#e15759"/>
+      <g class="node" y="351.55312720961626" transform="translate(590,351.55312720961626)" x="590" id="node-3">
+        <rect x="0" y="0" width="10" height="22.446872790383736" class="sankey-node" style="fill: #e15759"/>
       </g>
-      <g class="node" x="590" transform="translate(590,0)" y="0" id="node-4">
-        <rect x="0" y="0" width="10" height="234.2473484605001" class="sankey-node" fill="#76b7b2"/>
+      <g class="node" id="node-4" x="590" transform="translate(590,0)" y="0">
+        <rect x="0" y="0" width="10" height="234.2473484605001" class="sankey-node" style="fill: #76b7b2"/>
       </g>
-      <g class="node" y="258.7462235649547" transform="translate(590,258.7462235649547)" x="590" id="node-5">
-        <rect x="0" y="0" width="10" height="67.80690364466159" class="sankey-node" fill="#59a14f"/>
+      <g class="node" transform="translate(590,258.7462235649547)" x="590" y="258.7462235649547" id="node-5">
+        <rect x="0" y="0" width="10" height="67.80690364466159" class="sankey-node" style="fill: #59a14f"/>
       </g>
     </g>
     <g class="node-labels" font-size="14">
