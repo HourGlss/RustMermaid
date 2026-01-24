@@ -422,30 +422,24 @@ fn test_quadrant_z_order_shapes_before_text() {
     let diagram = parse(input).expect("Failed to parse");
     let svg = render(&diagram).expect("Failed to render");
 
-    // Find positions of elements
+    // Find positions of elements to verify z-order structure
     let first_text_pos = svg.find("<text ").expect("Should have text elements");
-    let last_rect_pos = svg.rfind("<rect ").expect("Should have rect elements");
-    let last_line_pos = svg.rfind("<line ").expect("Should have line elements");
-    let last_circle_pos = svg.rfind("<circle ").expect("Should have circle elements");
+    let _last_rect_pos = svg.rfind("<rect ").expect("Should have rect elements");
+    let _last_line_pos = svg.rfind("<line ").expect("Should have line elements");
+    // Note: circles (data points) appear with their labels, so they can be after some text
+    let _last_circle_pos = svg.rfind("<circle ").expect("Should have circle elements");
 
-    // All text should come after all shapes (rects, lines, circles)
-    // Actually, circles are shapes too, and point labels come after their circles
-    // So we check that rects and lines come before most text
+    // Quadrant rects should appear before text labels
     let first_rect_pos = svg.find("<rect ").expect("Should have rect");
+    assert!(
+        first_rect_pos < first_text_pos,
+        "Quadrant rects should appear before text elements for proper z-order"
+    );
 
-    // The title can come early, but quadrant labels should come after rects
-    // Let's check that the quadrant rects appear in the output
+    // Verify quadrant class markers exist
     assert!(
         svg.contains("quadrant-1"),
         "Should have quadrant class markers"
-    );
-
-    // Check that we have the main grouping structure from mermaid reference:
-    // quadrants group, border group, data-points group, labels group, title group
-    // (For now, just verify shapes exist before text labels in general structure)
-    assert!(
-        first_rect_pos < first_text_pos || svg.contains("<g class=\"main\""),
-        "Shapes should generally appear before text, or use proper grouping"
     );
 }
 
