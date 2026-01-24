@@ -50,20 +50,22 @@ pub fn render_pie(db: &PieDb, config: &RenderConfig) -> Result<String> {
         return Ok(doc.to_string());
     }
 
-    // Mermaid.js assigns colors based on ORIGINAL input order, but renders slices
-    // sorted by value descending. Legend stays in original order.
+    // Mermaid.js uses D3's scaleOrdinal which assigns colors in the order labels
+    // are first encountered. Since mermaid processes arcs in value-descending order,
+    // colors are assigned by sorted order, not original input order.
 
-    // Step 1: Create color mapping based on original order
+    // Step 1: Get sections and sort by value descending (like mermaid)
     let sections_vec: Vec<_> = sections.to_vec();
-    let label_to_color_index: std::collections::HashMap<_, _> = sections_vec
+    let mut sorted_for_rendering: Vec<_> = sections_vec.clone();
+    sorted_for_rendering.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Step 2: Create color mapping based on SORTED order (not input order!)
+    // D3 scaleOrdinal assigns colors as labels are first seen - in sorted order
+    let label_to_color_index: std::collections::HashMap<_, _> = sorted_for_rendering
         .iter()
         .enumerate()
         .map(|(i, (label, _))| (label.clone(), i))
         .collect();
-
-    // Step 2: Sort by value descending for slice rendering
-    let mut sorted_for_rendering: Vec<_> = sections_vec.clone();
-    sorted_for_rendering.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     // Pie colors from theme
     let colors: Vec<&str> = config.theme.pie_colors.iter().map(|s| s.as_str()).collect();
@@ -196,12 +198,13 @@ pub fn render_pie(db: &PieDb, config: &RenderConfig) -> Result<String> {
     }
 
     // Build legend items in ORIGINAL input order (not sorted)
-    // Include the raw value for showData display
+    // But use colors based on sorted order (looked up from label_to_color_index)
     let legend_items: Vec<(String, String, f64, f64)> = sections_vec
         .iter()
-        .enumerate()
-        .map(|(i, (label, value))| {
-            let color = colors[i % colors.len()];
+        .map(|(label, value)| {
+            // Look up the color index from sorted order, not input order
+            let color_index = label_to_color_index.get(label).copied().unwrap_or(0);
+            let color = colors[color_index % colors.len()];
             let percentage = *value / total;
             (color.to_string(), label.clone(), percentage, *value)
         })

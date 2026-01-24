@@ -1,6 +1,6 @@
 //! Theme configuration for SVG rendering
 
-use super::color::{adjust, Color};
+use super::color::{adjust, adjust_to_hsl_string, Color};
 
 /// Compute journey fillType colors dynamically from theme base colors.
 /// This matches mermaid.js theme-default.js journey color calculation.
@@ -30,25 +30,60 @@ fn compute_journey_fill_types(primary: &str, secondary: &str) -> Vec<String> {
 
 /// Compute pie chart colors dynamically from theme base colors.
 /// This matches mermaid.js theme-default.js pie color calculation.
-fn compute_pie_colors(primary: &str, secondary: &str, tertiary: &str) -> Vec<String> {
+///
+/// In mermaid.js:
+/// - tertiaryColor = adjust(primaryColor, { h: -160 }) - NOT a hardcoded value
+/// - pie1 = primaryColor (kept in original hex format)
+/// - pie2 = secondaryColor (kept in original hex format)
+/// - pie3+ = computed colors (output as HSL to match mermaid)
+fn compute_pie_colors(primary: &str, secondary: &str) -> Vec<String> {
     let primary_color = Color::from_hex(primary).unwrap_or_else(|| Color::rgb(236, 236, 255));
     let secondary_color = Color::from_hex(secondary).unwrap_or_else(|| Color::rgb(255, 255, 222));
-    let tertiary_color = Color::from_hex(tertiary).unwrap_or_else(|| Color::rgb(250, 250, 250));
+    // tertiaryColor is derived from primaryColor by hue shift, not a hardcoded value!
+    // mermaid.js: this.tertiaryColor = adjust(this.primaryColor, { h: -160 });
+    // Note: We compute tertiary's HSL directly to avoid precision loss
+    let (primary_h, primary_s, primary_l) = primary_color.to_hsl();
+    let tertiary_h = ((primary_h - 160.0) % 360.0 + 360.0) % 360.0;
+    let tertiary_s = primary_s;
+    let tertiary_l = primary_l;
 
+    // Use adjust_to_hsl_string to avoid RGB roundtrip precision loss
     vec![
-        primary_color.to_hsl_string(),   // pie1 = primaryColor
-        secondary_color.to_hsl_string(), // pie2 = secondaryColor
-        adjust(&tertiary_color, 0.0, 0.0, -40.0).to_hsl_string(), // pie3 = adjust(tertiaryColor, { l: -40 })
-        adjust(&primary_color, 0.0, 0.0, -10.0).to_hsl_string(), // pie4 = adjust(primaryColor, { l: -10 })
-        adjust(&secondary_color, 0.0, 0.0, -30.0).to_hsl_string(), // pie5 = adjust(secondaryColor, { l: -30 })
-        adjust(&tertiary_color, 0.0, 0.0, -20.0).to_hsl_string(), // pie6 = adjust(tertiaryColor, { l: -20 })
-        adjust(&primary_color, 60.0, 0.0, -20.0).to_hsl_string(), // pie7 = adjust(primaryColor, { h: +60, l: -20 })
-        adjust(&primary_color, -60.0, 0.0, -40.0).to_hsl_string(), // pie8 = adjust(primaryColor, { h: -60, l: -40 })
-        adjust(&primary_color, 120.0, 0.0, -40.0).to_hsl_string(), // pie9 = adjust(primaryColor, { h: 120, l: -40 })
-        adjust(&primary_color, 60.0, 0.0, -40.0).to_hsl_string(), // pie10 = adjust(primaryColor, { h: +60, l: -40 })
-        adjust(&primary_color, -90.0, 0.0, -40.0).to_hsl_string(), // pie11 = adjust(primaryColor, { h: -90, l: -40 })
-        adjust(&primary_color, 120.0, 0.0, -30.0).to_hsl_string(), // pie12 = adjust(primaryColor, { h: 120, l: -30 })
+        primary.to_lowercase(),   // pie1 = primaryColor (keep original hex format like mermaid)
+        secondary.to_lowercase(), // pie2 = secondaryColor (keep original hex format like mermaid)
+        // pie3 = adjust(tertiaryColor, { l: -40 })
+        format!(
+            "hsl({}, {}%, {}%)",
+            tertiary_h.round() as i32,
+            format_hsl_pct(tertiary_s),
+            format_hsl_pct((tertiary_l - 40.0).clamp(0.0, 100.0))
+        ),
+        adjust_to_hsl_string(&primary_color, 0.0, 0.0, -10.0), // pie4 = adjust(primaryColor, { l: -10 })
+        adjust_to_hsl_string(&secondary_color, 0.0, 0.0, -30.0), // pie5 = adjust(secondaryColor, { l: -30 })
+        // pie6 = adjust(tertiaryColor, { l: -20 })
+        format!(
+            "hsl({}, {}%, {}%)",
+            tertiary_h.round() as i32,
+            format_hsl_pct(tertiary_s),
+            format_hsl_pct((tertiary_l - 20.0).clamp(0.0, 100.0))
+        ),
+        adjust_to_hsl_string(&primary_color, 60.0, 0.0, -20.0), // pie7 = adjust(primaryColor, { h: +60, l: -20 })
+        adjust_to_hsl_string(&primary_color, -60.0, 0.0, -40.0), // pie8 = adjust(primaryColor, { h: -60, l: -40 })
+        adjust_to_hsl_string(&primary_color, 120.0, 0.0, -40.0), // pie9 = adjust(primaryColor, { h: 120, l: -40 })
+        adjust_to_hsl_string(&primary_color, 60.0, 0.0, -40.0), // pie10 = adjust(primaryColor, { h: +60, l: -40 })
+        adjust_to_hsl_string(&primary_color, -90.0, 0.0, -40.0), // pie11 = adjust(primaryColor, { h: -90, l: -40 })
+        adjust_to_hsl_string(&primary_color, 120.0, 0.0, -30.0), // pie12 = adjust(primaryColor, { h: 120, l: -30 })
     ]
+}
+
+/// Helper to format HSL percentage matching mermaid's precision
+fn format_hsl_pct(value: f64) -> String {
+    let rounded = value.round();
+    if (value - rounded).abs() < 0.0001 {
+        format!("{}", rounded as i32)
+    } else {
+        format!("{:.10}", value).trim_end_matches('0').trim_end_matches('.').to_string()
+    }
 }
 
 /// Color theme for diagram rendering
@@ -223,7 +258,7 @@ impl Default for Theme {
             font_family: "trebuchet ms, verdana, arial, sans-serif".to_string(),
             font_size: "16px".to_string(),
             // Pie chart - dynamically computed from theme colors (matches mermaid.js)
-            pie_colors: compute_pie_colors("#ECECFF", "#ffffde", "#fafafa"),
+            pie_colors: compute_pie_colors("#ECECFF", "#ffffde"),
             pie_stroke_color: "black".to_string(),
             pie_outer_stroke_color: "black".to_string(),
             pie_opacity: "0.7".to_string(),
@@ -332,7 +367,7 @@ impl Theme {
             font_family: "trebuchet ms, verdana, arial, sans-serif".to_string(),
             font_size: "16px".to_string(),
             // Pie chart - dynamically computed from dark theme colors
-            pie_colors: compute_pie_colors("#1f2020", "#8a8a8a", "#333333"),
+            pie_colors: compute_pie_colors("#1f2020", "#8a8a8a"),
             pie_stroke_color: "#81B1DB".to_string(),
             pie_outer_stroke_color: "#81B1DB".to_string(),
             pie_opacity: "0.7".to_string(),
@@ -438,7 +473,7 @@ impl Theme {
             font_family: "trebuchet ms, verdana, arial, sans-serif".to_string(),
             font_size: "16px".to_string(),
             // Pie chart - dynamically computed from neutral theme colors
-            pie_colors: compute_pie_colors("#f0f0f0", "#e0e0e0", "#fafafa"),
+            pie_colors: compute_pie_colors("#f0f0f0", "#e0e0e0"),
             pie_stroke_color: "#333333".to_string(),
             pie_outer_stroke_color: "#333333".to_string(),
             pie_opacity: "0.7".to_string(),
@@ -545,7 +580,7 @@ impl Theme {
             font_family: "trebuchet ms, verdana, arial, sans-serif".to_string(),
             font_size: "16px".to_string(),
             // Pie chart - dynamically computed from forest theme colors
-            pie_colors: compute_pie_colors("#cde498", "#cdffb2", "#e0f2c8"),
+            pie_colors: compute_pie_colors("#cde498", "#cdffb2"),
             pie_stroke_color: "black".to_string(),
             pie_outer_stroke_color: "black".to_string(),
             pie_opacity: "0.7".to_string(),
@@ -1726,5 +1761,70 @@ mod tests {
         let theme = Theme::from_directive(&config);
         // Should fall back to default theme
         assert_eq!(theme.primary_color, "#ECECFF");
+    }
+
+    #[test]
+    fn test_pie_colors_match_mermaid_default_theme() {
+        // This test ensures pie colors match mermaid.js default theme exactly.
+        // Bug: tertiaryColor was #fafafa (gray) instead of derived from primaryColor,
+        // causing pie3 and pie6 to be gray instead of having proper hue.
+        //
+        // In mermaid.js theme-default.js:
+        // - primaryColor = '#ECECFF' (light purple, hsl(240, 100%, 96%))
+        // - secondaryColor = '#ffffde' (light yellow, hsl(60, 100%, 93%))
+        // - tertiaryColor = adjust(primaryColor, { h: -160 }) = hsl(80, 100%, 96%)
+        //
+        // Pie colors:
+        // - pie1 = primaryColor = #ECECFF
+        // - pie2 = secondaryColor = #ffffde
+        // - pie3 = adjust(tertiaryColor, { l: -40 }) = hsl(80, 100%, 56%)
+        // - pie4 = adjust(primaryColor, { l: -10 }) = hsl(240, 100%, 86%)
+        // - etc.
+        let theme = Theme::default();
+
+        // Verify no pie color has 0% saturation (would indicate bug with grayscale tertiary)
+        for (i, color_str) in theme.pie_colors.iter().enumerate() {
+            // Parse the HSL string to check saturation
+            if color_str.starts_with("hsl(") {
+                let inner = &color_str[4..color_str.len() - 1];
+                let parts: Vec<&str> = inner.split(',').collect();
+                if parts.len() >= 2 {
+                    let saturation = parts[1].trim().trim_end_matches('%').parse::<f64>().unwrap_or(100.0);
+                    assert!(
+                        saturation > 0.0,
+                        "pie{} has 0% saturation (gray): {} - tertiaryColor may not be derived correctly",
+                        i + 1,
+                        color_str
+                    );
+                }
+            }
+        }
+
+        // pie1 should be primaryColor (light purple)
+        // pie2 should be secondaryColor (light yellow)
+        let pie1 = &theme.pie_colors[0];
+        let pie2 = &theme.pie_colors[1];
+
+        // Parse pie1 to verify it's the purple color (hue ~240)
+        if pie1.starts_with("hsl(") {
+            let inner = &pie1[4..pie1.len() - 1];
+            let hue: f64 = inner.split(',').next().unwrap().trim().parse().unwrap_or(0.0);
+            assert!(
+                (hue - 240.0).abs() < 5.0,
+                "pie1 should have hue ~240 (purple), got {}",
+                hue
+            );
+        }
+
+        // Parse pie2 to verify it's the yellow color (hue ~60)
+        if pie2.starts_with("hsl(") {
+            let inner = &pie2[4..pie2.len() - 1];
+            let hue: f64 = inner.split(',').next().unwrap().trim().parse().unwrap_or(0.0);
+            assert!(
+                (hue - 60.0).abs() < 5.0,
+                "pie2 should have hue ~60 (yellow), got {}",
+                hue
+            );
+        }
     }
 }

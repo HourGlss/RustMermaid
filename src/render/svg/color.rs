@@ -276,6 +276,37 @@ pub fn adjust(color: &Color, h: f64, s: f64, l: f64) -> Color {
     result
 }
 
+/// Adjust a color's HSL values and return the result as an HSL string directly.
+/// This avoids the precision loss from converting HSL → RGB → HSL.
+/// Output format matches mermaid.js: hsl(h, s%, l%) with specific precision.
+pub fn adjust_to_hsl_string(color: &Color, h: f64, s: f64, l: f64) -> String {
+    let (ch, cs, cl) = color.to_hsl();
+    let new_h = ((ch + h) % 360.0 + 360.0) % 360.0; // Normalize hue
+    let new_s = (cs + s).clamp(0.0, 100.0);
+    let new_l = (cl + l).clamp(0.0, 100.0);
+
+    // Format matching mermaid.js precision (10-digit precision for percentages)
+    format!(
+        "hsl({}, {}%, {}%)",
+        new_h.round() as i32,
+        format_mermaid_pct(new_s),
+        format_mermaid_pct(new_l)
+    )
+}
+
+/// Format percentage value matching mermaid.js output precision
+fn format_mermaid_pct(value: f64) -> String {
+    // Mermaid.js uses 10 significant digits after decimal
+    // Check if value is close to a whole number
+    let rounded = value.round();
+    if (value - rounded).abs() < 0.0001 {
+        format!("{}", rounded as i32)
+    } else {
+        // Match mermaid's precision: up to 10 decimal places
+        format!("{:.10}", value).trim_end_matches('0').trim_end_matches('.').to_string()
+    }
+}
+
 /// Darken a color by reducing lightness
 /// Amount is in percentage points (0-100)
 pub fn darken(color: &Color, amount: f64) -> Color {
