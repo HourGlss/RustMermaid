@@ -592,6 +592,9 @@ fn render_nodes(nodes: &[LayoutNode], config: &RenderConfig) -> SvgElement {
         let color = &colors[node.index % colors.len()];
 
         // Rect uses local coordinates (0,0) since group has the transform
+        // Use inline style for fill color instead of presentation attribute
+        // because CSS rules like ".node rect { fill: #ECECFF }" override
+        // presentation attributes but not inline styles
         let rect = SvgElement::Rect {
             x: 0.0,
             y: 0.0,
@@ -599,8 +602,9 @@ fn render_nodes(nodes: &[LayoutNode], config: &RenderConfig) -> SvgElement {
             height: node.y1 - node.y0,
             rx: None,
             ry: None,
-            attrs: Attrs::new().with_fill(color).with_class("sankey-node"),
-        };
+            attrs: Attrs::new().with_class("sankey-node"),
+        }
+        .with_style(&format!("fill: {}", color));
 
         // Group has transform for positioning, x/y are data attributes for tests
         let node_group = SvgElement::Group {
@@ -827,5 +831,36 @@ mod tests {
         assert!(result.contains("stroke-width="));
         // Links should have fill="none"
         assert!(result.contains("fill=\"none\""));
+    }
+
+    #[test]
+    fn test_node_colors_use_inline_style() {
+        // Node colors must use inline style (style="fill: #color") instead of
+        // presentation attributes (fill="#color") because CSS rules like
+        // ".node rect { fill: #ECECFF }" override presentation attributes but
+        // not inline styles. This ensures sankey node colors are visible.
+        let mut db = SankeyDb::new();
+        db.add_link("A", "B", 10.0);
+
+        let config = RenderConfig::default();
+        let result = render_sankey(&db, &config).unwrap();
+
+        // Sankey nodes should use inline style for fill, not presentation attribute
+        // The default theme colors start with #4e79a7 and #f28e2c
+        assert!(
+            result.contains(r#"style="fill: #"#),
+            "Sankey nodes should use inline style for fill color. Got: {}",
+            result
+        );
+
+        // Should NOT have presentation attribute fill on rect inside node
+        // (which would be overridden by CSS .node rect rules)
+        // Check that we don't have patterns like: <rect ... fill="#4e79a7" ... class="sankey-node">
+        let has_presentation_fill =
+            result.contains("fill=\"#4e79a7\"") || result.contains("fill=\"#f28e2c\"");
+        assert!(
+            !has_presentation_fill,
+            "Sankey nodes should NOT use presentation attribute fill (gets overridden by CSS)"
+        );
     }
 }
