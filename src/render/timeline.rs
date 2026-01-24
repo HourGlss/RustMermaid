@@ -11,7 +11,10 @@ use crate::error::Result;
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 
 // Mermaid-compatible layout constants
-const LEFT_MARGIN: f64 = 100.0; // Match reference (starts content at x=200 from viewBox x=100)
+// Mermaid uses masterX = 50 + LEFT_MARGIN where LEFT_MARGIN defaults to 50, giving x=100
+// But mermaid's viewBox starts at x=100, so content appears at x=200 from viewport origin
+// We use a simple viewBox starting at 0, so we need LEFT_MARGIN=200 to match visual output
+const LEFT_MARGIN: f64 = 200.0;
 const TOP_MARGIN: f64 = 50.0;
 const NODE_WIDTH: f64 = 150.0; // Reference uses width: 150 for node content (total = 150 + 2*padding = 190)
 const TEXT_WRAP_WIDTH: f64 = 150.0; // Reference uses width: 150 for text wrapping
@@ -149,9 +152,15 @@ fn calculate_layout(
 
     // Calculate total number of columns (tasks across all sections)
     let total_columns = tasks.len().max(1);
-    // Width: left margin + columns + right margin for timeline arrow
-    // Reference uses ~150px left margin and ~340px right margin for the arrow
-    let total_width = LEFT_MARGIN + (total_columns as f64) * COLUMN_WIDTH + LEFT_MARGIN * 3.0;
+    // Width calculation to match mermaid reference:
+    // - First task at x = LEFT_MARGIN (200)
+    // - Subsequent tasks spaced by COLUMN_WIDTH (200)
+    // - Node width = NODE_WIDTH + 2*NODE_PADDING (190)
+    // - Right margin = LEFT_MARGIN (200)
+    // Formula: (columns - 1) * spacing + node_width + left_margin + right_margin
+    let node_width = NODE_WIDTH + NODE_PADDING * 2.0;
+    let total_width =
+        (total_columns as f64 - 1.0).max(0.0) * COLUMN_WIDTH + node_width + LEFT_MARGIN * 2.0;
 
     // Calculate depth_y (position of timeline line)
     let section_begin_y = TOP_MARGIN;
@@ -430,8 +439,9 @@ fn render_task_node(
     doc.add_element(task_group);
 
     // Render events if present
+    // Pass task Y position (not bottom), as mermaid positions events relative to task Y
     if !task.events.is_empty() {
-        render_events(doc, task, section_color, x, y + height, layout);
+        render_events(doc, task, section_color, x, y, height, layout);
     }
 }
 
@@ -441,19 +451,26 @@ fn render_events(
     task: &TimelineTask,
     section_color: i32,
     task_x: f64,
-    task_bottom_y: f64,
+    task_y: f64,
+    task_height: f64,
     layout: &TimelineLayout,
 ) {
     let width = NODE_WIDTH + NODE_PADDING * 2.0;
     let center_x = task_x + width / 2.0;
 
-    // Draw vertical dashed line from task to events
-    let line_end_y = task_bottom_y + TASK_GAP + layout.max_event_line_length + 100.0;
+    // Mermaid positions: masterY + 100 (before drawEvents) + masterY + 100 (inside drawEvents)
+    // For vertical line: starts at task bottom (task_y + task_height)
+    // For events: starts at task_y + 200 (two TASK_GAP offsets)
+    let line_start_y = task_y + task_height;
+    let event_start_y = task_y + TASK_GAP * 2.0;
+
+    // Draw vertical dashed line from task bottom to below events
+    let line_end_y = event_start_y + layout.max_event_line_length + 100.0;
 
     let line_wrapper = SvgElement::Group {
         children: vec![SvgElement::Line {
             x1: center_x,
-            y1: task_bottom_y,
+            y1: line_start_y,
             x2: center_x,
             y2: line_end_y,
             attrs: Attrs::new()
@@ -466,8 +483,8 @@ fn render_events(
     };
     doc.add_element(line_wrapper);
 
-    // Render each event
-    let mut event_y = task_bottom_y + TASK_GAP;
+    // Render each event starting at task_y + 200
+    let mut event_y = event_start_y;
     for event in &task.events {
         let event_height = estimate_node_height(event, TEXT_WRAP_WIDTH);
         render_event_node(
@@ -920,5 +937,40 @@ mod tests {
         let svg = result.unwrap();
         // Forest theme uses green colors
         assert!(svg.contains("cde498") || svg.contains("#cde498"));
+    }
+
+    /// Test that layout positions match mermaid reference for timeline_simple
+    /// Reference values from mermaid-rendered timeline_simple:
+    /// - First task at translate(200, 50)
+    /// - Events at translate(200, 250)
+    /// - Vertical line y1="117.8" to y2="423.4"
+    #[test]
+    fn test_timeline_simple_layout_matches_mermaid() {
+        let mut db = TimelineDb::new();
+        db.set_title("History of Social Media Platform");
+        // Without sections, each task gets its own section color
+        db.add_task("2002", &["LinkedIn"]);
+        db.add_task("2004", &["Facebook", "Google"]);
+
+        let config = RenderConfig::default();
+        let result = render_timeline(&db, &config);
+        assert!(result.is_ok());
+        let svg = result.unwrap();
+
+        // Verify first task is at x=200 (LEFT_MARGIN + offset for viewBox compatibility)
+        // Mermaid positions first task at translate(200, 50)
+        assert!(
+            svg.contains("translate(200, 50)"),
+            "First task should be at translate(200, 50). SVG:\n{}",
+            svg
+        );
+
+        // Verify events are at y=250 (task_y + 100 + 100)
+        // Mermaid positions first event at translate(200, 250)
+        assert!(
+            svg.contains("translate(200, 250)"),
+            "First event should be at translate(200, 250). SVG:\n{}",
+            svg
+        );
     }
 }
