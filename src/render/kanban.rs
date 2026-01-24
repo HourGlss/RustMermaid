@@ -18,12 +18,12 @@ const RX: f64 = 5.0;
 const MIN_SECTION_HEIGHT: f64 = 50.0;
 /// Font size for labels
 const FONT_SIZE: f64 = 14.0;
-/// Line height for wrapped text
-const LINE_HEIGHT: f64 = 18.0;
-/// Max label width for wrapping
-const MAX_LABEL_WIDTH: f64 = 180.0;
-/// Minimum item height
-const MIN_ITEM_HEIGHT: f64 = 40.0;
+/// Line height for wrapped text (matches mermaid.js ~24px per line)
+const LINE_HEIGHT: f64 = 24.0;
+/// Max label width for wrapping (matches mermaid.js 175px content width + padding)
+const MAX_LABEL_WIDTH: f64 = 185.0;
+/// Minimum item height (matches mermaid.js 44px for single-line items)
+const MIN_ITEM_HEIGHT: f64 = 44.0;
 
 /// Render a kanban diagram to SVG
 pub fn render_kanban(db: &KanbanDb, config: &RenderConfig) -> Result<String> {
@@ -200,11 +200,22 @@ fn render_sections(db: &KanbanDb, layout: &KanbanLayout, _config: &RenderConfig)
                 section.css_classes.as_deref().unwrap_or("")
             )),
         };
-        children.push(rect);
 
         // Section label
         let label = render_section_label(&section.label, x, SECTION_WIDTH);
-        children.push(label);
+
+        // Wrap each section in its own group (like mermaid's cluster)
+        // This ensures proper z-order where rect is always before label text
+        let section_group = SvgElement::Group {
+            children: vec![rect, label],
+            attrs: Attrs::new()
+                .with_class(&format!(
+                    "cluster section-{}",
+                    (idx % 12) + 1
+                ))
+                .with_attr("id", &section.id),
+        };
+        children.push(section_group);
     }
 
     SvgElement::Group {
@@ -295,6 +306,7 @@ fn render_item(node: &KanbanNode, x: f64, y: f64, width: f64, height: f64) -> Sv
     let mut children = Vec::new();
 
     // Item background rectangle
+    // Note: Use class-based styling for fill, but keep stroke inline for consistency
     let rect = SvgElement::Rect {
         x: 0.0,
         y: 0.0,
@@ -302,13 +314,10 @@ fn render_item(node: &KanbanNode, x: f64, y: f64, width: f64, height: f64) -> Sv
         height,
         rx: Some(RX),
         ry: Some(RX),
-        attrs: Attrs::new()
-            .with_class(&format!(
-                "kanban-item {}",
-                node.css_classes.as_deref().unwrap_or("")
-            ))
-            .with_fill("#fff")
-            .with_stroke("#ccc"),
+        attrs: Attrs::new().with_class(&format!(
+            "kanban-item {}",
+            node.css_classes.as_deref().unwrap_or("")
+        )),
     };
     children.push(rect);
 
@@ -372,7 +381,7 @@ fn render_item(node: &KanbanNode, x: f64, y: f64, width: f64, height: f64) -> Sv
     SvgElement::Group {
         children,
         attrs: Attrs::new()
-            .with_class("kanban-item-group")
+            .with_class("node kanban-item-group")
             .with_attr("transform", &format!("translate({}, {})", x, y)),
     }
 }
@@ -431,20 +440,43 @@ fn priority_color(priority: &Priority) -> &'static str {
 fn generate_kanban_css(config: &RenderConfig) -> String {
     let theme = &config.theme;
 
+    // Section colors matching mermaid.js default theme cScale values
+    // These hues match the section-1 through section-12 CSS classes from mermaid reference output.
+    // The first kanban column gets section-1, second gets section-2, etc.
+    const SECTION_HUES: [f64; 12] = [
+        80.0,  // section-1: yellow-green (cScale1/secondaryColor adjusted)
+        270.0, // section-2: purple (cScale2/tertiaryColor adjusted)
+        300.0, // section-3: pink
+        330.0, // section-4: light red
+        0.0,   // section-5: red
+        30.0,  // section-6: orange
+        90.0,  // section-7: green
+        150.0, // section-8: teal
+        180.0, // section-9: cyan
+        210.0, // section-10: light blue
+        240.0, // section-11: blue
+        60.0,  // section-12: yellow
+    ];
+
     // Generate section colors (matching mermaid.js theme)
     let mut section_css = String::new();
-    for i in 1..=12 {
-        let hue = (i as f64 - 1.0) * 30.0;
+    for i in 0..12 {
+        let hue = SECTION_HUES[i];
+        // Mermaid uses ~86% lightness and 100% saturation for section fills
+        let lightness = 86.3;
+        let saturation = 100.0;
         section_css.push_str(&format!(
             r#"
 .section-{i} {{
-  fill: hsl({hue}, 60%, 90%);
-  stroke: hsl({hue}, 60%, 70%);
+  fill: hsl({hue}, {saturation}%, {lightness}%);
+  stroke: hsl({hue}, {saturation}%, {lightness}%);
   stroke-width: 1px;
 }}
 "#,
-            i = i,
-            hue = hue
+            i = i + 1, // Sections are numbered starting from 1
+            hue = hue,
+            saturation = saturation,
+            lightness = lightness
         ));
     }
 
@@ -471,9 +503,9 @@ fn generate_kanban_css(config: &RenderConfig) -> String {
   font-family: {font_family};
 }}
 
-.kanban-item {{
-  fill: #ffffff;
-  stroke: #ccc;
+.node rect, .kanban-item {{
+  fill: white;
+  stroke: #9370DB;
   stroke-width: 1px;
 }}
 
