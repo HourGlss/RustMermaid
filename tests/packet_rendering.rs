@@ -363,3 +363,126 @@ fn packet_title_renders_at_bottom() {
         "Should have packetTitle class"
     );
 }
+
+// ============================================================================
+// Mermaid Visual Parity Tests
+// ============================================================================
+
+fn get_svg_dimensions(doc: &Document<'_>) -> (f64, f64) {
+    let svg_node = doc
+        .descendants()
+        .find(|n| n.tag_name().name() == "svg")
+        .expect("SVG element not found");
+    let width: f64 = svg_node
+        .attribute("width")
+        .expect("width attribute missing")
+        .parse()
+        .expect("invalid width");
+    let height: f64 = svg_node
+        .attribute("height")
+        .expect("height attribute missing")
+        .parse()
+        .expect("invalid height");
+    (width, height)
+}
+
+fn get_first_rect_y(doc: &Document<'_>) -> f64 {
+    let rect = doc
+        .descendants()
+        .find(|n| n.tag_name().name() == "rect" && n.has_attribute("y"))
+        .expect("No rect found");
+    rect.attribute("y")
+        .expect("y attribute missing")
+        .parse()
+        .expect("invalid y")
+}
+
+fn get_first_rect_width(doc: &Document<'_>) -> f64 {
+    let rect = doc
+        .descendants()
+        .find(|n| n.tag_name().name() == "rect" && n.has_attribute("width"))
+        .expect("No rect found");
+    rect.attribute("width")
+        .expect("width attribute missing")
+        .parse()
+        .expect("invalid width")
+}
+
+#[test]
+fn packet_dimensions_match_mermaid_with_title() {
+    // Test case: TCP packet with title (from eval packet_complex)
+    // Mermaid calculates:
+    //   rowHeight: 32, paddingY: 5 (base) + 10 (showBits) = 15, bitWidth: 32, bitsPerRow: 32
+    //   totalRowHeight = 32 + 15 = 47
+    //   For 9 rows (bits 0-255 = 8 rows) + 1 title row: height = 47 * 9 = 423
+    //   Width = 32 * 32 + 2 = 1026
+    let input = r#"packet
+    title TCP Packet Structure
+    0-15: "Source Port"
+    16-31: "Destination Port"
+    32-63: "Sequence Number"
+    64-95: "Acknowledgment Number"
+    96-99: "Data Offset"
+    100-105: "Reserved"
+    106: "URG"
+    107: "ACK"
+    108: "PSH"
+    109: "RST"
+    110: "SYN"
+    111: "FIN"
+    112-127: "Window"
+    128-143: "Checksum"
+    144-159: "Urgent Pointer"
+    160-191: "(Options and Padding)"
+    192-255: "Data"
+"#;
+    let svg = render_packet_svg(input);
+    let doc = parse_svg(&svg);
+
+    let (width, height) = get_svg_dimensions(&doc);
+
+    // Width should be bitWidth * bitsPerRow + 2 = 32 * 32 + 2 = 1026
+    assert_eq!(width, 1026.0, "SVG width should match mermaid (1026)");
+
+    // Height should be totalRowHeight * (rows + 1) = 47 * 9 = 423
+    // (9 rows for 256 bits / 32 bits_per_row, + title row space, but actually
+    // the formula is: totalRowHeight * (words.length + 1) - (title ? 0 : rowHeight)
+    // With title: 47 * 9 = 423
+    assert_eq!(height, 423.0, "SVG height should match mermaid (423)");
+}
+
+#[test]
+fn packet_first_row_y_position_matches_mermaid() {
+    // First row should start at y = paddingY (15 when showBits is true)
+    let input = r#"packet
+    0-15: "Test"
+"#;
+    let svg = render_packet_svg(input);
+    let doc = parse_svg(&svg);
+
+    let first_y = get_first_rect_y(&doc);
+
+    // With showBits=true, paddingY = 5 + 10 = 15
+    assert_eq!(
+        first_y, 15.0,
+        "First row Y should be paddingY (15 with showBits)"
+    );
+}
+
+#[test]
+fn packet_block_width_matches_mermaid() {
+    // A 16-bit block should have width = 16 * bitWidth - paddingX = 16 * 32 - 5 = 507
+    let input = r#"packet
+    0-15: "Test"
+"#;
+    let svg = render_packet_svg(input);
+    let doc = parse_svg(&svg);
+
+    let first_width = get_first_rect_width(&doc);
+
+    // Width = bits * bitWidth - paddingX = 16 * 32 - 5 = 507
+    assert_eq!(
+        first_width, 507.0,
+        "16-bit block width should be 507 (16*32-5)"
+    );
+}

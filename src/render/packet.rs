@@ -28,11 +28,26 @@ impl Default for PacketConfig {
     fn default() -> Self {
         Self {
             row_height: 32.0,
-            padding_y: 8.0,
-            padding_x: 2.0,
+            // Mermaid defaults: paddingY: 5 (base)
+            padding_y: 5.0,
+            // Mermaid defaults: paddingX: 5
+            padding_x: 5.0,
             bit_width: 32.0,
             bits_per_row: 32,
             show_bits: true,
+        }
+    }
+}
+
+impl PacketConfig {
+    /// Returns the effective padding_y, which increases by 10 when show_bits is true
+    /// to make room for the bit number labels above the blocks.
+    /// This matches mermaid's behavior in db.ts: `if (config.showBits) { config.paddingY += 10; }`
+    pub fn effective_padding_y(&self) -> f64 {
+        if self.show_bits {
+            self.padding_y + 10.0
+        } else {
+            self.padding_y
         }
     }
 }
@@ -44,11 +59,12 @@ pub fn render_packet(db: &PacketDb, config: &RenderConfig) -> Result<String> {
     let packet_config = PacketConfig::default();
     let PacketConfig {
         row_height,
-        padding_y,
         bit_width,
         bits_per_row,
         ..
     } = packet_config;
+    // Use effective_padding_y which adds 10 when show_bits is true (like mermaid)
+    let padding_y = packet_config.effective_padding_y();
 
     let words = db.get_packet();
     let title = db.get_title();
@@ -112,12 +128,14 @@ fn draw_word(
 ) {
     let PacketConfig {
         row_height,
-        padding_y,
         padding_x,
         bit_width,
         bits_per_row,
         show_bits,
+        ..
     } = *config;
+    // Use effective_padding_y which adds 10 when show_bits is true
+    let padding_y = config.effective_padding_y();
 
     let word_y = row_number as f64 * (row_height + padding_y) + padding_y;
 
