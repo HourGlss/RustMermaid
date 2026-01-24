@@ -1,0 +1,46 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-23T15:53:34Z",
+  "closed_reason": "Z-order fix applied - git diagrams now pass 100% eval",
+  "created_at": "2026-01-23T14:33:38Z",
+  "dependencies": [],
+  "description": "Git diagram z-order issues. Parsing works, but text rendered before shapes. Visual similarity 67-71%.",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T15:39:43Z",
+      "field": "notes",
+      "new": "(changed)",
+      "old": "(changed)"
+    },
+    {
+      "at": "2026-01-23T15:40:30Z",
+      "field": "priority",
+      "new": 2,
+      "old": 0
+    },
+    {
+      "at": "2026-01-23T15:40:30Z",
+      "field": "description",
+      "new": "(changed)",
+      "old": "(changed)"
+    },
+    {
+      "at": "2026-01-23T15:53:34Z",
+      "field": "status",
+      "new": "closed",
+      "old": "open"
+    }
+  ],
+  "id": "se-8517fed6",
+  "labels": [
+    "eval",
+    "parser"
+  ],
+  "notes": "UPDATE: Parsing now works. Git diagram no longer has parse failure. Issue is z-order (text rendered before shapes) and minor dimension differences. Visual similarity 67-71%.",
+  "priority": 2,
+  "status": "closed",
+  "title": "git: Parse failure on basic git diagram",
+  "type": "bug",
+  "updated_at": "2026-01-23T15:53:34Z"
+}

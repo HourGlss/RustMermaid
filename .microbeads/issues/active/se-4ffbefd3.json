@@ -1,0 +1,28 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-23T14:34:25Z",
+  "dependencies": [],
+  "description": "All 3 block diagram samples show warnings:\n- block_layout: rect count (16 vs 32), z_order issue (shapes rendered after text)\n- block_shapes: rect count (16 vs 32), text count differs, z_order issue\n- block_spacing: rect count (6 vs 12), z_order issue\n\nVisual similarity ranges from 28.9% to 50.4%. Blocks are missing (half expected count). Z-order issue: text is rendered before shapes so may be hidden behind them. Check src/diagrams/block/ against reference.",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T22:35:32Z",
+      "field": "notes",
+      "new": "(changed)",
+      "old": "(changed)"
+    }
+  ],
+  "id": "se-4ffbefd3",
+  "labels": [
+    "eval",
+    "renderer"
+  ],
+  "notes": "Block layout differences are fundamental - nodes positioned differently than mermaid.js reference. Composite block sizing and nested block layout need work. Edge attachment sides are also incorrect (edges connect to wrong sides of blocks).",
+  "priority": 1,
+  "status": "open",
+  "title": "block: Rect count mismatch and z-order issues",
+  "type": "bug",
+  "updated_at": "2026-01-23T22:35:32Z"
+}
