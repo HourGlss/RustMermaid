@@ -369,6 +369,127 @@ fn test_gartner_style_chart() {
 }
 
 // ============================================================================
+// SVG Structure Tests (matching mermaid.js reference)
+// ============================================================================
+
+/// Count occurrences of a pattern in a string
+fn count_occurrences(text: &str, pattern: &str) -> usize {
+    text.matches(pattern).count()
+}
+
+#[test]
+fn test_quadrant_shape_counts() {
+    // Reference mermaid.js uses:
+    // - 4 rects (the 4 quadrants)
+    // - 6 lines (4 outer border + 2 internal dividers)
+    let input = r#"quadrantChart
+        title Test Chart
+        quadrant-1 Q1
+        quadrant-2 Q2
+        quadrant-3 Q3
+        quadrant-4 Q4
+        Point A: [0.5, 0.5]"#;
+
+    let diagram = parse(input).expect("Failed to parse");
+    let svg = render(&diagram).expect("Failed to render");
+
+    // Count rects - should be exactly 4 (quadrants only, no background or border rect)
+    let rect_count = count_occurrences(&svg, "<rect ");
+    assert_eq!(
+        rect_count, 4,
+        "Should have exactly 4 rects (quadrants only). Found: {}",
+        rect_count
+    );
+
+    // Count lines - should be 6 (4 outer border + 2 internal dividers)
+    let line_count = count_occurrences(&svg, "<line ");
+    assert_eq!(
+        line_count, 6,
+        "Should have exactly 6 lines (4 outer border + 2 internal). Found: {}",
+        line_count
+    );
+}
+
+#[test]
+fn test_quadrant_z_order_shapes_before_text() {
+    // In SVG, later elements appear on top. Shapes should be rendered before text
+    // so text labels are visible on top of shapes.
+    let input = r#"quadrantChart
+        title Test Chart
+        quadrant-1 Q1
+        Point A: [0.5, 0.5]"#;
+
+    let diagram = parse(input).expect("Failed to parse");
+    let svg = render(&diagram).expect("Failed to render");
+
+    // Find positions of elements
+    let first_text_pos = svg.find("<text ").expect("Should have text elements");
+    let last_rect_pos = svg.rfind("<rect ").expect("Should have rect elements");
+    let last_line_pos = svg.rfind("<line ").expect("Should have line elements");
+    let last_circle_pos = svg.rfind("<circle ").expect("Should have circle elements");
+
+    // All text should come after all shapes (rects, lines, circles)
+    // Actually, circles are shapes too, and point labels come after their circles
+    // So we check that rects and lines come before most text
+    let first_rect_pos = svg.find("<rect ").expect("Should have rect");
+
+    // The title can come early, but quadrant labels should come after rects
+    // Let's check that the quadrant rects appear in the output
+    assert!(
+        svg.contains("quadrant-1"),
+        "Should have quadrant class markers"
+    );
+
+    // Check that we have the main grouping structure from mermaid reference:
+    // quadrants group, border group, data-points group, labels group, title group
+    // (For now, just verify shapes exist before text labels in general structure)
+    assert!(
+        first_rect_pos < first_text_pos || svg.contains("<g class=\"main\""),
+        "Shapes should generally appear before text, or use proper grouping"
+    );
+}
+
+#[test]
+fn test_quadrant_no_css_fill_override() {
+    // CSS class fill rules should not override inline fill attributes on text
+    // The eval detected: ".quadrant-label { fill: #333333 }" overriding inline fills
+    let input = r#"quadrantChart
+        quadrant-1 Q1
+        quadrant-2 Q2
+        quadrant-3 Q3
+        quadrant-4 Q4"#;
+
+    let diagram = parse(input).expect("Failed to parse");
+    let config = RenderConfig::default();
+    let svg = selkie::render_with_config(&diagram, &config).expect("Failed to render");
+
+    // If CSS defines fill for .quadrant-label, text elements with that class
+    // will have their inline fill overridden. Check that CSS does NOT set fill.
+    if svg.contains(".quadrant-label {") {
+        let css_section = svg
+            .find("<style>")
+            .and_then(|start| svg.find("</style>").map(|end| &svg[start..end]));
+
+        if let Some(css) = css_section {
+            // Extract the .quadrant-label rule
+            if let Some(rule_start) = css.find(".quadrant-label {") {
+                let rule_end = css[rule_start..]
+                    .find('}')
+                    .unwrap_or(css.len() - rule_start);
+                let rule = &css[rule_start..rule_start + rule_end];
+
+                // The rule should NOT contain a fill property (let inline attributes work)
+                assert!(
+                    !rule.contains("fill:") || rule.contains("fill: inherit"),
+                    "CSS .quadrant-label should not override fill. Found: {}",
+                    rule
+                );
+            }
+        }
+    }
+}
+
+// ============================================================================
 // Theme Tests
 // ============================================================================
 

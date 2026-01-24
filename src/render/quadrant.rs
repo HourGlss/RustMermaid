@@ -62,36 +62,8 @@ pub fn render_quadrant(db: &QuadrantDb, config: &RenderConfig) -> Result<String>
     let quadrant_width = chart_width / 2.0;
     let quadrant_height = chart_height / 2.0;
 
-    // Render background
-    let bg = SvgElement::Rect {
-        x: 0.0,
-        y: 0.0,
-        width,
-        height,
-        rx: None,
-        ry: None,
-        attrs: Attrs::new()
-            .with_fill(&config.theme.background)
-            .with_class("quadrant-background"),
-    };
-    doc.add_element(bg);
-
-    // Render title if present
-    if !db.title.is_empty() {
-        let title_elem = SvgElement::Text {
-            x: width / 2.0,
-            y: PADDING + TITLE_HEIGHT / 2.0,
-            content: db.title.clone(),
-            attrs: Attrs::new()
-                .with_attr("text-anchor", "middle")
-                .with_attr("dominant-baseline", "middle")
-                .with_class("quadrant-title")
-                .with_attr("font-size", &format!("{}", TITLE_FONT_SIZE))
-                .with_attr("font-weight", "bold")
-                .with_fill(&config.theme.quadrant_title_fill),
-        };
-        doc.add_element(title_elem);
-    }
+    // Note: No background rect - matching mermaid.js reference implementation
+    // The SVG background is controlled by the container or CSS
 
     // Render the four quadrants
     // Quadrant 2 (top-left)
@@ -146,50 +118,87 @@ pub fn render_quadrant(db: &QuadrantDb, config: &RenderConfig) -> Result<String>
             .with_class("quadrant quadrant-4"),
     });
 
-    // Render quadrant borders (internal dividers)
-    // Vertical center line
+    // Render borders using 6 lines (matching mermaid.js reference)
+    // External border stroke width
+    let ext_border_width = 2.0;
+    let half_ext_border = ext_border_width / 2.0;
+
+    // Top border
+    doc.add_element(SvgElement::Line {
+        x1: chart_left - half_ext_border,
+        y1: chart_top,
+        x2: chart_right + half_ext_border,
+        y2: chart_top,
+        attrs: Attrs::new()
+            .with_stroke(&config.theme.quadrant_external_border_stroke)
+            .with_stroke_width(ext_border_width)
+            .with_class("quadrant-border quadrant-border-top"),
+    });
+
+    // Right border
+    doc.add_element(SvgElement::Line {
+        x1: chart_right,
+        y1: chart_top + half_ext_border,
+        x2: chart_right,
+        y2: chart_bottom - half_ext_border,
+        attrs: Attrs::new()
+            .with_stroke(&config.theme.quadrant_external_border_stroke)
+            .with_stroke_width(ext_border_width)
+            .with_class("quadrant-border quadrant-border-right"),
+    });
+
+    // Bottom border
+    doc.add_element(SvgElement::Line {
+        x1: chart_left - half_ext_border,
+        y1: chart_bottom,
+        x2: chart_right + half_ext_border,
+        y2: chart_bottom,
+        attrs: Attrs::new()
+            .with_stroke(&config.theme.quadrant_external_border_stroke)
+            .with_stroke_width(ext_border_width)
+            .with_class("quadrant-border quadrant-border-bottom"),
+    });
+
+    // Left border
+    doc.add_element(SvgElement::Line {
+        x1: chart_left,
+        y1: chart_top + half_ext_border,
+        x2: chart_left,
+        y2: chart_bottom - half_ext_border,
+        attrs: Attrs::new()
+            .with_stroke(&config.theme.quadrant_external_border_stroke)
+            .with_stroke_width(ext_border_width)
+            .with_class("quadrant-border quadrant-border-left"),
+    });
+
+    // Vertical center line (internal divider)
     doc.add_element(SvgElement::Line {
         x1: chart_left + quadrant_width,
-        y1: chart_top,
+        y1: chart_top + half_ext_border,
         x2: chart_left + quadrant_width,
-        y2: chart_bottom,
+        y2: chart_bottom - half_ext_border,
         attrs: Attrs::new()
             .with_stroke(&config.theme.quadrant_internal_border_stroke)
             .with_stroke_width(1.0)
-            .with_class("quadrant-border"),
+            .with_class("quadrant-border quadrant-border-vertical"),
     });
 
-    // Horizontal center line
+    // Horizontal center line (internal divider)
     doc.add_element(SvgElement::Line {
-        x1: chart_left,
+        x1: chart_left + half_ext_border,
         y1: chart_top + quadrant_height,
-        x2: chart_right,
+        x2: chart_right - half_ext_border,
         y2: chart_top + quadrant_height,
         attrs: Attrs::new()
             .with_stroke(&config.theme.quadrant_internal_border_stroke)
             .with_stroke_width(1.0)
-            .with_class("quadrant-border"),
-    });
-
-    // Render outer border
-    doc.add_element(SvgElement::Rect {
-        x: chart_left,
-        y: chart_top,
-        width: chart_width,
-        height: chart_height,
-        rx: None,
-        ry: None,
-        attrs: Attrs::new()
-            .with_fill("none")
-            .with_stroke(&config.theme.quadrant_external_border_stroke)
-            .with_stroke_width(2.0)
-            .with_class("quadrant-outer-border"),
+            .with_class("quadrant-border quadrant-border-horizontal"),
     });
 
     // Check if there are any points (affects quadrant label positioning)
     let has_points = !db.get_points().is_empty();
 
-    // Render quadrant labels
+    // Render quadrant labels (part of quadrants group in reference)
     render_quadrant_labels(
         &mut doc,
         db,
@@ -201,7 +210,18 @@ pub fn render_quadrant(db: &QuadrantDb, config: &RenderConfig) -> Result<String>
         has_points,
     );
 
-    // Render axis labels
+    // Render data points (before axis labels per mermaid.js reference)
+    render_points(
+        &mut doc,
+        db,
+        config,
+        chart_left,
+        chart_top,
+        chart_width,
+        chart_height,
+    );
+
+    // Render axis labels (after data points per mermaid.js reference)
     render_axis_labels(
         &mut doc,
         db,
@@ -213,16 +233,22 @@ pub fn render_quadrant(db: &QuadrantDb, config: &RenderConfig) -> Result<String>
         has_points,
     );
 
-    // Render data points
-    render_points(
-        &mut doc,
-        db,
-        config,
-        chart_left,
-        chart_top,
-        chart_width,
-        chart_height,
-    );
+    // Render title last (matching mermaid.js reference - title appears on top)
+    if !db.title.is_empty() {
+        let title_elem = SvgElement::Text {
+            x: width / 2.0,
+            y: PADDING + TITLE_HEIGHT / 2.0,
+            content: db.title.clone(),
+            attrs: Attrs::new()
+                .with_attr("text-anchor", "middle")
+                .with_attr("dominant-baseline", "middle")
+                .with_class("quadrant-title")
+                .with_attr("font-size", &format!("{}", TITLE_FONT_SIZE))
+                .with_attr("font-weight", "bold")
+                .with_fill(&config.theme.quadrant_title_fill),
+        };
+        doc.add_element(title_elem);
+    }
 
     Ok(doc.to_string())
 }
@@ -526,15 +552,12 @@ fn render_points(
 }
 
 /// Generate CSS for quadrant chart styling
+/// Note: Text elements use inline fill attributes, so CSS should NOT override fill
+/// to allow per-quadrant text colors (matching mermaid.js behavior)
 fn generate_quadrant_css(theme: &crate::render::svg::Theme) -> String {
     format!(
         r#"
-.quadrant-background {{
-  fill: {background};
-}}
-
 .quadrant-title {{
-  fill: {title_fill};
   font-family: {font_family};
 }}
 
@@ -543,23 +566,14 @@ fn generate_quadrant_css(theme: &crate::render::svg::Theme) -> String {
 }}
 
 .quadrant-border {{
-  stroke: {internal_border};
   stroke-width: 1px;
 }}
 
-.quadrant-outer-border {{
-  fill: none;
-  stroke: {external_border};
-  stroke-width: 2px;
-}}
-
 .quadrant-label {{
-  fill: {text_fill};
   font-family: {font_family};
 }}
 
 .axis-label {{
-  fill: {x_axis_text};
   font-family: {font_family};
 }}
 
@@ -568,17 +582,9 @@ fn generate_quadrant_css(theme: &crate::render::svg::Theme) -> String {
 }}
 
 .quadrant-point-label {{
-  fill: {point_text_fill};
   font-family: {font_family};
 }}
 "#,
-        background = theme.background,
-        title_fill = theme.quadrant_title_fill,
-        text_fill = theme.quadrant_text_fill,
-        internal_border = theme.quadrant_internal_border_stroke,
-        external_border = theme.quadrant_external_border_stroke,
-        x_axis_text = theme.quadrant_x_axis_text_fill,
-        point_text_fill = theme.quadrant_point_text_fill,
         font_family = theme.font_family,
     )
 }
