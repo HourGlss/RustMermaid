@@ -57,6 +57,15 @@ impl Attrs {
         self
     }
 
+    /// Conditionally add a fill attribute
+    pub fn with_fill_if(self, condition: bool, fill: &str) -> Self {
+        if condition {
+            self.with_fill(fill)
+        } else {
+            self
+        }
+    }
+
     pub fn with_stroke(mut self, stroke: &str) -> Self {
         self.attrs.insert("stroke".to_string(), stroke.to_string());
         self

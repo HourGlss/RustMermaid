@@ -6,7 +6,7 @@
 
 use crate::diagrams::treemap::{TreemapDb, TreemapNode};
 use crate::error::Result;
-use crate::render::svg::color::{darken, Color};
+use crate::render::svg::color::{contrasting_text, darken, Color};
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 
 /// Default inner padding between cells/sections (reserved for future use)
@@ -28,14 +28,14 @@ const LEAF_FONT_SIZE: f64 = 38.0;
 /// Font size for section labels
 const SECTION_FONT_SIZE: f64 = 12.0;
 
-/// Font size for value labels
-const VALUE_FONT_SIZE: f64 = 10.0;
+/// Font size for value labels (matches mermaid.js ~23px for leaf values)
+const VALUE_FONT_SIZE: f64 = 23.0;
 
-/// Default diagram width
-const DEFAULT_WIDTH: f64 = 960.0;
+/// Default diagram width (matches mermaid.js 1000px)
+const DEFAULT_WIDTH: f64 = 1000.0;
 
-/// Default diagram height
-const DEFAULT_HEIGHT: f64 = 500.0;
+/// Default diagram height (matches mermaid.js ~370px viewBox)
+const DEFAULT_HEIGHT: f64 = 370.0;
 
 /// A positioned rectangle for treemap rendering
 #[derive(Debug, Clone)]
@@ -490,6 +490,25 @@ fn get_section_fill_color(section: usize, config: &RenderConfig) -> String {
     }
 }
 
+/// Get a contrasting text color (black or white) for a given fill color string
+fn get_contrasting_text_color(fill_color: &str) -> String {
+    // Try parsing as HSL string first
+    if let Some((h, s, l)) = parse_hsl_string(fill_color) {
+        let color = Color::from_hsl(h, s, l);
+        let text = contrasting_text(&color);
+        return text.to_hex();
+    }
+
+    // Try parsing as hex
+    if let Some(color) = Color::from_hex(fill_color) {
+        let text = contrasting_text(&color);
+        return text.to_hex();
+    }
+
+    // Default to black
+    "#000000".to_string()
+}
+
 /// Render a section (branch node with header)
 fn render_section(rect: &TreemapRect, index: usize, config: &RenderConfig) -> SvgElement {
     let mut children = Vec::new();
@@ -553,8 +572,14 @@ fn render_section(rect: &TreemapRect, index: usize, config: &RenderConfig) -> Sv
     let label_x = rect.x + 6.0;
     let label_y = rect.y + SECTION_HEADER_HEIGHT / 2.0;
 
-    // Extract text color from styles
+    // Extract text color from styles, or use contrasting color based on background
     let text_style = extract_text_style(&rect.styles);
+    let text_color = if text_style.is_empty() {
+        // Determine text color based on section fill color luminance
+        get_contrasting_text_color(&fill_color)
+    } else {
+        String::new() // Use style override
+    };
 
     children.push(SvgElement::Text {
         x: label_x,
@@ -565,6 +590,7 @@ fn render_section(rect: &TreemapRect, index: usize, config: &RenderConfig) -> Sv
             .with_attr("dominant-baseline", "middle")
             .with_attr("font-weight", "bold")
             .with_attr("font-size", &format!("{}px", SECTION_FONT_SIZE))
+            .with_fill_if(!text_color.is_empty(), &text_color)
             .with_style_if(!text_style.is_empty(), &text_style),
     });
 
@@ -579,7 +605,8 @@ fn render_section(rect: &TreemapRect, index: usize, config: &RenderConfig) -> Sv
             .with_attr("text-anchor", "end")
             .with_attr("dominant-baseline", "middle")
             .with_attr("font-style", "italic")
-            .with_attr("font-size", &format!("{}px", VALUE_FONT_SIZE))
+            .with_attr("font-size", &format!("{}px", SECTION_FONT_SIZE))
+            .with_fill_if(!text_color.is_empty(), &text_color)
             .with_style_if(!text_style.is_empty(), &text_style),
     });
 
@@ -645,8 +672,14 @@ fn render_leaf(rect: &TreemapRect, index: usize, config: &RenderConfig) -> SvgEl
     let center_x = rect.x + rect.width / 2.0;
     let center_y = rect.y + rect.height / 2.0;
 
-    // Extract text color from styles
+    // Extract text color from styles, or use contrasting color based on background
     let text_style = extract_text_style(&rect.styles);
+    let text_color = if text_style.is_empty() {
+        // Determine text color based on leaf fill color luminance
+        get_contrasting_text_color(&fill_color)
+    } else {
+        String::new() // Use style override
+    };
 
     // Calculate font size based on available space
     let available_width = rect.width - 8.0; // 4px padding on each side
@@ -687,6 +720,7 @@ fn render_leaf(rect: &TreemapRect, index: usize, config: &RenderConfig) -> SvgEl
                 .with_attr("dominant-baseline", "middle")
                 .with_attr("font-size", &format!("{}px", label_font_size))
                 .with_attr("clip-path", &format!("url(#{})", clip_id))
+                .with_fill_if(!text_color.is_empty(), &text_color)
                 .with_style_if(!text_style.is_empty(), &text_style),
         });
 
@@ -702,6 +736,7 @@ fn render_leaf(rect: &TreemapRect, index: usize, config: &RenderConfig) -> SvgEl
                     .with_attr("dominant-baseline", "hanging")
                     .with_attr("font-size", &format!("{}px", value_font_size))
                     .with_attr("clip-path", &format!("url(#{})", clip_id))
+                    .with_fill_if(!text_color.is_empty(), &text_color)
                     .with_style_if(!text_style.is_empty(), &text_style),
             });
         }
@@ -779,6 +814,8 @@ fn generate_treemap_css(config: &RenderConfig) -> String {
         // Calculate a darker version for stroke
         let stroke_color = color; // Use same color for simplicity
 
+        // Note: text fill colors are now set inline via contrasting_text()
+        // to ensure proper contrast against the section background color
         section_css.push_str(&format!(
             r#"
 .section-{i} .treemapSection {{
@@ -789,17 +826,10 @@ fn generate_treemap_css(config: &RenderConfig) -> String {
   fill: {color};
   stroke: {color};
 }}
-.section-{i} .treemapLabel,
-.section-{i} .treemapValue,
-.section-{i} .treemapSectionLabel,
-.section-{i} .treemapSectionValue {{
-  fill: {text_color};
-}}
 "#,
             i = i,
             color = color,
             stroke_color = stroke_color,
-            text_color = theme.primary_text_color,
         ));
     }
 
