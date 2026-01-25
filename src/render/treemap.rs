@@ -6,7 +6,7 @@
 
 use crate::diagrams::treemap::{TreemapDb, TreemapNode};
 use crate::error::Result;
-use crate::render::svg::color::{darken, Color};
+use crate::render::svg::color::{contrasting_text, darken, Color};
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 
 /// Default inner padding between cells/sections (reserved for future use)
@@ -28,14 +28,28 @@ const LEAF_FONT_SIZE: f64 = 38.0;
 /// Font size for section labels
 const SECTION_FONT_SIZE: f64 = 12.0;
 
-/// Font size for value labels
-const VALUE_FONT_SIZE: f64 = 10.0;
+/// Base font size for value labels (scaled relative to label font size)
+/// Mermaid.js uses 28px base, scaled to 60% of label font size
+const VALUE_FONT_SIZE_BASE: f64 = 28.0;
+
+/// Value font size as a factor of label font size (matching mermaid.js)
+const VALUE_SCALE_FACTOR: f64 = 0.6;
+
+/// Minimum value font size
+const MIN_VALUE_FONT_SIZE: f64 = 6.0;
+
+/// Font size for section header value labels (fixed, matching mermaid.js)
+const SECTION_VALUE_FONT_SIZE: f64 = 10.0;
 
 /// Default diagram width
 const DEFAULT_WIDTH: f64 = 960.0;
 
-/// Default diagram height
-const DEFAULT_HEIGHT: f64 = 500.0;
+/// Default diagram height (matching mermaid.js effective treemap content height)
+/// The reference uses 355px for section height, which gives 310px leaf height
+const DEFAULT_HEIGHT: f64 = 355.0;
+
+/// Diagram padding (matching mermaid.js diagramPadding)
+const DIAGRAM_PADDING: f64 = 8.0;
 
 /// A positioned rectangle for treemap rendering
 #[derive(Debug, Clone)]
@@ -107,10 +121,6 @@ pub fn render_treemap(db: &TreemapDb, config: &RenderConfig) -> Result<String> {
 
     let width = DEFAULT_WIDTH;
     let height = DEFAULT_HEIGHT;
-    let svg_width = width;
-    let svg_height = height + title_height;
-
-    doc.set_size(svg_width, svg_height);
 
     // Add CSS styles
     if config.embed_css {
@@ -123,7 +133,7 @@ pub fn render_treemap(db: &TreemapDb, config: &RenderConfig) -> Result<String> {
     // Add title if present
     if !title.is_empty() {
         container_children.push(SvgElement::Text {
-            x: svg_width / 2.0,
+            x: width / 2.0,
             y: title_height / 2.0,
             content: title.to_string(),
             attrs: Attrs::new()
@@ -152,6 +162,20 @@ pub fn render_treemap(db: &TreemapDb, config: &RenderConfig) -> Result<String> {
         height,
     };
     layout_treemap(&virtual_root, bounds, 0, 0, &mut ctx);
+
+    // Calculate actual content bounds for viewBox
+    // This matches mermaid.js's setupViewPortForSVG approach
+    let content_bounds = calculate_content_bounds(&ctx.positioned, title_height);
+    let svg_width = content_bounds.width + 2.0 * DIAGRAM_PADDING;
+    let svg_height = content_bounds.height + 2.0 * DIAGRAM_PADDING;
+
+    // Set viewBox with padding (matching mermaid.js viewBox format)
+    doc.set_size_with_origin(
+        content_bounds.x - DIAGRAM_PADDING,
+        content_bounds.y - DIAGRAM_PADDING,
+        svg_width,
+        svg_height,
+    );
 
     // Render sections (branch nodes with children)
     let mut section_elements = Vec::new();
@@ -209,6 +233,43 @@ pub fn render_treemap(db: &TreemapDb, config: &RenderConfig) -> Result<String> {
     });
 
     Ok(doc.to_string())
+}
+
+/// Calculate the bounding box of all positioned elements
+/// This is used to set the viewBox to match actual content (like mermaid.js's setupViewPortForSVG)
+fn calculate_content_bounds(positioned: &[TreemapRect], title_height: f64) -> Bounds {
+    if positioned.is_empty() {
+        return Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: DEFAULT_WIDTH,
+            height: DEFAULT_HEIGHT,
+        };
+    }
+
+    let mut min_x = f64::MAX;
+    let mut min_y = f64::MAX;
+    let mut max_x = f64::MIN;
+    let mut max_y = f64::MIN;
+
+    for rect in positioned {
+        min_x = min_x.min(rect.x);
+        min_y = min_y.min(rect.y);
+        max_x = max_x.max(rect.x + rect.width);
+        max_y = max_y.max(rect.y + rect.height);
+    }
+
+    // Include title in bounds if present
+    if title_height > 0.0 {
+        min_y = min_y.min(0.0);
+    }
+
+    Bounds {
+        x: min_x,
+        y: min_y,
+        width: max_x - min_x,
+        height: max_y - min_y,
+    }
 }
 
 /// Calculate total value of a node and its descendants
@@ -490,6 +551,34 @@ fn get_section_fill_color(section: usize, config: &RenderConfig) -> String {
     }
 }
 
+/// Get the contrasting text color for a section (white on dark, black on light)
+/// This matches mermaid.js colorScaleLabel behavior
+fn get_section_text_color(section: usize, config: &RenderConfig) -> String {
+    let base_color = config
+        .theme
+        .pie_colors
+        .get(section)
+        .cloned()
+        .unwrap_or_else(|| "#ECECFF".to_string());
+
+    // Get the fill color (darkened version)
+    let fill = if let Some((h, s, l)) = parse_hsl_string(&base_color) {
+        darken(&Color::from_hsl(h, s, l), 20.0)
+    } else if let Some(color) = Color::from_hex(&base_color) {
+        darken(&color, 20.0)
+    } else {
+        Color::rgb(236, 236, 255) // Default light color
+    };
+
+    // Return contrasting text color
+    let text_color = contrasting_text(&fill);
+    if text_color.r == 255 {
+        "#ffffff".to_string()
+    } else {
+        "black".to_string()
+    }
+}
+
 /// Render a section (branch node with header)
 fn render_section(rect: &TreemapRect, index: usize, config: &RenderConfig) -> SvgElement {
     let mut children = Vec::new();
@@ -553,8 +642,9 @@ fn render_section(rect: &TreemapRect, index: usize, config: &RenderConfig) -> Sv
     let label_x = rect.x + 6.0;
     let label_y = rect.y + SECTION_HEADER_HEIGHT / 2.0;
 
-    // Extract text color from styles
+    // Extract text color from styles, or use contrasting color
     let text_style = extract_text_style(&rect.styles);
+    let default_text_color = get_section_text_color(rect.section, config);
 
     children.push(SvgElement::Text {
         x: label_x,
@@ -565,6 +655,7 @@ fn render_section(rect: &TreemapRect, index: usize, config: &RenderConfig) -> Sv
             .with_attr("dominant-baseline", "middle")
             .with_attr("font-weight", "bold")
             .with_attr("font-size", &format!("{}px", SECTION_FONT_SIZE))
+            .with_attr_if(text_style.is_empty(), "fill", &default_text_color)
             .with_style_if(!text_style.is_empty(), &text_style),
     });
 
@@ -579,7 +670,8 @@ fn render_section(rect: &TreemapRect, index: usize, config: &RenderConfig) -> Sv
             .with_attr("text-anchor", "end")
             .with_attr("dominant-baseline", "middle")
             .with_attr("font-style", "italic")
-            .with_attr("font-size", &format!("{}px", VALUE_FONT_SIZE))
+            .with_attr("font-size", &format!("{}px", SECTION_VALUE_FONT_SIZE))
+            .with_attr_if(text_style.is_empty(), "fill", &default_text_color)
             .with_style_if(!text_style.is_empty(), &text_style),
     });
 
@@ -645,8 +737,9 @@ fn render_leaf(rect: &TreemapRect, index: usize, config: &RenderConfig) -> SvgEl
     let center_x = rect.x + rect.width / 2.0;
     let center_y = rect.y + rect.height / 2.0;
 
-    // Extract text color from styles
+    // Extract text color from styles, or use contrasting color
     let text_style = extract_text_style(&rect.styles);
+    let default_text_color = get_section_text_color(rect.section, config);
 
     // Calculate font size based on available space
     let available_width = rect.width - 8.0; // 4px padding on each side
@@ -671,7 +764,10 @@ fn render_leaf(rect: &TreemapRect, index: usize, config: &RenderConfig) -> SvgEl
 
     let font_scale = scale_x.min(scale_y).min(1.0);
     let label_font_size = (LEAF_FONT_SIZE * font_scale).max(8.0);
-    let value_font_size = (VALUE_FONT_SIZE * font_scale).max(6.0);
+    // Value font size is 60% of label font size (matching mermaid.js)
+    // Capped at VALUE_FONT_SIZE_BASE (28px), min MIN_VALUE_FONT_SIZE (6px)
+    let value_font_size =
+        (label_font_size * VALUE_SCALE_FACTOR).clamp(MIN_VALUE_FONT_SIZE, VALUE_FONT_SIZE_BASE);
 
     // Only show text if there's enough space
     let min_display_size = 20.0;
@@ -687,6 +783,7 @@ fn render_leaf(rect: &TreemapRect, index: usize, config: &RenderConfig) -> SvgEl
                 .with_attr("dominant-baseline", "middle")
                 .with_attr("font-size", &format!("{}px", label_font_size))
                 .with_attr("clip-path", &format!("url(#{})", clip_id))
+                .with_attr_if(text_style.is_empty(), "fill", &default_text_color)
                 .with_style_if(!text_style.is_empty(), &text_style),
         });
 
@@ -702,6 +799,7 @@ fn render_leaf(rect: &TreemapRect, index: usize, config: &RenderConfig) -> SvgEl
                     .with_attr("dominant-baseline", "hanging")
                     .with_attr("font-size", &format!("{}px", value_font_size))
                     .with_attr("clip-path", &format!("url(#{})", clip_id))
+                    .with_attr_if(text_style.is_empty(), "fill", &default_text_color)
                     .with_style_if(!text_style.is_empty(), &text_style),
             });
         }
@@ -789,17 +887,10 @@ fn generate_treemap_css(config: &RenderConfig) -> String {
   fill: {color};
   stroke: {color};
 }}
-.section-{i} .treemapLabel,
-.section-{i} .treemapValue,
-.section-{i} .treemapSectionLabel,
-.section-{i} .treemapSectionValue {{
-  fill: {text_color};
-}}
 "#,
             i = i,
             color = color,
             stroke_color = stroke_color,
-            text_color = theme.primary_text_color,
         ));
     }
 
@@ -839,7 +930,7 @@ fn generate_treemap_css(config: &RenderConfig) -> String {
         font_family = theme.font_family,
         text_color = theme.primary_text_color,
         leaf_font_size = LEAF_FONT_SIZE,
-        value_font_size = VALUE_FONT_SIZE,
+        value_font_size = SECTION_VALUE_FONT_SIZE,
         section_css = section_css
     )
 }

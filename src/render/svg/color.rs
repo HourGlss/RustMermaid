@@ -255,15 +255,17 @@ impl Color {
 }
 
 /// Format a percentage value for HSL output, matching mermaid.js precision
-/// Uses full precision for non-integer values, integer for whole numbers
+/// Mermaid.js outputs HSL values with up to 10 decimal places
 fn format_hsl_pct(value: f64) -> String {
     // Check if value is close to a whole number
     let rounded = value.round();
     if (value - rounded).abs() < 0.0001 {
         format!("{}", rounded as i32)
     } else {
-        // Use full precision like mermaid.js does
-        format!("{}", value)
+        // Limit to 10 decimal places to match mermaid.js output
+        // Use trimming to remove trailing zeros
+        let formatted = format!("{:.10}", value);
+        formatted.trim_end_matches('0').trim_end_matches('.').to_string()
     }
 }
 

@@ -775,3 +775,98 @@ fn treemap_visual_parity_inline_colors() {
         "treemapSection elements should have inline fill attribute"
     );
 }
+
+/// Get value font size from treemapValue elements
+fn get_value_font_sizes(doc: &Document<'_>) -> Vec<f64> {
+    let mut sizes = Vec::new();
+    for node in doc.descendants() {
+        if let Some(class) = node.attribute("class") {
+            if class.split_whitespace().any(|c| c == "treemapValue") {
+                // Check font-size attribute first
+                if let Some(size) = node.attribute("font-size") {
+                    if let Ok(s) = size.trim_end_matches("px").parse::<f64>() {
+                        sizes.push(s);
+                    }
+                }
+                // Also check style attribute for font-size
+                else if let Some(style) = node.attribute("style") {
+                    for part in style.split(';') {
+                        let part = part.trim();
+                        if part.starts_with("font-size:") {
+                            let size_str = part.trim_start_matches("font-size:").trim();
+                            if let Ok(s) = size_str.trim_end_matches("px").parse::<f64>() {
+                                sizes.push(s);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    sizes
+}
+
+#[test]
+fn treemap_visual_parity_value_font_size() {
+    // Test: Value labels should be proportional to label font size
+    // Mermaid.js uses: value_font_size = label_font_size * 0.6 (with max 28px)
+    // For default 38px label, value should be ~23px (not 10px!)
+    let input = r#"treemap-beta
+"Category A"
+    "Item A1": 10
+    "Item A2": 20
+"Category B"
+    "Item B1": 15
+    "Item B2": 25
+"#;
+    let svg = render_treemap_svg(input);
+    let doc = parse_svg(&svg);
+
+    // Get font sizes from treemapValue elements
+    let value_sizes = get_value_font_sizes(&doc);
+    assert!(
+        !value_sizes.is_empty(),
+        "treemapValue elements should have font-size"
+    );
+
+    // The largest leaf should have value font size close to 23px (60% of 38px)
+    // At minimum, it should be larger than the hardcoded 10px
+    let max_value_size = value_sizes.iter().cloned().fold(0.0_f64, f64::max);
+    assert!(
+        max_value_size >= 15.0,
+        "treemapValue font-size should be at least 15px for visual parity with mermaid.js (got {}px). \
+         Mermaid uses 60% of label font size, so 38px label → 23px value.",
+        max_value_size
+    );
+}
+
+#[test]
+fn treemap_visual_parity_height() {
+    // Test: SVG height should be content-based, not fixed at 500px
+    // Mermaid.js calculates height based on content (e.g., 371px for basic treemap)
+    let input = r#"treemap-beta
+"Category A"
+    "Item A1": 10
+    "Item A2": 20
+"Category B"
+    "Item B1": 15
+    "Item B2": 25
+"#;
+    let svg = render_treemap_svg(input);
+    let doc = parse_svg(&svg);
+
+    // Get viewBox height
+    let height = get_viewbox_height(&doc);
+    assert!(height.is_some(), "SVG should have viewBox with height");
+
+    let h = height.unwrap();
+    // Reference height is 371px, selkie currently uses 500px (too tall)
+    // Allow some tolerance, but height should be less than 450px for visual parity
+    assert!(
+        h <= 450.0,
+        "SVG height should be content-based, not fixed at 500px. \
+         Mermaid.js uses ~371px for this diagram, but got {}px. \
+         Height should be calculated from content, not hardcoded.",
+        h
+    );
+}

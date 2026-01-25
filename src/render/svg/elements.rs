@@ -46,6 +46,15 @@ impl Attrs {
         }
     }
 
+    /// Conditionally add an attribute
+    pub fn with_attr_if(self, condition: bool, key: &str, value: &str) -> Self {
+        if condition {
+            self.with_attr(key, value)
+        } else {
+            self
+        }
+    }
+
     pub fn with_transform(mut self, transform: &str) -> Self {
         self.attrs
             .insert("transform".to_string(), transform.to_string());
