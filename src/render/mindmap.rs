@@ -16,8 +16,8 @@ const MIN_NODE_WIDTH: f64 = 50.0;
 /// Minimum node height
 const MIN_NODE_HEIGHT: f64 = 30.0;
 
-/// Radial distance from parent to child
-const RADIAL_DISTANCE: f64 = 68.0;
+/// Radial distance from parent to child (matches mermaid.js spacing)
+const RADIAL_DISTANCE: f64 = 95.0;
 
 /// Maximum number of color sections (matches mermaid.js)
 const MAX_SECTIONS: usize = 12;
@@ -146,45 +146,45 @@ pub fn render_mindmap(db: &MindmapDb, config: &RenderConfig) -> Result<String> {
 }
 
 /// Calculate branch angles for root children
-/// Layout pattern: first branch goes strongly right (landscape), others spread in back-left
-/// Optimized for landscape aspect ratio
+/// Layout pattern matches mermaid.js: first branch goes right, others distributed around
+/// to create a balanced radial layout
 fn calculate_branch_angles(num_children: usize) -> Vec<f64> {
     use std::f64::consts::PI;
 
     match num_children {
         0 => vec![],
-        1 => vec![0.1],            // Single child goes right, slightly down
-        2 => vec![0.1, PI * 0.75], // First right, second left-down (135°)
+        1 => vec![0.0], // Single child goes right
+        2 => vec![0.0, PI], // First right, second left
         3 => {
-            // Layout pattern for 3 branches:
-            // - First: right with slight downward tilt (creates horizontal extent)
-            // - Second: down-left quadrant
-            // - Third: up-left quadrant
-            vec![0.15, PI * 0.65, -PI * 0.65] // ~9°, ~117°, ~-117°
+            // Mermaid.js pattern for 3 branches:
+            // - First (Origins): right with slight down tilt (~10°)
+            // - Second (Research): down-left (~130°)
+            // - Third (Tools): up-right (~-50°)
+            vec![PI * 0.06, PI * 0.70, -PI * 0.32]
         }
         _ => {
             let mut angles = Vec::with_capacity(num_children);
 
-            // First child always goes right with slight downward tilt
-            angles.push(0.1);
+            // First child goes right
+            angles.push(0.0);
 
-            // Distribute remaining children in back-left quadrant
+            // Distribute remaining children evenly around the root
+            // Starting from down-left and alternating down/up
             let remaining = num_children - 1;
             if remaining > 0 {
-                let down_count = remaining.div_ceil(2);
-                let up_count = remaining - down_count;
+                // Spread remaining children in a fan pattern
+                // Avoiding the right side (already taken by first child)
+                let available_arc = PI * 1.7; // ~306 degrees, leaving gap on right
+                let start_angle = PI * 0.7; // Start from down-left (~126°)
 
-                // Down-left quadrant (angles from ~100° to ~150°)
-                for i in 0..down_count {
-                    let t = (i as f64 + 0.5) / (down_count as f64);
-                    let angle = PI * 0.55 + t * PI * 0.28; // ~100° to ~150°
-                    angles.push(angle);
-                }
-
-                // Up-left quadrant (angles from ~-100° to ~-150°)
-                for i in 0..up_count {
-                    let t = (i as f64 + 0.5) / (up_count as f64);
-                    let angle = -PI * 0.55 - t * PI * 0.28; // ~-100° to ~-150°
+                for i in 0..remaining {
+                    // Alternate between positive and negative angles from start
+                    let offset = (i as f64 + 1.0) / (remaining as f64 + 1.0) * available_arc;
+                    let angle = if i % 2 == 0 {
+                        start_angle + offset * 0.3 // Down-left side
+                    } else {
+                        -start_angle - offset * 0.3 // Up-right side
+                    };
                     angles.push(angle);
                 }
             }
@@ -224,13 +224,14 @@ fn position_radial_tree(
     let is_right_branch = angle.abs() < PI / 3.0;
 
     // Calculate distance based on depth and direction
-    // Right branches get more distance to create landscape aspect ratio
+    // Mermaid uses force-directed layout; we approximate with increasing distances
     let base_distance = if is_right_branch {
-        RADIAL_DISTANCE * 1.5 // More distance for right-going branches
+        RADIAL_DISTANCE * 1.4 // More distance for right-going branches
     } else {
-        RADIAL_DISTANCE * 1.1 // Slightly more for other branches
+        RADIAL_DISTANCE * 1.2 // Good distance for other branches
     };
-    let distance = base_distance * (1.0 + (depth.saturating_sub(1)) as f64 * 0.12);
+    // Distance grows with depth to spread out deeper nodes
+    let distance = base_distance * (1.0 + (depth.saturating_sub(1)) as f64 * 0.2);
 
     // Calculate node center position
     let node_cx = parent_cx + distance * angle.cos();
@@ -304,11 +305,11 @@ fn position_radial_tree(
 fn calculate_children_spread(num_children: usize, depth: usize) -> f64 {
     use std::f64::consts::PI;
 
-    // Base spread decreases significantly with depth to create compact layout
+    // Base spread - mermaid tends to have wider spreads
     let base_spread = match depth {
-        1 => PI / 3.0, // First level: 60 degrees
-        2 => PI / 4.0, // Second level: 45 degrees
-        _ => PI / 5.0, // Deeper: 36 degrees
+        1 => PI / 2.5, // First level: 72 degrees
+        2 => PI / 3.0, // Second level: 60 degrees
+        _ => PI / 4.0, // Deeper: 45 degrees
     };
 
     // Adjust for number of children
@@ -413,20 +414,26 @@ fn render_edges(nodes: &[PositionedNode], _config: &RenderConfig) -> SvgElement 
                     node.node_type,
                 );
 
-                // Use a curved path with cubic bezier to match mermaid's "basis" curve style
-                // Mermaid uses d3-shape's curveBasis which creates smooth S-curves
+                // Use a curved path to match mermaid's "basis" curve style
+                // Mermaid uses d3-shape's curveBasis which creates smooth organic curves
                 let dx = end_x - start_x;
                 let dy = end_y - start_y;
 
-                // Calculate control points for smooth cubic bezier curve
-                // Similar to d3's basis curve interpolation
-                let t1 = 0.3;
-                let t2 = 0.7;
+                // For curveBasis style, control points create smooth flow
+                // Pull control points toward the midpoint with some perpendicular offset
 
-                let ctrl1_x = start_x + dx * t1;
-                let ctrl1_y = start_y + dy * t1 * 0.5; // Bias toward horizontal
-                let ctrl2_x = start_x + dx * t2;
-                let ctrl2_y = end_y - dy * (1.0 - t2) * 0.5; // Bias toward end
+                // Calculate perpendicular direction for curve bulge
+                let len = (dx * dx + dy * dy).sqrt().max(0.001);
+                let perp_x = -dy / len;
+                let perp_y = dx / len;
+
+                // Add slight perpendicular offset to create organic curve feel
+                let bulge = len * 0.05;
+
+                let ctrl1_x = start_x + dx * 0.25 + perp_x * bulge;
+                let ctrl1_y = start_y + dy * 0.25 + perp_y * bulge;
+                let ctrl2_x = end_x - dx * 0.25 + perp_x * bulge;
+                let ctrl2_y = end_y - dy * 0.25 + perp_y * bulge;
 
                 let path = format!(
                     "M{:.1},{:.1} C{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}",
@@ -443,6 +450,10 @@ fn render_edges(nodes: &[PositionedNode], _config: &RenderConfig) -> SvgElement 
                 // Add depth class for stroke width
                 let depth_class = format!("edge-depth-{}", node.depth.min(10));
 
+                // Calculate stroke width based on depth (mermaid.js uses 17 - 3*depth)
+                // Clamp minimum to 2.0 to ensure edges remain visible
+                let stroke_width = (17.0 - 3.0 * node.depth as f64).max(2.0);
+
                 children.push(SvgElement::Path {
                     d: path,
                     attrs: Attrs::new()
@@ -450,7 +461,7 @@ fn render_edges(nodes: &[PositionedNode], _config: &RenderConfig) -> SvgElement 
                         .with_class(&section_class)
                         .with_class(&depth_class)
                         .with_fill("none")
-                        .with_stroke_width(3.0),
+                        .with_stroke_width(stroke_width),
                 });
             }
         }
