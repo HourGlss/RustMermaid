@@ -921,12 +921,12 @@ fn render_leaf(rect: &TreemapRect, index: usize, config: &RenderConfig) -> SvgEl
     // Only show text if there's enough space
     let min_display_size = 20.0;
     if rect.width >= min_display_size && rect.height >= min_display_size {
-        // Calculate positions to center label + value together
-        // The label and value form a text block that should be centered
-        let gap = 2.0; // Gap between label and value
-        let total_text_height = label_font_size + gap + value_font_size;
-        let label_y = center_y - total_text_height / 2.0 + label_font_size / 2.0;
-        let value_y = label_y + label_font_size / 2.0 + gap;
+        // Mermaid.js positions the label at center and value below
+        // Label uses dominant-baseline: middle, so y is the vertical center of text
+        // Value uses dominant-baseline: hanging, so y is the top edge of text
+        let gap = 2.0; // Gap between label bottom and value top (matches mermaid)
+        let label_y = center_y; // Label centered in cell
+        let value_y = center_y + label_font_size / 2.0 + gap; // Value hangs below label
 
         // Leaf label (centered) with clip-path reference
         children.push(SvgElement::Text {

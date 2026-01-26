@@ -821,3 +821,80 @@ fn treemap_visual_parity_inline_colors() {
         "treemapSection elements should have inline fill attribute"
     );
 }
+
+// ============================================================================
+// Bug Fix Tests
+// ============================================================================
+
+/// Get the Y position of a text element by class name and content
+fn get_text_y_by_class_and_content(
+    doc: &Document<'_>,
+    class_name: &str,
+    text_content: &str,
+) -> Option<f64> {
+    for node in doc.descendants() {
+        if node.tag_name().name() == "text" {
+            // Check if it has the required class
+            let has_class = node
+                .attribute("class")
+                .map(|class| class.split_whitespace().any(|c| c == class_name))
+                .unwrap_or(false);
+            if !has_class {
+                continue;
+            }
+            // Get the text content from children
+            let content: String = node
+                .descendants()
+                .filter(|n| n.is_text())
+                .filter_map(|n| n.text())
+                .collect();
+            if content.trim() == text_content {
+                return node.attribute("y").and_then(|y| y.parse().ok());
+            }
+        }
+    }
+    None
+}
+
+#[test]
+fn treemap_value_on_separate_line_below_label() {
+    // Bug: Value numbers should be on a separate line below the label
+    // Expected: The value text Y position should be greater than the label Y position
+    // (meaning it appears below the label in SVG coordinate space)
+    let input = r#"treemap-beta
+"Root"
+    "Backend": 400000
+"#;
+    let svg = render_treemap_svg(input);
+    let doc = parse_svg(&svg);
+
+    // Find the LEAF label "Backend" (class: treemapLabel) and its value (class: treemapValue)
+    // Note: Section headers also have values but with class treemapSectionValue
+    let label_y = get_text_y_by_class_and_content(&doc, "treemapLabel", "Backend");
+    let value_y = get_text_y_by_class_and_content(&doc, "treemapValue", "400,000");
+
+    assert!(
+        label_y.is_some(),
+        "Should find label 'Backend' with class treemapLabel in SVG"
+    );
+    assert!(
+        value_y.is_some(),
+        "Should find value '400,000' with class treemapValue in SVG"
+    );
+
+    let label_y = label_y.unwrap();
+    let value_y = value_y.unwrap();
+
+    // The value should be on a separate line BELOW the label
+    // In SVG, Y increases downward, so value_y should be > label_y
+    // Mermaid.js uses approximately 21px separation (font-size dependent)
+    let min_separation = 15.0;
+    assert!(
+        value_y > label_y + min_separation,
+        "Value should be on separate line below label. Label Y: {}, Value Y: {}, separation: {}px (expected >= {}px)",
+        label_y,
+        value_y,
+        value_y - label_y,
+        min_separation
+    );
+}
