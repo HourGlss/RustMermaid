@@ -148,7 +148,7 @@
       <g class="items">
         <g class="node kanban-item-group" transform="translate(7.5, 25)">
           <rect x="0" y="0" width="185" height="44" rx="5" ry="5" class="kanban-item " style=""/>
-          <text x="92.5" y="22" class="kanban-label" dominant-baseline="middle" text-anchor="middle">Create Documentation</text>
+          <text x="92.5" y="22" class="kanban-label" text-anchor="middle" dominant-baseline="middle">Create Documentation</text>
         </g>
         <g class="node kanban-item-group" transform="translate(7.5, 74)">
           <rect x="0" y="0" width="185" height="68" rx="5" ry="5" class="kanban-item " style=""/>

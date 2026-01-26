@@ -142,11 +142,11 @@
         </g>
         <g class="cluster section-2" id="id7">
           <rect x="205" y="0" width="200" height="248" rx="5" ry="5" class="section section-2 " style=""/>
-          <text x="305" y="22" class="section-label" dominant-baseline="middle" text-anchor="middle">In progress</text>
+          <text x="305" y="22" class="section-label" text-anchor="middle" dominant-baseline="middle">In progress</text>
         </g>
         <g class="cluster section-3" id="id9">
           <rect x="410" y="0" width="200" height="50" rx="5" ry="5" class="section section-3 " style=""/>
-          <text x="510" y="22" class="section-label" dominant-baseline="middle" text-anchor="middle">Ready for deploy</text>
+          <text x="510" y="22" class="section-label" text-anchor="middle" dominant-baseline="middle">Ready for deploy</text>
         </g>
         <g class="cluster section-4" id="id10">
           <rect x="615" y="0" width="200" height="103" rx="5" ry="5" class="section section-4 " style=""/>
@@ -154,7 +154,7 @@
         </g>
         <g class="cluster section-5" id="id11">
           <rect x="820" y="0" width="200" height="297" rx="5" ry="5" class="section section-5 " style=""/>
-          <text x="920" y="22" class="section-label" text-anchor="middle" dominant-baseline="middle">Done</text>
+          <text x="920" y="22" class="section-label" dominant-baseline="middle" text-anchor="middle">Done</text>
         </g>
         <g class="cluster section-6" id="id12">
           <rect x="1025" y="0" width="200" height="103" rx="5" ry="5" class="section section-6 " style=""/>
@@ -177,7 +177,7 @@
         <g class="node kanban-item-group" transform="translate(212.5, 170)">
           <rect x="0" y="0" width="185" height="68" rx="5" ry="5" class="kanban-item " style=""/>
           <text x="92.5" y="22" class="kanban-label" text-anchor="middle" dominant-baseline="middle">Design grammar</text>
-          <text x="175" y="46" class="kanban-assigned" font-size="12px" text-anchor="end">knsv</text>
+          <text x="175" y="46" class="kanban-assigned" text-anchor="end" font-size="12px">knsv</text>
         </g>
         <g class="node kanban-item-group" transform="translate(622.5, 25)">
           <rect x="0" y="0" width="185" height="68" rx="5" ry="5" class="kanban-item " style=""/>
@@ -192,16 +192,16 @@
         </g>
         <g class="node kanban-item-group" transform="translate(827.5, 74)">
           <rect x="0" y="0" width="185" height="140" rx="5" ry="5" class="kanban-item " style=""/>
-          <line x1="2" y1="2.5" x2="2" y2="137.5" class="priority-indicator" stroke="red" stroke-width="4"/>
+          <line x1="2" y1="2.5" x2="2" y2="137.5" class="priority-indicator" stroke-width="4" stroke="red"/>
           <text x="92.5" y="10" text-anchor="middle" class="kanban-label"><tspan x="92.5" dy="0.5em">Title of diagram is</tspan><tspan x="92.5" dy="1.2em">more than 100 chars</tspan><tspan x="92.5" dy="1.2em">when user duplicates</tspan><tspan x="92.5" dy="1.2em">diagram</tspan></text>
-          <text x="10" y="118" class="kanban-ticket" text-anchor="start" font-size="12px">MC-2036</text>
+          <text x="10" y="118" class="kanban-ticket" font-size="12px" text-anchor="start">MC-2036</text>
         </g>
         <g class="node kanban-item-group" transform="translate(827.5, 219)">
           <rect x="0" y="0" width="185" height="68" rx="5" ry="5" class="kanban-item " style=""/>
           <line x1="2" y1="2.5" x2="2" y2="65.5" class="priority-indicator" stroke="orange" stroke-width="4"/>
-          <text x="92.5" y="22" class="kanban-label" text-anchor="middle" dominant-baseline="middle">Update DB function</text>
-          <text x="10" y="46" class="kanban-ticket" font-size="12px" text-anchor="start">MC-2037</text>
-          <text x="175" y="46" class="kanban-assigned" font-size="12px" text-anchor="end">knsv</text>
+          <text x="92.5" y="22" class="kanban-label" dominant-baseline="middle" text-anchor="middle">Update DB function</text>
+          <text x="10" y="46" class="kanban-ticket" text-anchor="start" font-size="12px">MC-2037</text>
+          <text x="175" y="46" class="kanban-assigned" text-anchor="end" font-size="12px">knsv</text>
         </g>
         <g class="node kanban-item-group" transform="translate(1032.5, 25)">
           <rect x="0" y="0" width="185" height="68" rx="5" ry="5" class="kanban-item " style=""/>
