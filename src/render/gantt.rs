@@ -89,7 +89,59 @@ pub fn render_gantt(db: &mut GanttDb, config: &RenderConfig) -> Result<String> {
         doc.add_style(&generate_gantt_css(&config.theme));
     }
 
-    // Render title
+    // Collect tasks grouped by section for rendering
+    let sections = collect_sections(&tasks);
+    let grid_height = total_height - TOP_PADDING - GRID_LINE_START_PADDING;
+
+    // === PASS 1: ALL SHAPES (z-order: shapes first) ===
+
+    // Grid lines (shapes only)
+    render_grid_shapes(
+        &mut doc,
+        min_date,
+        days_range,
+        LEFT_PADDING,
+        chart_width,
+        total_height,
+        grid_height,
+    );
+
+    // Section backgrounds
+    render_section_backgrounds(
+        &mut doc,
+        &tasks,
+        &sections,
+        total_width,
+        TOP_PADDING,
+        row_height,
+    );
+
+    // Task bar rectangles (shapes only)
+    render_task_bar_shapes(
+        &mut doc,
+        &tasks,
+        &sections,
+        min_date,
+        days_range,
+        LEFT_PADDING,
+        TOP_PADDING,
+        chart_width,
+        row_height,
+    );
+
+    // Today line
+    render_today_line(
+        &mut doc,
+        min_date,
+        days_range,
+        LEFT_PADDING,
+        chart_width,
+        total_height,
+    );
+
+    // === PASS 2: ALL TEXT (z-order: text last) ===
+
+    // Title
     if !db.title.is_empty() {
         let title_elem = SvgElement::Text {
             x: total_width / 2.0,
@@ -102,55 +154,30 @@ pub fn render_gantt(db: &mut GanttDb, config: &RenderConfig) -> Result<String> {
         doc.add_element(title_elem);
     }
 
-    // Collect tasks grouped by section for rendering
-    let sections = collect_sections(&tasks);
-
-    // Render grid and axis FIRST (behind everything else)
-    let grid_height = total_height - TOP_PADDING - GRID_LINE_START_PADDING;
-    render_grid_and_axis(
+    // Grid tick labels
+    render_grid_labels(
         &mut doc,
         min_date,
         days_range,
         LEFT_PADDING,
         chart_width,
         total_height,
-        grid_height,
     );
 
-    // Render section backgrounds (behind tasks but over grid)
-    render_section_backgrounds(
-        &mut doc,
-        &tasks,
-        &sections,
-        total_width,
-        TOP_PADDING,
-        row_height,
-    );
-
-    // Render task bars (on top of backgrounds and grid)
-    render_task_bars(
-        &mut doc,
-        &tasks,
-        &sections,
-        min_date,
-        days_range,
-        LEFT_PADDING,
-        TOP_PADDING,
-        chart_width,
-        row_height,
-    );
-
-    // Render section labels on left side
+    // Section labels
     render_section_labels(&mut doc, &tasks, &sections, TOP_PADDING, row_height);
 
-    // Render today line
-    render_today_line(
+    // Task labels
+    render_task_labels(
         &mut doc,
+        &tasks,
+        &sections,
         min_date,
         days_range,
         LEFT_PADDING,
+        TOP_PADDING,
         chart_width,
-        total_height,
+        row_height,
     );
 
     Ok(doc.to_string())
@@ -207,9 +234,80 @@ fn render_section_backgrounds(
     }
 }
 
-/// Render task bars and labels
+/// Calculate task bar geometry
+#[allow(clippy::type_complexity)]
 #[allow(clippy::too_many_arguments)]
-fn render_task_bars(
+fn calculate_task_bar_geometry(
+    task: &crate::diagrams::gantt::Task,
+    task_idx: usize,
+    tasks_len: usize,
+    min: chrono::NaiveDateTime,
+    px_per_day: f64,
+    left_padding: f64,
+    top_padding: f64,
+    row_height: f64,
+) -> Option<(f64, f64, f64, f64, &'static str, String)> {
+    let start = task.start_time?;
+    let end = task.end_time?;
+
+    let start_offset = (start - min).num_days() as f64;
+    let duration = (end - start).num_days().max(1) as f64;
+
+    let bar_x = left_padding + start_offset * px_per_day;
+    let bar_width = duration * px_per_day;
+    let bar_y = task_idx as f64 * row_height + top_padding;
+
+    let (final_x, final_y, final_width, final_height, extra_class) = if task.flags.vert {
+        let vert_width = BAR_HEIGHT * 0.08;
+        let vert_height = tasks_len as f64 * row_height + BAR_HEIGHT * 2.0;
+        (
+            bar_x,
+            GRID_LINE_START_PADDING,
+            vert_width,
+            vert_height,
+            " vert ",
+        )
+    } else if task.flags.milestone {
+        let mid_x = bar_x + bar_width / 2.0 - BAR_HEIGHT / 2.0;
+        (mid_x, bar_y, BAR_HEIGHT, BAR_HEIGHT, " milestone ")
+    } else {
+        (bar_x, bar_y, bar_width, BAR_HEIGHT, "")
+    };
+
+    let center_x = final_x + final_width / 2.0;
+    let center_y = final_y + final_height / 2.0;
+    let transform_origin = format!("{}px {}px", center_x, center_y);
+
+    Some((
+        final_x,
+        final_y,
+        final_width,
+        final_height,
+        extra_class,
+        transform_origin,
+    ))
+}
+
+/// Get CSS class for task bar based on flags
+fn get_task_bar_class(flags: &crate::diagrams::gantt::TaskFlags, sec_num: usize) -> String {
+    if flags.active && flags.critical {
+        format!("task activeCrit{}", sec_num)
+    } else if flags.done && flags.critical {
+        format!("task doneCrit{}", sec_num)
+    } else if flags.done {
+        format!("task done{}", sec_num)
+    } else if flags.active {
+        format!("task active{}", sec_num)
+    } else if flags.critical {
+        format!("task crit{}", sec_num)
+    } else {
+        format!("task task{}", sec_num)
+    }
+}
+
+/// Render task bar rectangles only (shapes, no text)
+#[allow(clippy::too_many_arguments)]
+fn render_task_bar_shapes(
     doc: &mut SvgDocument,
     tasks: &[crate::diagrams::gantt::Task],
     sections: &[(String, usize, usize)],
@@ -221,69 +319,30 @@ fn render_task_bars(
     row_height: f64,
 ) {
     let Some(min) = min_date else { return };
-
-    // Calculate pixels per day (time scale)
     let px_per_day = chart_width / days_range;
 
     for (task_idx, task) in tasks.iter().enumerate() {
-        let Some(start) = task.start_time else {
+        let Some((final_x, final_y, final_width, final_height, extra_class, transform_origin)) =
+            calculate_task_bar_geometry(
+                task,
+                task_idx,
+                tasks.len(),
+                min,
+                px_per_day,
+                left_padding,
+                top_padding,
+                row_height,
+            )
+        else {
             continue;
         };
-        let Some(end) = task.end_time else { continue };
 
-        let start_offset = (start - min).num_days() as f64;
-        let duration = (end - start).num_days().max(1) as f64;
-
-        let bar_x = left_padding + start_offset * px_per_day;
-        let bar_width = duration * px_per_day;
-        let bar_y = task_idx as f64 * row_height + top_padding;
-
-        // Find section index for this task
         let section_idx = sections
             .iter()
             .position(|(_, s, e)| task_idx >= *s && task_idx < *e)
             .unwrap_or(0);
-
-        // Determine CSS class based on task flags
         let sec_num = section_idx % 4;
-        let bar_class = if task.flags.active && task.flags.critical {
-            format!("task activeCrit{}", sec_num)
-        } else if task.flags.done && task.flags.critical {
-            format!("task doneCrit{}", sec_num)
-        } else if task.flags.done {
-            format!("task done{}", sec_num)
-        } else if task.flags.active {
-            format!("task active{}", sec_num)
-        } else if task.flags.critical {
-            format!("task crit{}", sec_num)
-        } else {
-            format!("task task{}", sec_num)
-        };
-
-        // Handle special task types: vert markers and milestones
-        let (final_x, final_y, final_width, final_height, extra_class) = if task.flags.vert {
-            // Vert marker: thin vertical line spanning entire chart
-            let vert_width = BAR_HEIGHT * 0.08; // Very narrow
-            let vert_height = tasks.len() as f64 * row_height + BAR_HEIGHT * 2.0;
-            (
-                bar_x,
-                GRID_LINE_START_PADDING,
-                vert_width,
-                vert_height,
-                " vert ",
-            )
-        } else if task.flags.milestone {
-            // Milestone: small square centered at midpoint
-            let mid_x = bar_x + bar_width / 2.0 - BAR_HEIGHT / 2.0;
-            (mid_x, bar_y, BAR_HEIGHT, BAR_HEIGHT, " milestone ")
-        } else {
-            (bar_x, bar_y, bar_width, BAR_HEIGHT, "")
-        };
-
-        // Calculate transform-origin for proper rotation (needed for milestones)
-        let center_x = final_x + final_width / 2.0;
-        let center_y = final_y + final_height / 2.0;
-        let transform_origin = format!("{}px {}px", center_x, center_y);
+        let bar_class = get_task_bar_class(&task.flags, sec_num);
 
         let bar_elem = SvgElement::Rect {
             x: final_x,
@@ -298,10 +357,48 @@ fn render_task_bars(
                 .with_attr("transform-origin", &transform_origin),
         };
         doc.add_element(bar_elem);
+    }
+}
 
-        // Handle text positioning differently for vert markers
+/// Render task labels only (text, no shapes)
+#[allow(clippy::too_many_arguments)]
+fn render_task_labels(
+    doc: &mut SvgDocument,
+    tasks: &[crate::diagrams::gantt::Task],
+    sections: &[(String, usize, usize)],
+    min_date: Option<chrono::NaiveDateTime>,
+    days_range: f64,
+    left_padding: f64,
+    top_padding: f64,
+    chart_width: f64,
+    row_height: f64,
+) {
+    let Some(min) = min_date else { return };
+    let px_per_day = chart_width / days_range;
+
+    for (task_idx, task) in tasks.iter().enumerate() {
+        let Some((final_x, final_y, final_width, _final_height, _extra_class, _transform_origin)) =
+            calculate_task_bar_geometry(
+                task,
+                task_idx,
+                tasks.len(),
+                min,
+                px_per_day,
+                left_padding,
+                top_padding,
+                row_height,
+            )
+        else {
+            continue;
+        };
+
+        let section_idx = sections
+            .iter()
+            .position(|(_, s, e)| task_idx >= *s && task_idx < *e)
+            .unwrap_or(0);
+        let sec_num = section_idx % 4;
+
         if task.flags.vert {
-            // Vert text: positioned below the chart, centered on the marker
             let vert_text_y = GRID_LINE_START_PADDING + tasks.len() as f64 * row_height + 60.0;
             let task_label = SvgElement::Text {
                 x: final_x + final_width / 2.0,
@@ -314,18 +411,13 @@ fn render_task_bars(
             };
             doc.add_element(task_label);
         } else {
-            // Standard task text positioning
-            // Estimate text width (approx 0.5 * fontSize per character for typical fonts)
             let estimated_text_width = task.task.len() as f64 * FONT_SIZE * 0.5;
-            let text_y = bar_y + BAR_HEIGHT / 2.0 + (FONT_SIZE / 2.0 - 2.0);
+            let text_y = final_y + BAR_HEIGHT / 2.0 + (FONT_SIZE / 2.0 - 2.0);
 
-            // Determine if text fits inside bar, or needs to go outside
             let text_fits_inside = estimated_text_width <= final_width;
             let end_x = final_x + final_width;
-            // Use a small margin (10px) - the text is placed at end_x + 5, so need 5px gap + some buffer
             let room_on_right = end_x + estimated_text_width + 10.0 <= TARGET_WIDTH;
 
-            // Calculate text position and class based on fit
             let (text_x, text_position) = if text_fits_inside {
                 (final_x + final_width / 2.0, TextPosition::Inside)
             } else if room_on_right {
@@ -334,9 +426,7 @@ fn render_task_bars(
                 (final_x - 5.0, TextPosition::OutsideLeft)
             };
 
-            // Determine text class based on position and task flags
             let text_class = build_text_class(sec_num, &task.flags, text_position);
-
             let milestone_text_class = if task.flags.milestone {
                 " milestoneText"
             } else {
@@ -432,8 +522,66 @@ fn render_section_labels(
     }
 }
 
-/// Render grid lines and axis with D3-style automatic tick intervals
-fn render_grid_and_axis(
+/// Calculate tick dates based on date range
+fn calculate_tick_dates(start: chrono::NaiveDateTime, days_range: f64) -> Vec<chrono::NaiveDate> {
+    use chrono::{Datelike, NaiveDate};
+
+    if days_range > 60.0 {
+        // Monthly ticks
+        let mut dates = Vec::new();
+        let start_date = start.date();
+        let end_date = start_date + chrono::Duration::days(days_range as i64);
+
+        // Start from first of current or next month
+        let mut current = if start_date.day() == 1 {
+            start_date
+        } else {
+            let next_month = if start_date.month() == 12 {
+                NaiveDate::from_ymd_opt(start_date.year() + 1, 1, 1)
+            } else {
+                NaiveDate::from_ymd_opt(start_date.year(), start_date.month() + 1, 1)
+            };
+            next_month.unwrap_or(start_date)
+        };
+
+        if start_date.day() == 1 {
+            dates.push(start_date);
+        }
+
+        while current <= end_date {
+            if current > start_date {
+                dates.push(current);
+            }
+            let next = if current.month() == 12 {
+                NaiveDate::from_ymd_opt(current.year() + 1, 1, 1)
+            } else {
+                NaiveDate::from_ymd_opt(current.year(), current.month() + 1, 1)
+            };
+            current = next.unwrap_or(end_date + chrono::Duration::days(1));
+        }
+        dates
+    } else if days_range > 14.0 {
+        // Every 2 days
+        let interval = 2;
+        let mut dates = Vec::new();
+        let start_date = start.date();
+        for day in (0..=days_range as i64).step_by(interval) {
+            dates.push(start_date + chrono::Duration::days(day));
+        }
+        dates
+    } else {
+        // Daily
+        let mut dates = Vec::new();
+        let start_date = start.date();
+        for day in 0..=days_range as i64 {
+            dates.push(start_date + chrono::Duration::days(day));
+        }
+        dates
+    }
+}
+
+/// Render grid lines only (shapes, no text)
+fn render_grid_shapes(
     doc: &mut SvgDocument,
     min_date: Option<chrono::NaiveDateTime>,
     days_range: f64,
@@ -444,86 +592,10 @@ fn render_grid_and_axis(
 ) {
     let Some(start) = min_date else { return };
 
-    use chrono::{Datelike, NaiveDate};
-
-    // Determine appropriate tick interval based on date range
-    // D3's automatic behavior: monthly for multi-month, weekly for weeks, daily for days
-    let (tick_dates, _format_str): (Vec<NaiveDate>, &str) = if days_range > 60.0 {
-        // Monthly ticks
-        let mut dates = Vec::new();
-        let start_date = start.date();
-        let end_date = start_date + chrono::Duration::days(days_range as i64);
-
-        // Start from first of current or next month
-        let mut current = if start_date.day() == 1 {
-            start_date
-        } else {
-            // Move to first of next month
-            let next_month = if start_date.month() == 12 {
-                NaiveDate::from_ymd_opt(start_date.year() + 1, 1, 1)
-            } else {
-                NaiveDate::from_ymd_opt(start_date.year(), start_date.month() + 1, 1)
-            };
-            next_month.unwrap_or(start_date)
-        };
-
-        // Include start date if it's the first of month
-        if start_date.day() == 1 {
-            dates.push(start_date);
-        }
-
-        while current <= end_date {
-            if current > start_date {
-                dates.push(current);
-            }
-            // Move to next month
-            let next = if current.month() == 12 {
-                NaiveDate::from_ymd_opt(current.year() + 1, 1, 1)
-            } else {
-                NaiveDate::from_ymd_opt(current.year(), current.month() + 1, 1)
-            };
-            current = next.unwrap_or(end_date + chrono::Duration::days(1));
-        }
-        (dates, "%Y-%m-%d")
-    } else if days_range > 14.0 {
-        // Every 2-3 days
-        let interval = 2;
-        let mut dates = Vec::new();
-        let start_date = start.date();
-        for day in (0..=days_range as i64).step_by(interval) {
-            dates.push(start_date + chrono::Duration::days(day));
-        }
-        (dates, "%Y-%m-%d")
-    } else {
-        // Daily
-        let mut dates = Vec::new();
-        let start_date = start.date();
-        for day in 0..=days_range as i64 {
-            dates.push(start_date + chrono::Duration::days(day));
-        }
-        (dates, "%Y-%m-%d")
-    };
-
+    let tick_dates = calculate_tick_dates(start, days_range);
     let px_per_day = chart_width / days_range;
     let start_date = start.date();
 
-    // Estimate label width for overlap detection
-    // Date format "YYYY-MM-DD" = 10 chars, font-size 10, average char width ~0.6 * font-size
-    let estimated_label_width = 10.0 * 10.0 * 0.6; // ~60px per label
-
-    // Calculate minimum spacing between ticks
-    let min_tick_spacing = if tick_dates.len() > 1 {
-        let first_x = (tick_dates[0] - start_date).num_days() as f64 * px_per_day;
-        let second_x = (tick_dates[1] - start_date).num_days() as f64 * px_per_day;
-        (second_x - first_x).abs()
-    } else {
-        chart_width // Single tick, no overlap possible
-    };
-
-    // If labels would overlap, rotate them
-    let should_rotate = estimated_label_width > min_tick_spacing * 0.9;
-
-    // Grid group
     let mut grid_children = Vec::new();
 
     // Add path element for D3 compatibility
@@ -551,12 +623,62 @@ fn render_grid_and_axis(
             y2: -grid_height,
             attrs: Attrs::new().with_attr("stroke", "currentColor"),
         });
+    }
 
-        // Tick label - rotate if labels would overlap
+    let grid_group = SvgElement::Group {
+        children: grid_children,
+        attrs: Attrs::new()
+            .with_class("grid")
+            .with_attr(
+                "transform",
+                &format!("translate({}, {})", left_padding, total_height - 50.0),
+            )
+            .with_attr("fill", "none")
+            .with_attr("font-size", "10")
+            .with_attr("font-family", "sans-serif")
+            .with_attr("text-anchor", "middle"),
+    };
+    doc.add_element(grid_group);
+}
+
+/// Render grid tick labels only (text, no shapes)
+fn render_grid_labels(
+    doc: &mut SvgDocument,
+    min_date: Option<chrono::NaiveDateTime>,
+    days_range: f64,
+    left_padding: f64,
+    chart_width: f64,
+    total_height: f64,
+) {
+    let Some(start) = min_date else { return };
+
+    use chrono::Datelike;
+
+    let tick_dates = calculate_tick_dates(start, days_range);
+    let px_per_day = chart_width / days_range;
+    let start_date = start.date();
+
+    // Estimate label width for overlap detection
+    let estimated_label_width = 10.0 * 10.0 * 0.6; // ~60px per label
+
+    let min_tick_spacing = if tick_dates.len() > 1 {
+        let first_x = (tick_dates[0] - start_date).num_days() as f64 * px_per_day;
+        let second_x = (tick_dates[1] - start_date).num_days() as f64 * px_per_day;
+        (second_x - first_x).abs()
+    } else {
+        chart_width
+    };
+
+    let should_rotate = estimated_label_width > min_tick_spacing * 0.9;
+
+    let mut label_children = Vec::new();
+
+    for date in &tick_dates {
+        let day_offset = (*date - start_date).num_days() as f64;
+        let x = day_offset * px_per_day + 0.5;
+
         let label = format!("{:04}-{:02}-{:02}", date.year(), date.month(), date.day());
         let label_attrs = if should_rotate {
-            // Rotate -45 degrees around the label position
-            // Use text-anchor: end so text extends up-left from the anchor point
             Attrs::new()
                 .with_attr("fill", "#000")
                 .with_attr("dy", "0.5em")
@@ -572,7 +694,7 @@ fn render_grid_and_axis(
                 .with_attr("font-size", "10")
                 .with_attr("style", "text-anchor: middle;")
         };
-        grid_children.push(SvgElement::Text {
+        label_children.push(SvgElement::Text {
             x,
             y: 3.0,
             content: label,
@@ -580,21 +702,19 @@ fn render_grid_and_axis(
         });
     }
 
-    // Wrap in group with transform (like mermaid)
-    let grid_group = SvgElement::Group {
-        children: grid_children,
+    let label_group = SvgElement::Group {
+        children: label_children,
         attrs: Attrs::new()
-            .with_class("grid")
+            .with_class("grid-labels")
             .with_attr(
                 "transform",
                 &format!("translate({}, {})", left_padding, total_height - 50.0),
             )
-            .with_attr("fill", "none")
             .with_attr("font-size", "10")
             .with_attr("font-family", "sans-serif")
             .with_attr("text-anchor", "middle"),
     };
-    doc.add_element(grid_group);
+    doc.add_element(label_group);
 }
 
 /// Render today line
