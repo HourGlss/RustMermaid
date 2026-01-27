@@ -2986,9 +2986,6 @@ fn test_state_multiple_composites_aligned() {
         let composite_start = svg.find(&composite_marker)?;
         let relevant_section = &svg[composite_start..composite_start.saturating_add(600)];
 
-        // Pre-compile regex outside the loop
-        let y_pattern = regex::Regex::new(r#"y="([0-9.]+)""#).ok()?;
-
         // Find line containing state-composite-outer
         let y_pattern = regex::Regex::new(r#"y="([0-9.]+)""#).ok()?;
         for line in relevant_section.lines() {
