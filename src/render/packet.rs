@@ -96,12 +96,17 @@ pub fn render_packet(db: &PacketDb, config: &RenderConfig) -> Result<String> {
         doc.add_style(&generate_packet_css());
     }
 
-    // Render each word (row)
+    // === PASS 1: ALL SHAPES (z-order: shapes first) ===
     for (word_index, word) in words.iter().enumerate() {
-        draw_word(&mut doc, word, word_index, &packet_config);
+        draw_word_shapes(&mut doc, word, word_index, &packet_config);
     }
 
-    // Render title at the bottom
+    // === PASS 2: ALL TEXT (z-order: text last) ===
+    for (word_index, word) in words.iter().enumerate() {
+        draw_word_labels(&mut doc, word, word_index, &packet_config);
+    }
+
+    // Render title at the bottom (text)
     if has_title {
         let title_y = svg_height - total_row_height / 2.0;
         let title_elem = SvgElement::Text {
@@ -119,8 +124,43 @@ pub fn render_packet(db: &PacketDb, config: &RenderConfig) -> Result<String> {
     Ok(doc.to_string())
 }
 
-/// Draw a word (row) of packet blocks
-fn draw_word(
+/// Draw block rectangles for a word (row) - shapes only
+fn draw_word_shapes(
+    doc: &mut SvgDocument,
+    word: &[crate::diagrams::packet::PacketBlock],
+    row_number: usize,
+    config: &PacketConfig,
+) {
+    let PacketConfig {
+        row_height,
+        padding_x,
+        bit_width,
+        bits_per_row,
+        ..
+    } = *config;
+    let padding_y = config.effective_padding_y();
+    let word_y = row_number as f64 * (row_height + padding_y) + padding_y;
+
+    for block in word {
+        let position_in_row = block.start % bits_per_row;
+        let block_x = position_in_row as f64 * bit_width + 1.0;
+        let width = block.bits as f64 * bit_width - padding_x;
+
+        let rect = SvgElement::Rect {
+            x: block_x,
+            y: word_y,
+            width,
+            height: row_height,
+            rx: None,
+            ry: None,
+            attrs: Attrs::new().with_class("packetBlock"),
+        };
+        doc.add_element(rect);
+    }
+}
+
+/// Draw labels and bit numbers for a word (row) - text only
+fn draw_word_labels(
     doc: &mut SvgDocument,
     word: &[crate::diagrams::packet::PacketBlock],
     row_number: usize,
@@ -134,28 +174,13 @@ fn draw_word(
         show_bits,
         ..
     } = *config;
-    // Use effective_padding_y which adds 10 when show_bits is true
     let padding_y = config.effective_padding_y();
-
     let word_y = row_number as f64 * (row_height + padding_y) + padding_y;
 
     for block in word {
-        // Calculate block position within the row
         let position_in_row = block.start % bits_per_row;
         let block_x = position_in_row as f64 * bit_width + 1.0;
         let width = block.bits as f64 * bit_width - padding_x;
-
-        // Block rectangle
-        let rect = SvgElement::Rect {
-            x: block_x,
-            y: word_y,
-            width,
-            height: row_height,
-            rx: None,
-            ry: None,
-            attrs: Attrs::new().with_class("packetBlock"),
-        };
-        doc.add_element(rect);
 
         // Block label (centered in the block)
         let label = SvgElement::Text {
