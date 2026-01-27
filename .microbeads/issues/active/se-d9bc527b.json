@@ -12,6 +12,12 @@
       "field": "notes",
       "new": "(changed)",
       "old": "(changed)"
+    },
+    {
+      "at": "2026-01-27T01:20:41Z",
+      "field": "notes",
+      "new": "(changed)",
+      "old": "(changed)"
     }
   ],
   "id": "se-d9bc527b",
@@ -19,10 +25,10 @@
     "eval",
     "renderer"
   ],
-  "notes": "Sequence diagram has fundamental layout differences - text placement at bottom vs top (698% difference), different aspect ratios. Needs layout algorithm changes for text positioning and diagram sizing.",
+  "notes": "Fixed z-order issue: Fragment label shapes (polygons) now render in clusters layer before edgeLabels. Warnings reduced from 33 to 29.",
   "priority": 1,
   "status": "open",
   "title": "sequence: Multiple rendering issues",
   "type": "bug",
-  "updated_at": "2026-01-23T22:36:45Z"
+  "updated_at": "2026-01-27T01:20:41Z"
 }
