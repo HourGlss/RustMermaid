@@ -24,6 +24,12 @@
       "field": "notes",
       "new": "(changed)",
       "old": "(changed)"
+    },
+    {
+      "at": "2026-01-27T01:22:08Z",
+      "field": "notes",
+      "new": "(changed)",
+      "old": "(changed)"
     }
   ],
   "id": "se-e65d3d96",
@@ -31,10 +37,10 @@
     "eval",
     "renderer"
   ],
-  "notes": "Layout algorithm produces completely different node positions than mermaid reference. Edge positions off by 500-1000+ pixels. This is a deep layout issue requiring dagre/elk investigation. Visual similarity only 8%.",
+  "notes": "Status update: Original issues (node_count=0, edge_count=0) are FIXED - flowcharts now render all nodes and edges correctly.\n\nRemaining issues are:\n1. aspect_ratio ERROR - Layout produces slightly different dimensions (5% diff)\n2. labels_missing ERROR - Multi-line text extraction differs (selkie uses tspan, mermaid uses separate elements)\n3. edge_positions WARN - Layout algorithm positions nodes differently than mermaid's dagre\n4. stroke_width WARN - Eval averages stroke-widths differently\n\nVisual similarity 8-32% is low but this is due to layout position differences, not missing content. Structural similarity is 90-98% which shows the content is correct.\n\nAlso fixed: colors check now extracts CSS colors properly, finding 50% color match.",
   "priority": 1,
   "status": "open",
   "title": "flowchart: Missing nodes, edges, and labels across all samples",
   "type": "bug",
-  "updated_at": "2026-01-23T15:54:44Z"
+  "updated_at": "2026-01-27T01:22:08Z"
 }
