@@ -1,0 +1,17 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-27T01:57:03Z",
+  "dependencies": [],
+  "description": "**Context:**\nClosed PR #53 because it had too many merge conflicts after 249 commits landed on main. However, there IS duplication worth addressing.\n\n**Clear consolidation targets:**\n1. `normalize_br_tags()` - 12 occurrences across 6 files (timeline.rs, sequence.rs, svg/elements.rs, svg/edges.rs, layout/size.rs)\n2. `wrap_text_by_width()` - 3 duplicates (kanban.rs, c4.rs, timeline.rs)  \n3. `estimate_text_width()` - 2 duplicates (kanban.rs, timeline.rs)\n\n**NOT in scope:**\n- Legend rendering abstraction (too many variations)\n- Title rendering abstraction (implementations differ)\n- ChartMargins struct (files use different margin strategies)\n\n**Approach:**\nUse code-simplifier skill on fresh main to identify and extract only the clearly duplicated utilities.",
+  "design": "",
+  "id": "se-8cf4ed1b",
+  "labels": [],
+  "notes": "",
+  "priority": 3,
+  "status": "open",
+  "title": "Create text_utils.rs for common string utilities",
+  "type": "chore",
+  "updated_at": "2026-01-27T01:57:03Z"
+}
