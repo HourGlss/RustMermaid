@@ -200,14 +200,15 @@ fn compute_level_layout(
                 .keys()
                 .any(|child_id| level_layouts.contains_key(child_id));
 
-            // Apply width expansion to match mermaid's getBBox() behavior.
-            // Mermaid measures the full rendered cluster including internal padding and margins.
-            // Leaf composites need more expansion for visual padding balance.
-            // Non-leaf composites also need significant expansion to match mermaid's wider sizing.
-            let expansion_factor = if is_leaf_composite { 1.6 } else { 1.4 };
+            // Apply additive width padding to match mermaid's cluster sizing.
+            // Mermaid's dagre uses border nodes to size clusters, which adds
+            // roughly nodeSpacing (50px) worth of padding around content.
+            // We use additive padding instead of multiplicative factors to avoid
+            // compounding across nesting levels (which caused 80% width inflation).
+            let extra_padding = if is_leaf_composite { 40.0 } else { 30.0 };
             let original_width = inner_layout.width;
-            let expanded_width = original_width * expansion_factor;
-            let width_offset = (expanded_width - original_width) / 2.0;
+            let expanded_width = original_width + extra_padding;
+            let width_offset = extra_padding / 2.0;
 
             // Shift all positions to center content within expanded width
             for (_, (x, _, _, _)) in inner_layout.positions.iter_mut() {
@@ -3494,6 +3495,80 @@ Cancelled --> [*]
             "Running node width ({:.1}px) should be at most 80px for compact layout. \
              Excess width shifts all nodes and edges horizontally.",
             running_node.width
+        );
+    }
+
+    #[test]
+    fn test_complex2_diagram_width_within_reference_range() {
+        // The mermaid reference for state_complex2 is 716px wide.
+        // Selkie was rendering at 1286px (80% too wide) because expansion factors
+        // compound across nesting levels.
+        // The diagram should be within 30% of the reference width.
+        let input = r#"stateDiagram-v2
+[*] --> Idle
+
+state Idle {
+    [*] --> Ready
+    Ready --> Processing: Start Job
+}
+
+state Processing {
+    [*] --> Validating
+    Validating --> Queued: Valid
+    Validating --> Failed: Invalid
+    Queued --> Running: Worker Available
+    Running --> Completed: Success
+    Running --> Failed: Error
+    Running --> Paused: Pause Request
+
+    state Running {
+        [*] --> Initializing
+        Initializing --> Executing
+        Executing --> Finalizing
+        Finalizing --> [*]
+    }
+}
+
+state Paused {
+    [*] --> WaitingResume
+    WaitingResume --> Timeout: 1 hour
+}
+
+Paused --> Running: Resume
+Paused --> Cancelled: Cancel Request
+Timeout --> Cancelled
+
+Completed --> Idle: Reset
+Failed --> Idle: Retry
+Cancelled --> Idle: Reset
+
+Completed --> [*]
+Cancelled --> [*]
+"#;
+        let db = parse(input).expect("Should parse");
+        let config = crate::render::RenderConfig::default();
+        let svg = render_state(&db, &config).expect("Should render");
+
+        // Extract viewBox width
+        let viewbox_re = regex::Regex::new(r#"viewBox="[^"]*\s([\d.]+)\s[\d.]+"#).unwrap();
+        let viewbox_cap = viewbox_re.captures(&svg).expect("Should have viewBox");
+        let svg_width: f64 = viewbox_cap[1].parse().unwrap();
+
+        let reference_width = 716.0;
+        let max_acceptable_width = reference_width * 1.30; // within 30%
+
+        eprintln!(
+            "state_complex2 SVG width: {:.1}px (reference: {:.1}px, max: {:.1}px)",
+            svg_width, reference_width, max_acceptable_width
+        );
+
+        assert!(
+            svg_width <= max_acceptable_width,
+            "state_complex2 SVG width ({:.1}px) should be within 30% of reference ({:.1}px), \
+             max acceptable: {:.1}px. Expansion factors are compounding too aggressively.",
+            svg_width,
+            reference_width,
+            max_acceptable_width
         );
     }
 }
