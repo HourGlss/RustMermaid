@@ -1,0 +1,17 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-29T17:10:23Z",
+  "dependencies": [],
+  "description": "The flowchart_complex sample has an aspect_ratio ERROR because character-based text estimation (CharacterSizeEstimator with char_width_ratio 0.6) produces ~7% wider layouts than browser getBBox. Selkie: 1361x1108 (ratio 1.23), Reference: 1274x1089 (ratio 1.17). Fixing this requires more sophisticated font metrics or per-character width tables.",
+  "design": "",
+  "id": "se-ea04babd",
+  "labels": [],
+  "notes": "",
+  "priority": 2,
+  "status": "open",
+  "title": "Flowchart: flowchart_complex aspect_ratio error from text width estimation",
+  "type": "bug",
+  "updated_at": "2026-01-29T17:10:23Z"
+}
