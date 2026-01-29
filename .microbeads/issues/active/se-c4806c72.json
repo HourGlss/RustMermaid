@@ -1,0 +1,17 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-29T16:39:31Z",
+  "dependencies": [],
+  "description": "Edge positions diverge from the reference across all state diagrams:\\n\\n- Simple state: edges off by 17-30px (minor, mostly cosmetic)\\n- Complex state: edges off by 6-597px, with direction mismatches (vertical vs diagonal)\\n- Complex2: edges off by up to 1713px, with many direction mismatches\\n\\nThe edge position errors grow dramatically with diagram complexity, suggesting the layout algorithm places nodes in very different positions than the reference. This is likely downstream of the composite layout issue (sibling states not laid out horizontally) rather than an independent edge routing problem.\\n\\nAddress after fixing the composite layout issue first.",
+  "design": "",
+  "id": "se-c4806c72",
+  "labels": [],
+  "notes": "",
+  "priority": 3,
+  "status": "open",
+  "title": "State: improve edge routing positions (15-30px off on simple, hundreds of px off on complex)",
+  "type": "bug",
+  "updated_at": "2026-01-29T16:39:31Z"
+}

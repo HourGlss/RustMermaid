@@ -1,0 +1,17 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-29T16:39:30Z",
+  "dependencies": [],
+  "description": "In state_complex2, the eval reports: 'Nested composite Processing not centered in Idle: -137px offset (reference: 30px)'\\n\\nNested composite states should be centered horizontally within their parent composite. Currently they appear offset to one side.\\n\\nCheck the composite layout/positioning logic in src/render/state.rs.",
+  "design": "",
+  "id": "se-6e633cd1",
+  "labels": [],
+  "notes": "",
+  "priority": 2,
+  "status": "open",
+  "title": "State: fix nested composite centering within parent composites",
+  "type": "bug",
+  "updated_at": "2026-01-29T16:39:30Z"
+}

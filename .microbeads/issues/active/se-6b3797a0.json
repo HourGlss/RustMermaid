@@ -1,0 +1,17 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-29T16:39:28Z",
+  "dependencies": [],
+  "description": "state_complex2 shows a major layout problem: Selkie renders all states in a single vertical column, producing a diagram 1286px wide vs the reference's 716px (80% wider, aspect ratio 0.67 vs 0.42).\\n\\nThe reference lays out sibling states (e.g., Failed/Paused/Completed, Resume/Cancel) horizontally when they're at the same nesting level. Selkie instead stacks everything vertically.\\n\\nThis is the highest-impact state diagram issue — it makes complex state diagrams nearly unrecognizable.\\n\\nKey files:\\n- src/render/state.rs (layout logic)\\n- Reference: reference-implementations/mermaid/packages/mermaid/src/diagrams/state/stateRenderer-v3-unified.ts\\n\\nSpecific composite issues from eval:\\n- Composite 'Idle' size: ref 700x1461, selkie 1186x1674 (width 70% diff)\\n- Composite 'Processing' size: ref 600x1233, selkie 830x1425 (width 38% diff)\\n- Nested composite 'Processing' not centered in 'Idle': -137px offset (ref: 30px)",
+  "design": "",
+  "id": "se-6b3797a0",
+  "labels": [],
+  "notes": "",
+  "priority": 1,
+  "status": "open",
+  "title": "State: fix layout of sibling states within composite groups (complex2 width 80% off)",
+  "type": "bug",
+  "updated_at": "2026-01-29T16:39:28Z"
+}

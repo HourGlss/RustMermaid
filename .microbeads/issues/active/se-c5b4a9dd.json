@@ -1,0 +1,17 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-29T16:39:25Z",
+  "dependencies": [],
+  "description": "All state diagrams show 42% color match. Selkie uses wrong fill colors:\\n- Uses #ffffcc/#ffffde instead of #fff5ad (note/label backgrounds)\\n- Uses #666666 instead of #333 (text/dark elements)\\n- Uses #ffffff instead of 'white' (semantically same but eval flags it)\\n- Missing: black, #552222, #131300, #e0e0e0\\n\\nCompare fill colors in src/render/state.rs with reference styles in reference-implementations/mermaid/packages/mermaid/src/diagrams/state/styles.ts\\n\\nAffects all 4 state eval diagrams.",
+  "design": "",
+  "id": "se-c5b4a9dd",
+  "labels": [],
+  "notes": "",
+  "priority": 2,
+  "status": "open",
+  "title": "State: fix fill color palette to match mermaid.js reference",
+  "type": "bug",
+  "updated_at": "2026-01-29T16:39:25Z"
+}
