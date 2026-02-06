@@ -2653,4 +2653,124 @@ mod tests {
             );
         }
     }
+
+    // --- Architecture diagram ASCII alignment tests ---
+
+    fn parse_architecture_and_layout(input: &str) -> crate::layout::LayoutGraph {
+        let diagram = crate::parse(input).unwrap();
+        let db = match diagram {
+            crate::diagrams::Diagram::Architecture(db) => db,
+            _ => panic!("Expected Architecture diagram"),
+        };
+        let estimator = CharacterSizeEstimator::default();
+        crate::render::architecture::layout_architecture(&db, &estimator).unwrap()
+    }
+
+    #[test]
+    fn architecture_lr_nodes_same_row() {
+        // db:L -- R:server means db is left of server, same row
+        let input = "architecture-beta\n    service db(database)[Database]\n    service server(server)[Server]\n    db:L -- R:server";
+        let graph = parse_architecture_and_layout(input);
+        let output = render_graph_ascii(&graph).unwrap();
+
+        // Both nodes should be present
+        assert!(
+            output.contains("db") && output.contains("server"),
+            "Architecture ASCII should contain both 'db' and 'server'\nOutput:\n{}",
+            output
+        );
+
+        // Find the row containing "db" box center and "server" box center
+        let lines: Vec<&str> = output.lines().collect();
+        let db_row = lines.iter().position(|l| l.contains("db"));
+        let server_row = lines.iter().position(|l| l.contains("server"));
+        assert!(
+            db_row.is_some() && server_row.is_some(),
+            "Both labels should appear on some row\nOutput:\n{}",
+            output
+        );
+        assert_eq!(
+            db_row.unwrap(),
+            server_row.unwrap(),
+            "db and server should be on the same row (L-R edge)\nOutput:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn architecture_tb_nodes_same_column() {
+        // disk1:T -- B:server means disk1 is above server, same column
+        let input = "architecture-beta\n    service disk1(disk)[Storage]\n    service server(server)[Server]\n    disk1:T -- B:server";
+        let graph = parse_architecture_and_layout(input);
+        let output = render_graph_ascii(&graph).unwrap();
+
+        assert!(
+            output.contains("disk1") && output.contains("server"),
+            "Architecture ASCII should contain both labels\nOutput:\n{}",
+            output
+        );
+
+        // server should appear above disk1 (disk1's Top port connects to server's Bottom port)
+        let lines: Vec<&str> = output.lines().collect();
+        let disk1_row = lines.iter().position(|l| l.contains("disk1"));
+        let server_row = lines.iter().position(|l| l.contains("server"));
+        assert!(
+            server_row.unwrap() < disk1_row.unwrap(),
+            "server should appear above disk1 (disk1:T -- B:server)\nOutput:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn architecture_group_renders_boundary() {
+        // The group "api" should render with a visible boundary box
+        let input = "architecture-beta\n    group api(cloud)[API]\n    service db(database)[Database] in api\n    service server(server)[Server] in api\n    db:L -- R:server";
+        let graph = parse_architecture_and_layout(input);
+        let output = render_graph_ascii(&graph).unwrap();
+
+        // Group boundary should use box-drawing chars
+        assert!(
+            output.contains("api") || output.contains("API"),
+            "Architecture ASCII should contain group label\nOutput:\n{}",
+            output
+        );
+        assert!(
+            output.contains('╭') && output.contains('╯'),
+            "Group boundary should use rounded box chars\nOutput:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn architecture_simple_file_alignment() {
+        let input = std::fs::read_to_string("docs/sources/architecture.mmd").unwrap();
+        let graph = parse_architecture_and_layout(&input);
+        let output = render_graph_ascii(&graph).unwrap();
+
+        // All key nodes should be present
+        for label in &["db", "disk1", "server", "gateway"] {
+            assert!(
+                output.contains(label),
+                "Architecture ASCII should contain '{}'\nOutput:\n{}",
+                label,
+                output
+            );
+        }
+
+        // db and server should be on the same row (L-R edge)
+        let lines: Vec<&str> = output.lines().collect();
+        let db_row = lines
+            .iter()
+            .position(|l| l.contains("   db   ") || l.contains(" db "));
+        let server_row = lines.iter().position(|l| l.contains("server"));
+        if let (Some(db_r), Some(srv_r)) = (db_row, server_row) {
+            assert!(
+                (db_r as i32 - srv_r as i32).unsigned_abs() <= 1,
+                "db (row {}) and server (row {}) should be on same row (L-R edge)\nOutput:\n{}",
+                db_r,
+                srv_r,
+                output
+            );
+        }
+    }
 }

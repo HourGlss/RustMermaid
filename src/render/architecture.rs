@@ -7,7 +7,7 @@ use crate::diagrams::architecture::{
 };
 use crate::error::Result;
 use crate::layout::{
-    LayoutDirection, LayoutEdge, LayoutGraph, LayoutNode, LayoutOptions, NodeShape, Padding,
+    LayoutDirection, LayoutEdge, LayoutGraph, LayoutNode, LayoutOptions, NodeShape, Padding, Point,
     SizeEstimator, ToLayoutGraph,
 };
 
@@ -210,7 +210,171 @@ fn apply_architecture_layout(db: &ArchitectureDb, graph: &mut LayoutGraph) {
         }
     }
 
+    route_architecture_edges(db, graph);
+
     graph.compute_bounds();
+}
+
+/// Compute bend_points for each architecture edge so the ASCII renderer can
+/// draw braille lines.  Uses the same port / bend logic as the SVG renderer.
+fn route_architecture_edges(_db: &ArchitectureDb, graph: &mut LayoutGraph) {
+    // Build a lookup from edge metadata to the original ArchitectureEdge so we
+    // can read lhs_dir / rhs_dir / group flags.
+    for layout_edge in &mut graph.edges {
+        let lhs_dir_str = layout_edge.metadata.get("lhs_dir").cloned();
+        let rhs_dir_str = layout_edge.metadata.get("rhs_dir").cloned();
+        let lhs_group = layout_edge
+            .metadata
+            .get("lhs_group")
+            .map(|v| v == "true")
+            .unwrap_or(false);
+        let rhs_group = layout_edge
+            .metadata
+            .get("rhs_group")
+            .map(|v| v == "true")
+            .unwrap_or(false);
+
+        let lhs_dir = lhs_dir_str
+            .as_deref()
+            .and_then(|s| s.chars().next())
+            .and_then(ArchitectureDirection::from_char);
+        let rhs_dir = rhs_dir_str
+            .as_deref()
+            .and_then(|s| s.chars().next())
+            .and_then(ArchitectureDirection::from_char);
+
+        let (Some(lhs_dir), Some(rhs_dir)) = (lhs_dir, rhs_dir) else {
+            continue;
+        };
+
+        let source_id = layout_edge.sources.first().cloned();
+        let target_id = layout_edge.targets.first().cloned();
+        let (Some(source_id), Some(target_id)) = (source_id, target_id) else {
+            continue;
+        };
+
+        let source_node = graph.nodes.iter().find(|n| n.id == source_id);
+        let target_node = graph.nodes.iter().find(|n| n.id == target_id);
+        let (Some(source_node), Some(target_node)) = (source_node, target_node) else {
+            continue;
+        };
+
+        let start = node_port(source_node, lhs_dir);
+        let end = node_port(target_node, rhs_dir);
+        let (Some(mut start), Some(mut end)) = (start, end) else {
+            continue;
+        };
+
+        // Shift for group boundary edges
+        let group_edge_shift = ARCH_PADDING + 4.0;
+        if lhs_group {
+            if lhs_dir.is_x() {
+                start.x += if lhs_dir == ArchitectureDirection::Left {
+                    -group_edge_shift
+                } else {
+                    group_edge_shift
+                };
+            } else {
+                start.y += if lhs_dir == ArchitectureDirection::Top {
+                    -group_edge_shift
+                } else {
+                    group_edge_shift + ARCH_EDGE_GROUP_LABEL_SHIFT
+                };
+            }
+        }
+        if rhs_group {
+            if rhs_dir.is_x() {
+                end.x += if rhs_dir == ArchitectureDirection::Left {
+                    -group_edge_shift
+                } else {
+                    group_edge_shift
+                };
+            } else {
+                end.y += if rhs_dir == ArchitectureDirection::Top {
+                    -group_edge_shift
+                } else {
+                    group_edge_shift + ARCH_EDGE_GROUP_LABEL_SHIFT
+                };
+            }
+        }
+
+        // Shrink junction ports inward
+        let half_icon = ARCH_ICON_SIZE / 2.0;
+        let is_source_junction = source_node
+            .metadata
+            .get("node_type")
+            .map(|v| v == "junction")
+            .unwrap_or(false);
+        let is_target_junction = target_node
+            .metadata
+            .get("node_type")
+            .map(|v| v == "junction")
+            .unwrap_or(false);
+        if !lhs_group && is_source_junction {
+            if lhs_dir.is_x() {
+                start.x += if lhs_dir == ArchitectureDirection::Left {
+                    half_icon
+                } else {
+                    -half_icon
+                };
+            } else {
+                start.y += if lhs_dir == ArchitectureDirection::Top {
+                    half_icon
+                } else {
+                    -half_icon
+                };
+            }
+        }
+        if !rhs_group && is_target_junction {
+            if rhs_dir.is_x() {
+                end.x += if rhs_dir == ArchitectureDirection::Left {
+                    half_icon
+                } else {
+                    -half_icon
+                };
+            } else {
+                end.y += if rhs_dir == ArchitectureDirection::Top {
+                    half_icon
+                } else {
+                    -half_icon
+                };
+            }
+        }
+
+        // Compute bend points
+        let is_cross_axis =
+            (lhs_dir.is_x() && rhs_dir.is_y()) || (lhs_dir.is_y() && rhs_dir.is_x());
+        let points = if is_cross_axis {
+            let bend = if lhs_dir.is_y() {
+                Point::new(start.x, end.y)
+            } else {
+                Point::new(end.x, start.y)
+            };
+            vec![start, bend, end]
+        } else {
+            vec![start, end]
+        };
+
+        // Set label position at midpoint of path
+        if layout_edge.label.is_some() && points.len() >= 2 {
+            layout_edge.label_position = crate::layout::geometric_midpoint(&points);
+        }
+
+        layout_edge.bend_points = points;
+    }
+}
+
+/// Get the port position on a node for a given direction.
+fn node_port(node: &LayoutNode, dir: ArchitectureDirection) -> Option<Point> {
+    let (x, y) = (node.x?, node.y?);
+    let w = node.width;
+    let h = node.height;
+    Some(match dir {
+        ArchitectureDirection::Left => Point::new(x, y + h / 2.0),
+        ArchitectureDirection::Right => Point::new(x + w, y + h / 2.0),
+        ArchitectureDirection::Top => Point::new(x + w / 2.0, y),
+        ArchitectureDirection::Bottom => Point::new(x + w / 2.0, y + h),
+    })
 }
 
 fn apply_overlap_jitter(

@@ -231,8 +231,7 @@ pub fn render_ascii_with_config(
             Ok(ascii::render_er_ascii(db, &graph)?)
         }
         Diagram::Architecture(db) => {
-            let graph = db.to_layout_graph(&estimator)?;
-            let graph = layout::layout(graph)?;
+            let graph = architecture::layout_architecture(db, &estimator)?;
             Ok(ascii::render_graph_ascii_with_config(&graph, config)?)
         }
         Diagram::Requirement(db) => {
