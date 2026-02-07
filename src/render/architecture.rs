@@ -259,8 +259,8 @@ fn route_architecture_edges(_db: &ArchitectureDb, graph: &mut LayoutGraph) {
             continue;
         };
 
-        let start = node_port(source_node, lhs_dir);
-        let end = node_port(target_node, rhs_dir);
+        let start = architecture_node_port(source_node, lhs_dir);
+        let end = architecture_node_port(target_node, rhs_dir);
         let (Some(mut start), Some(mut end)) = (start, end) else {
             continue;
         };
@@ -341,19 +341,8 @@ fn route_architecture_edges(_db: &ArchitectureDb, graph: &mut LayoutGraph) {
             }
         }
 
-        // Compute bend points
-        let is_cross_axis =
-            (lhs_dir.is_x() && rhs_dir.is_y()) || (lhs_dir.is_y() && rhs_dir.is_x());
-        let points = if is_cross_axis {
-            let bend = if lhs_dir.is_y() {
-                Point::new(start.x, end.y)
-            } else {
-                Point::new(end.x, start.y)
-            };
-            vec![start, bend, end]
-        } else {
-            vec![start, end]
-        };
+        // Compute bend points using the shared edge-point function
+        let points = architecture_edge_points(start, end, lhs_dir, rhs_dir);
 
         // Set label position at midpoint of path
         if layout_edge.label.is_some() && points.len() >= 2 {
@@ -365,7 +354,10 @@ fn route_architecture_edges(_db: &ArchitectureDb, graph: &mut LayoutGraph) {
 }
 
 /// Get the port position on a node for a given direction.
-fn node_port(node: &LayoutNode, dir: ArchitectureDirection) -> Option<Point> {
+///
+/// Used by both the SVG and ASCII renderers to determine where edges
+/// attach to a node's bounding box.
+pub fn architecture_node_port(node: &LayoutNode, dir: ArchitectureDirection) -> Option<Point> {
     let (x, y) = (node.x?, node.y?);
     let w = node.width;
     let h = node.height;
@@ -375,6 +367,30 @@ fn node_port(node: &LayoutNode, dir: ArchitectureDirection) -> Option<Point> {
         ArchitectureDirection::Top => Point::new(x + w / 2.0, y),
         ArchitectureDirection::Bottom => Point::new(x + w / 2.0, y + h),
     })
+}
+
+/// Compute bend points for an architecture edge between two ports.
+///
+/// For same-axis connections (both horizontal or both vertical), returns a
+/// straight line. For cross-axis connections, returns an L-shaped bend.
+pub fn architecture_edge_points(
+    start: Point,
+    end: Point,
+    source_dir: ArchitectureDirection,
+    target_dir: ArchitectureDirection,
+) -> Vec<Point> {
+    let is_cross_axis =
+        (source_dir.is_x() && target_dir.is_y()) || (source_dir.is_y() && target_dir.is_x());
+    if is_cross_axis {
+        let bend = if source_dir.is_y() {
+            Point::new(start.x, end.y)
+        } else {
+            Point::new(end.x, start.y)
+        };
+        vec![start, bend, end]
+    } else {
+        vec![start, end]
+    }
 }
 
 fn apply_overlap_jitter(

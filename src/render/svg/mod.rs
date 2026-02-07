@@ -20,8 +20,8 @@ use crate::diagrams::flowchart::{FlowSubGraph, FlowchartDb};
 use crate::error::Result;
 use crate::layout::{LayoutGraph, LayoutNode, Point};
 use crate::render::architecture::{
-    ARCH_EDGE_GROUP_LABEL_SHIFT, ARCH_FONT_SIZE, ARCH_GROUP_ICON_SCALE, ARCH_ICON_SIZE,
-    ARCH_LABEL_HEIGHT, ARCH_PADDING,
+    architecture_edge_points, architecture_node_port, ARCH_EDGE_GROUP_LABEL_SHIFT, ARCH_FONT_SIZE,
+    ARCH_GROUP_ICON_SCALE, ARCH_ICON_SIZE, ARCH_LABEL_HEIGHT, ARCH_PADDING,
 };
 
 /// Configuration for SVG rendering
@@ -746,37 +746,6 @@ fn is_junction_node(db: &ArchitectureDb, node: &LayoutNode, id: &str) -> bool {
     db.get_junctions().iter().any(|junction| junction.id == id)
 }
 
-fn architecture_node_port(node: &LayoutNode, dir: ArchitectureDirection) -> Option<Point> {
-    let (x, y) = (node.x?, node.y?);
-    let w = node.width;
-    let h = node.height;
-    let point = match dir {
-        ArchitectureDirection::Left => Point::new(x, y + h / 2.0),
-        ArchitectureDirection::Right => Point::new(x + w, y + h / 2.0),
-        ArchitectureDirection::Top => Point::new(x + w / 2.0, y),
-        ArchitectureDirection::Bottom => Point::new(x + w / 2.0, y + h),
-    };
-    Some(point)
-}
-
-fn architecture_edge_points(
-    start: Point,
-    end: Point,
-    source_dir: ArchitectureDirection,
-    target_dir: ArchitectureDirection,
-) -> Vec<Point> {
-    if is_architecture_direction_xy(source_dir, target_dir) {
-        let bend = if source_dir.is_y() {
-            Point::new(start.x, end.y)
-        } else {
-            Point::new(end.x, start.y)
-        };
-        vec![start, bend, end]
-    } else {
-        vec![start, end]
-    }
-}
-
 fn build_architecture_path(points: &[Point]) -> String {
     let mut d = String::new();
     if let Some(first) = points.first() {
@@ -858,10 +827,6 @@ fn architecture_xy_label_angle(
     } else {
         45.0
     }
-}
-
-fn is_architecture_direction_xy(a: ArchitectureDirection, b: ArchitectureDirection) -> bool {
-    (a.is_x() && b.is_y()) || (a.is_y() && b.is_x())
 }
 
 fn architecture_text_markup(text: &str) -> String {
