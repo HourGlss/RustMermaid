@@ -33,11 +33,25 @@ const SUBGRAPH_TITLES: FamilyDefinition = FamilyDefinition {
     description: "Reference flowcharts contain subgraph titles that Selkie omitted.",
 };
 
+const SUBGRAPH_ENDPOINTS: FamilyDefinition = FamilyDefinition {
+    family: "flow_subgraph_endpoints",
+    spec_id: "FLOW-1.5",
+    title: "Subgraph endpoint routing",
+    description: "Flowchart edges to subgraph IDs render duplicate ordinary nodes instead of attaching to the subgraph container.",
+};
+
 const EDGE_LABELS: FamilyDefinition = FamilyDefinition {
     family: "flow_edge_labels",
     spec_id: "FLOW-2.3",
     title: "Visible edge labels",
     description: "Reference flowcharts contain edge labels that Selkie omitted.",
+};
+
+const LABEL_MARKUP: FamilyDefinition = FamilyDefinition {
+    family: "flow_label_markup",
+    spec_id: "FLOW-2.4",
+    title: "Visible label markup normalization",
+    description: "Flowchart labels expose raw HTML tags, double-escaped entities, or unnormalized Mermaid escapes instead of Mermaid-visible text.",
 };
 
 const ORIENTATION: FamilyDefinition = FamilyDefinition {
@@ -77,9 +91,11 @@ pub fn classify_failure_families(diagrams: &[DiagramResult]) -> Vec<FailureFamil
                 "labels_missing" if missing_subgraph_title(diagram, &issue.message) => {
                     Some(&SUBGRAPH_TITLES)
                 }
+                "node_count" if has_subgraph_edge_endpoint(diagram) => Some(&SUBGRAPH_ENDPOINTS),
                 "labels_missing" if missing_edge_label(diagram, &issue.message) => {
                     Some(&EDGE_LABELS)
                 }
+                "label_markup_artifacts" => Some(&LABEL_MARKUP),
                 "aspect_ratio" => Some(&ORIENTATION),
                 "dimensions" => Some(&LAYOUT_SIZING),
                 "edge_positions" | "edge_attachment_sides" => Some(&EDGE_ROUTING),
@@ -157,6 +173,45 @@ fn subgraph_titles(source: &str) -> Vec<String> {
             let line = line.trim();
             let rest = line.strip_prefix("subgraph ")?;
             Some(extract_subgraph_title(rest.trim()))
+        })
+        .collect()
+}
+
+fn has_subgraph_edge_endpoint(diagram: &DiagramResult) -> bool {
+    let Some(source) = diagram.diagram_text.as_deref() else {
+        return false;
+    };
+    let ids = subgraph_ids(source);
+    if ids.is_empty() {
+        return false;
+    }
+
+    source.lines().any(|line| {
+        let line = line.trim();
+        ids.iter().any(|id| {
+            (line.starts_with(id) && line.contains("--"))
+                || (line.contains("--") && line.ends_with(id))
+                || line.contains(&format!(" {id}"))
+                || line.contains(&format!("{id} "))
+        })
+    })
+}
+
+fn subgraph_ids(source: &str) -> Vec<String> {
+    source
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            let rest = line.strip_prefix("subgraph ")?;
+            let rest = rest.trim();
+            if rest.starts_with('"') {
+                return None;
+            }
+            let id_end = rest
+                .find(|c: char| c.is_whitespace() || c == '[')
+                .unwrap_or(rest.len());
+            let id = rest[..id_end].trim();
+            (!id.is_empty()).then(|| id.to_string())
         })
         .collect()
 }
@@ -261,6 +316,31 @@ end"#,
     }
 
     #[test]
+    /// Groups subgraph endpoint duplicate-node failures under FLOW-1.5.
+    fn groups_subgraph_endpoint_node_count_under_flow_requirement() {
+        let diagrams = vec![diagram(
+            "subgraph_endpoint",
+            r#"flowchart TB
+subgraph Group["Grouped Nodes"]
+    A[Node A]
+end
+Group --> B[Node B]"#,
+            vec![Issue::error(
+                "node_count",
+                "Node count mismatch: expected 2, got 3",
+            )],
+        )];
+
+        let families = classify_failure_families(&diagrams);
+
+        assert_eq!(families.len(), 1);
+        assert_eq!(families[0].family, "flow_subgraph_endpoints");
+        assert_eq!(families[0].spec_id, "FLOW-1.5");
+        assert_eq!(families[0].diagram_count, 1);
+        assert_eq!(families[0].issue_count, 1);
+    }
+
+    #[test]
     /// @spec FLOW-2.3: When Mermaid renders a flowchart edge label as layout text, the eval report shall group missing edge-label text under the edge label visibility requirement.
     fn groups_missing_edge_labels_under_flow_requirement() {
         let diagrams = vec![diagram(
@@ -280,6 +360,28 @@ end"#,
         assert_eq!(families[0].diagram_count, 1);
         assert_eq!(families[0].issue_count, 1);
         assert_eq!(families[0].diagrams, vec!["edge_label"]);
+    }
+
+    #[test]
+    /// Groups visible label markup normalization failures under FLOW-2.4.
+    fn groups_label_markup_artifacts_under_flow_requirement() {
+        let diagrams = vec![diagram(
+            "label_markup",
+            "flowchart LR\nA[\"Vec&lt;Effect&gt;\"] --> B[Some<b>2</b>]",
+            vec![Issue::error(
+                "label_markup_artifacts",
+                r#"Label text contains raw markup or double-escaped HTML entities: ["Vec&lt;Effect&gt;", "Some<b>2</b>"]"#,
+            )],
+        )];
+
+        let families = classify_failure_families(&diagrams);
+
+        assert_eq!(families.len(), 1);
+        assert_eq!(families[0].family, "flow_label_markup");
+        assert_eq!(families[0].spec_id, "FLOW-2.4");
+        assert_eq!(families[0].diagram_count, 1);
+        assert_eq!(families[0].issue_count, 1);
+        assert_eq!(families[0].diagrams, vec!["label_markup"]);
     }
 
     #[test]

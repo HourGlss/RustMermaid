@@ -507,7 +507,7 @@ impl SvgElement {
                 content,
                 attrs,
             } => {
-                let normalized = crate::render::text_utils::normalize_br_tags(content);
+                let normalized = crate::render::text_utils::normalize_mermaid_label_markup(content);
                 if normalized.contains('\n') {
                     let lines: Vec<&str> = normalized.split('\n').collect();
                     let num_lines = lines.len();

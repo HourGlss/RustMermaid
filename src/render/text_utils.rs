@@ -12,6 +12,50 @@ pub(crate) fn normalize_br_tags(text: &str) -> String {
         .replace("<br>", "\n")
 }
 
+/// Normalize Mermaid label markup into the visible text Selkie should emit.
+///
+/// Mermaid's HTML-label path treats `<br/>` as a line break, lets simple inline
+/// formatting tags contribute only their inner text, and decodes common HTML
+/// entities such as `&lt;` before the SVG/XML layer escapes the final text.
+pub(crate) fn normalize_mermaid_label_markup(text: &str) -> String {
+    let with_breaks = normalize_br_tags(text);
+    let without_formatting = strip_inline_formatting_tags(&with_breaks);
+    let decoded = decode_basic_html_entities(&without_formatting);
+    decode_mermaid_escapes(&decoded)
+}
+
+fn strip_inline_formatting_tags(text: &str) -> String {
+    const TAGS: &[&str] = &[
+        "<b>",
+        "</b>",
+        "<strong>",
+        "</strong>",
+        "<em>",
+        "</em>",
+        "<i>",
+        "</i>",
+    ];
+
+    let mut result = text.to_string();
+    for tag in TAGS {
+        result = result.replace(tag, "");
+    }
+    result
+}
+
+fn decode_basic_html_entities(text: &str) -> String {
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
+fn decode_mermaid_escapes(text: &str) -> String {
+    text.replace("\\\\", "\\")
+}
+
 /// Estimate text width in pixels using per-character weight classes.
 ///
 /// Approximates browser rendering of proportional fonts (e.g. Trebuchet MS)
@@ -109,6 +153,31 @@ mod tests {
     #[test]
     fn normalize_br_tags_empty_string() {
         assert_eq!(normalize_br_tags(""), "");
+    }
+
+    #[test]
+    fn normalize_mermaid_label_markup_decodes_entities_after_removing_tags() {
+        assert_eq!(
+            normalize_mermaid_label_markup("Vec&lt;Effect&gt;"),
+            "Vec<Effect>"
+        );
+        assert_eq!(normalize_mermaid_label_markup("Some<b>2</b>"), "Some2");
+    }
+
+    #[test]
+    fn normalize_mermaid_label_markup_converts_br_before_removing_tags() {
+        assert_eq!(
+            normalize_mermaid_label_markup("Line 1<br/>Line <b>2</b>"),
+            "Line 1\nLine 2"
+        );
+    }
+
+    #[test]
+    fn normalize_mermaid_label_markup_decodes_literal_backslash_escape() {
+        assert_eq!(
+            normalize_mermaid_label_markup(r"join with \\n"),
+            r"join with \n"
+        );
     }
 
     // ── estimate_text_width ──────────────────────────────────────────

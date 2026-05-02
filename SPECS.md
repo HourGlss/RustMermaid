@@ -14,25 +14,31 @@ Source: `src/diagrams/flowchart/parser.rs:767`
 
 When a subgraph declares its own direction, the application shall preserve that direction without changing the parent flowchart direction.
 
-Source: `src/render/flowchart.rs:392`
+Source: `src/render/flowchart.rs:398`
 
 ### FLOW-1.3
 
 When a flowchart contains subgraph member nodes, the application shall preserve parent-child relationships in the layout graph.
 
-Source: `src/render/flowchart.rs:187`
+Source: `src/render/flowchart.rs:193`
 
 ### FLOW-1.4
 
 When a rendered flowchart reference contains subgraph titles that Selkie omits, the eval report shall group the failures under the visible subgraph titles requirement.
 
-Source: `src/eval/failure_families.rs:239`
+Source: `src/eval/failure_families.rs:294`
+
+### FLOW-1.5
+
+When a flowchart edge uses a subgraph ID as an endpoint, the application shall route the edge to the subgraph container without rendering a duplicate node for that subgraph ID.
+
+Source: `tests/render_integration.rs:471`
 
 ### FLOW-2.1
 
 When a flowchart edge has a Mermaid label, the application shall preserve that label in the layout graph edge model.
 
-Source: `src/render/flowchart.rs:259`
+Source: `src/render/flowchart.rs:265`
 
 ### FLOW-2.2
 
@@ -44,31 +50,37 @@ Source: `tests/flowchart_edge_label_truncation.rs:3`
 
 When Mermaid renders a flowchart edge label as layout text, the eval report shall group missing edge-label text under the edge label visibility requirement.
 
-Source: `src/eval/failure_families.rs:264`
+Source: `src/eval/failure_families.rs:344`
+
+### FLOW-2.4
+
+When Selkie renders flowchart label text with raw HTML tags, double-escaped entities, or unnormalized Mermaid escapes, the eval report shall flag the label as a visible markup artifact.
+
+Source: `src/eval/checks.rs:2977`
 
 ### FLOW-3.1
 
 When a flowchart edge is rendered to SVG, the application shall emit an SVG path for the edge route.
 
-Source: `src/render/flowchart.rs:352`
+Source: `src/render/flowchart.rs:358`
 
 ### FLOW-3.2
 
 When a flowchart's major rendered orientation differs from Mermaid, the eval report shall group the failure under the orientation preservation requirement.
 
-Source: `src/eval/failure_families.rs:286`
+Source: `src/eval/failure_families.rs:388`
 
 ### FLOW-3.3
 
 When flowchart edge routes differ from Mermaid, the eval report shall group the failure under the edge routing preservation requirement.
 
-Source: `src/eval/failure_families.rs:287`
+Source: `src/eval/failure_families.rs:389`
 
 ### FLOW-3.4
 
 When Mermaid lays out a flowchart with direction and node/rank spacing, the eval report shall group dimension drift under the layout sizing requirement.
 
-Source: `src/eval/failure_families.rs:312`
+Source: `src/eval/failure_families.rs:414`
 
 ### FLOW-4.1
 
@@ -80,4 +92,4 @@ Source: `src/diagrams/flowchart/parser.rs:1895`
 
 When flowchart styling differs from Mermaid stroke or color behavior, the eval report shall group the failure under the visual styling requirement.
 
-Source: `src/eval/failure_families.rs:333`
+Source: `src/eval/failure_families.rs:435`

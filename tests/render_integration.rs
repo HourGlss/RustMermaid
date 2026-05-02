@@ -468,6 +468,31 @@ fn flowchart_subgraph_with_predeclared_nodes_renders_cluster_label() {
 }
 
 #[test]
+/// @spec FLOW-1.5: When a flowchart edge uses a subgraph ID as an endpoint, the application shall route the edge to the subgraph container without rendering a duplicate node for that subgraph ID.
+fn flowchart_subgraph_endpoint_does_not_render_duplicate_node() {
+    let input = r#"flowchart TB
+    subgraph Group["Grouped Nodes"]
+        A[Node A]
+    end
+    Group --> B[Node B]
+"#;
+
+    let diagram = parse(input).expect("Failed to parse subgraph endpoint flowchart");
+    let svg = render(&diagram).expect("Failed to render subgraph endpoint flowchart");
+
+    assert!(
+        !svg.contains(r#"id="node-Group""#),
+        "Subgraph endpoint should not render a duplicate ordinary node. SVG:\n{}",
+        svg
+    );
+    assert!(
+        svg.contains("Grouped Nodes"),
+        "Subgraph container title should still render. SVG:\n{}",
+        svg
+    );
+}
+
+#[test]
 fn test_arrow_markers_are_defined() {
     let input = r#"flowchart LR
     A --> B"#;

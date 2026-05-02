@@ -263,7 +263,11 @@ pub fn render_shape(
     };
 
     // Create label with contrasting text color when custom styles are present
-    let label_text = vertex.text.as_deref().unwrap_or(&node.id);
+    let label_text = vertex
+        .text
+        .as_deref()
+        .map(crate::render::text_utils::normalize_mermaid_label_markup)
+        .unwrap_or_else(|| node.id.clone());
     let mut label_attrs = Attrs::new()
         .with_class("label")
         .with_attr("text-anchor", "middle")

@@ -139,6 +139,13 @@ impl SvgRenderer {
             if node.is_dummy {
                 continue;
             }
+            if node
+                .metadata
+                .get("is_group")
+                .is_some_and(|value| value == "true")
+            {
+                continue;
+            }
 
             // Get the original vertex info
             if let Some(vertex) = db.vertices().get(&node.id) {

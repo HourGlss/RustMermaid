@@ -1,6 +1,6 @@
 //! Flowchart adapter for layout
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::diagrams::flowchart::{Direction, FlowVertexType, FlowchartDb};
 use crate::error::Result;
@@ -26,6 +26,8 @@ impl ToLayoutGraph for FlowchartDb {
 
         // Build map of node_id -> subgraph_id for setting parent relationships
         let mut node_to_subgraph: HashMap<&str, &str> = HashMap::new();
+        let subgraph_ids: HashSet<&str> =
+            self.subgraphs().iter().map(|sg| sg.id.as_str()).collect();
         for subgraph in self.subgraphs() {
             for node_id in &subgraph.nodes {
                 node_to_subgraph.insert(node_id.as_str(), subgraph.id.as_str());
@@ -61,6 +63,10 @@ impl ToLayoutGraph for FlowchartDb {
         let mut vertex_ids: Vec<&String> = self.vertices().keys().collect();
         vertex_ids.sort();
         for id in vertex_ids {
+            if subgraph_ids.contains(id.as_str()) {
+                continue;
+            }
+
             let vertex = self.vertices().get(id).unwrap();
             let shape = vertex
                 .vertex_type

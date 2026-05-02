@@ -45,6 +45,7 @@ pub fn check_structure(
     check_node_count(selkie, reference, &mut issues);
     check_edge_count(selkie, reference, &mut issues);
     check_missing_labels(selkie, reference, &mut issues);
+    check_label_markup_artifacts(selkie, &mut issues);
 
     // WARNING checks - significant differences
     check_dimensions(selkie, reference, config, &mut issues);
@@ -449,6 +450,46 @@ fn check_extra_labels(selkie: &SvgStructure, reference: &SvgStructure, issues: &
             format!("Extra labels in selkie: {:?}", extra),
         ));
     }
+}
+
+/// Check for user-visible markup/entity artifacts in labels.
+fn check_label_markup_artifacts(selkie: &SvgStructure, issues: &mut Vec<Issue>) {
+    let artifact_labels: Vec<_> = selkie
+        .labels
+        .iter()
+        .filter(|label| has_label_markup_artifact(label))
+        .cloned()
+        .collect();
+
+    if !artifact_labels.is_empty() {
+        issues.push(
+            Issue::error(
+                "label_markup_artifacts",
+                format!(
+                    "Label text contains raw markup, double-escaped HTML entities, or unnormalized Mermaid escapes: {:?}",
+                    artifact_labels
+                ),
+            )
+            .with_values("clean visible text".to_string(), format!("{artifact_labels:?}")),
+        );
+    }
+}
+
+fn has_label_markup_artifact(label: &str) -> bool {
+    let lower = label.to_ascii_lowercase();
+    lower.contains("&lt;")
+        || lower.contains("&gt;")
+        || lower.contains("&amp;lt;")
+        || lower.contains("&amp;gt;")
+        || lower.contains("<br")
+        || lower.contains("</br")
+        || lower.contains("<b>")
+        || lower.contains("</b>")
+        || lower.contains("<strong>")
+        || lower.contains("</strong>")
+        || lower.contains("<em>")
+        || lower.contains("</em>")
+        || label.contains("\\\\n")
 }
 
 /// Check dimensions - WARNING if >20% off, INFO if >5% off
@@ -2929,6 +2970,35 @@ mod tests {
         assert!(
             has_missing_label_error,
             "Should have error for missing labels"
+        );
+    }
+
+    #[test]
+    /// @spec FLOW-2.4: When Selkie renders flowchart label text with raw HTML tags, double-escaped entities, or unnormalized Mermaid escapes, the eval report shall flag the label as a visible markup artifact.
+    fn flags_visible_label_markup_artifacts() {
+        let selkie = make_structure(
+            3,
+            2,
+            vec![
+                "A",
+                "Vec&lt;Effect&gt;",
+                "Status <b>bold</b>",
+                "join with \\\\n",
+            ],
+        );
+        let reference = make_structure(
+            3,
+            2,
+            vec!["A", "Vec<Effect>", "Status bold", "join with \\n"],
+        );
+
+        let issues = check_structure(&selkie, &reference, &CheckConfig::default());
+
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.level == Level::Error && i.check == "label_markup_artifacts"),
+            "Should have error for visible label markup artifacts: {issues:?}"
         );
     }
 

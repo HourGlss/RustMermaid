@@ -75,7 +75,7 @@ pub fn render_edge_parts(
             let char_width_ratio = 0.6;
 
             // Handle multiline text (split by <br> or newlines)
-            let text = crate::render::text_utils::normalize_br_tags(&flow_edge.text);
+            let text = crate::render::text_utils::normalize_mermaid_label_markup(&flow_edge.text);
             let lines: Vec<&str> = text.lines().collect();
             let max_chars = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
             let num_lines = lines.len().max(1);
@@ -101,9 +101,8 @@ pub fn render_edge_parts(
                 .with_attr("text-anchor", "middle")
                 .with_attr("dominant-baseline", "central");
 
-            label_elements.push(
-                SvgElement::text(label_pos.x, label_pos.y, &flow_edge.text).with_attrs(label_attrs),
-            );
+            label_elements
+                .push(SvgElement::text(label_pos.x, label_pos.y, text).with_attrs(label_attrs));
 
             let group_attrs = Attrs::new()
                 .with_class("edgeLabel")
