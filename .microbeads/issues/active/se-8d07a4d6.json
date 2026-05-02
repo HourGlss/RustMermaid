@@ -1,0 +1,21 @@
+{
+  "acceptance_criteria": "Eval report groups flowchart failures by requirement/failure family; top families are summarized across the corpus; new FLOW-* requirements cover at least subgraph title visibility and orientation preservation",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-05-02T02:03:17Z",
+  "dependencies": [],
+  "description": "Add deterministic flowchart eval clustering that maps failures such as missing subgraph labels, aspect-ratio/orientation mismatches, edge-position deltas, and style mismatches to FLOW-* compatibility requirements before adding optional image triage.",
+  "design": "",
+  "id": "se-8d07a4d6",
+  "labels": [
+    "eval",
+    "specs",
+    "flowchart"
+  ],
+  "notes": "",
+  "priority": 1,
+  "status": "open",
+  "title": "Expand FLOW specs into eval failure families",
+  "type": "task",
+  "updated_at": "2026-05-02T02:03:17Z"
+}
