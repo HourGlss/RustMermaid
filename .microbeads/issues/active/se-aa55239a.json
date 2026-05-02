@@ -1,0 +1,36 @@
+{
+  "acceptance_criteria": "Eval overlap checks and sequence rendering tests both use the shared SequenceGeometry helper; no sequence_overlap findings in latest sequence eval report.",
+  "claimed_at": "2026-05-02T00:53:09Z",
+  "claimed_by": "fix-issue-202",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-05-02T00:53:05Z",
+  "dependencies": [],
+  "description": "Remove duplicated sequence SVG geometry parsing between eval overlap checks and sequence rendering tests. Implemented on branch fix-issue-202 with shared render::svg::sequence_geometry helper.",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-05-02T00:53:09Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    },
+    {
+      "at": "2026-05-02T00:53:09Z",
+      "field": "claimed_by",
+      "new": "fix-issue-202",
+      "old": null
+    }
+  ],
+  "id": "se-aa55239a",
+  "labels": [
+    "eval",
+    "renderer"
+  ],
+  "notes": "",
+  "priority": 3,
+  "status": "in_progress",
+  "title": "sequence: share SVG geometry helpers",
+  "type": "chore",
+  "updated_at": "2026-05-02T00:53:09Z"
+}

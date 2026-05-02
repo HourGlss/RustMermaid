@@ -2,8 +2,8 @@
   "acceptance_criteria": "",
   "claimed_at": "2026-05-02T00:08:18Z",
   "claimed_by": "fix-issue-202",
-  "closed_at": "2026-05-02T00:52:22Z",
-  "closed_reason": "",
+  "closed_at": null,
+  "closed_reason": null,
   "created_at": "2026-01-23T14:35:37Z",
   "dependencies": [],
   "description": "sequence sample shows multiple warnings:\n- dimensions: SVG size differs (650x357 vs 1041x484)\n- edge_count: expected 0, got 4\n- node_count: expected 0, got 4\n- path count: expected 25, got 5 (80% missing)\n- rect count: expected 10, got 4 (60% missing)\n- text count: expected 18, got 4 (78% missing)\n\nVisual similarity: 10.7%, structural: 73.0%. Most elements are missing or incorrect. Check src/diagrams/sequence/ against reference.",
@@ -38,6 +38,12 @@
       "field": "status",
       "new": "closed",
       "old": "in_progress"
+    },
+    {
+      "at": "2026-05-02T00:53:04Z",
+      "field": "status",
+      "new": "open",
+      "old": "closed"
     }
   ],
   "id": "se-d9bc527b",
@@ -47,8 +53,8 @@
   ],
   "notes": "Fixed z-order issue: Fragment label shapes (polygons) now render in clusters layer before edgeLabels. Warnings reduced from 33 to 29.",
   "priority": 1,
-  "status": "closed",
+  "status": "open",
   "title": "sequence: Multiple rendering issues",
   "type": "bug",
-  "updated_at": "2026-05-02T00:52:22Z"
+  "updated_at": "2026-05-02T00:53:04Z"
 }
