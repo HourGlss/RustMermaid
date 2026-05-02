@@ -184,6 +184,7 @@ mod tests {
     }
 
     #[test]
+    /// @spec FLOW-1.3: When a flowchart contains subgraph member nodes, the application shall preserve parent-child relationships in the layout graph.
     fn test_compound_graph_structure() {
         use crate::diagrams::flowchart::parse;
         use crate::layout;
@@ -255,6 +256,7 @@ mod tests {
     }
 
     #[test]
+    /// @spec FLOW-2.1: When a flowchart edge has a Mermaid label, the application shall preserve that label in the layout graph edge model.
     fn test_edge_labels() {
         let mut db = FlowchartDb::new();
         db.add_vertex_simple("A", Some("Start"), None);
@@ -347,6 +349,7 @@ mod tests {
     }
 
     #[test]
+    /// @spec FLOW-3.1: When a flowchart edge is rendered to SVG, the application shall emit an SVG path for the edge route.
     fn test_flowchart_svg_has_edge_path() {
         use crate::diagrams::Diagram;
         use crate::render;
@@ -386,6 +389,7 @@ mod tests {
     }
 
     #[test]
+    /// @spec FLOW-1.2: When a subgraph declares its own direction, the application shall preserve that direction without changing the parent flowchart direction.
     fn test_subgraph_with_different_direction_end_to_end() {
         use crate::diagrams::flowchart::parse;
         use crate::layout;

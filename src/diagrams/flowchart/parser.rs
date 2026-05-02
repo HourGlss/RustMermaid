@@ -730,6 +730,7 @@ mod tests {
     }
 
     #[test]
+    /// @spec FLOW-1.1: When a flowchart declares a named subgraph, the application shall preserve the subgraph title text in the parsed model.
     fn test_parse_subgraph() {
         let input = r#"flowchart LR
 subgraph sub1[Title]
@@ -1857,6 +1858,7 @@ A[\LeanLeft\]"#;
         }
 
         #[test]
+        /// @spec FLOW-4.1: When a Mermaid flowchart applies a class to nodes, the application shall preserve the class assignment in the parsed node model.
         fn test_cypress_style_nodes_via_class() {
             // From Cypress test 5: should style nodes via a class
             let input = r#"graph TD
