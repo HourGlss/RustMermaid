@@ -50,6 +50,12 @@
       "field": "notes",
       "new": "(changed)",
       "old": "(changed)"
+    },
+    {
+      "at": "2026-05-02T01:35:28Z",
+      "field": "notes",
+      "new": "(changed)",
+      "old": "(changed)"
     }
   ],
   "id": "se-d9bc527b",
@@ -57,10 +63,10 @@
     "eval",
     "renderer"
   ],
-  "notes": "Fixed z-order issue: Fragment label shapes (polygons) now render in clusters layer before edgeLabels. Warnings reduced from 33 to 29. Shared sequence SVG geometry helper work completed separately in se-aa55239a; broad sequence parity issues remain open.",
+  "notes": "Fixed z-order issue: Fragment label shapes (polygons) now render in clusters layer before edgeLabels. Warnings reduced from 33 to 29. Shared sequence SVG geometry helper work completed separately in se-aa55239a; broad sequence parity issues remain open. Issue 202 follow-up fixes added: loop condition offset follows Mermaid label-box positioning, note boxes expand to contain rendered text, sequence arrow markers use userSpaceOnUse, and fragment frames preserve content width for wide notes. Latest sequence eval still has unrelated parity errors (6 errors, 40 warnings) and no sequence_overlap/sequence_marker_size findings from this fix.",
   "priority": 1,
   "status": "open",
   "title": "sequence: Multiple rendering issues",
   "type": "bug",
-  "updated_at": "2026-05-02T00:55:43Z"
+  "updated_at": "2026-05-02T01:35:28Z"
 }
