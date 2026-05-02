@@ -1,0 +1,28 @@
+{
+  "acceptance_criteria": "Flowchart eval no longer reports labels_missing/labels_extra caused solely by escaped Mermaid HTML-like label markup; add regression coverage based on reference implementation behavior before changing renderer/eval behavior.",
+  "closed_at": "2026-05-02T14:21:07Z",
+  "closed_reason": "Fixed in leverage-on-quality: added FLOW-2.4 eval coverage for raw markup/entities/escape artifacts and normalized flowchart label rendering; flowchart eval no longer reports markup-driven labels_missing/labels_extra.",
+  "created_at": "2026-05-02T12:39:33Z",
+  "dependencies": [],
+  "description": "Flowchart eval still reports missing labels where Selkie escapes Mermaid HTML-like label content instead of matching reference text extraction. Examples from /tmp/selkie-flow-subgraph-members-after/selkie-eval-c7b7ea64: channel_flowchart_event_sources expects Vec<Effect> but Selkie emits Vec&lt;Effect&gt;; channel_flowchart_orphan_tracker expects cleanup_orphaned_worktrees limit: Some2 / OrphanTracker::prune&unmerged / Re-tracked with warned_at: None but Selkie emits literal <b> markup.",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-05-02T14:21:07Z",
+      "field": "status",
+      "new": "closed",
+      "old": "open"
+    }
+  ],
+  "id": "se-9c7a4d20",
+  "labels": [
+    "eval",
+    "renderer"
+  ],
+  "notes": "",
+  "priority": 2,
+  "status": "closed",
+  "title": "flowchart: normalize HTML labels to match Mermaid text extraction",
+  "type": "bug",
+  "updated_at": "2026-05-02T14:21:07Z"
+}

@@ -44,6 +44,18 @@
       "field": "claimed_by",
       "new": "leverage-on-quality",
       "old": null
+    },
+    {
+      "at": "2026-05-02T12:39:46Z",
+      "field": "notes",
+      "new": "(changed)",
+      "old": "(changed)"
+    },
+    {
+      "at": "2026-05-02T14:21:07Z",
+      "field": "notes",
+      "new": "(changed)",
+      "old": "(changed)"
     }
   ],
   "id": "se-e65d3d96",
@@ -51,10 +63,10 @@
     "eval",
     "renderer"
   ],
-  "notes": "Status update: Original issues (node_count=0, edge_count=0) are FIXED - flowcharts now render all nodes and edges correctly.\n\nRemaining issues are:\n1. aspect_ratio ERROR - Layout produces slightly different dimensions (5% diff)\n2. labels_missing ERROR - Multi-line text extraction differs (selkie uses tspan, mermaid uses separate elements)\n3. edge_positions WARN - Layout algorithm positions nodes differently than mermaid's dagre\n4. stroke_width WARN - Eval averages stroke-widths differently\n\nVisual similarity 8-32% is low but this is due to layout position differences, not missing content. Structural similarity is 90-98% which shows the content is correct.\n\nAlso fixed: colors check now extracts CSS colors properly, finding 50% color match.",
+  "notes": "2026-05-02 leverage-on-quality follow-up loop: added FLOW-2.4 eval coverage and renderer normalization for Mermaid label markup/entities/escapes, plus FLOW-1.5 coverage for edges that target subgraph IDs. Eval progression: /tmp/selkie-pr-flow-eval structural 90%, 19 errors; /tmp/selkie-flow-loop-1 structural 91%, 15 errors after label markup normalization; /tmp/selkie-flow-loop-2 14 errors after removing duplicate subgraph endpoint nodes; /tmp/selkie-flow-loop-3 13 errors after Mermaid backslash escape normalization. Remaining flowchart blockers are layout/orientation/routing/styling families plus one edge-tokenization mismatch for unquoted dotted label ending in x ('PR #722 fi' vs 'fix').",
   "priority": 1,
   "status": "in_progress",
   "title": "flowchart: Missing nodes, edges, and labels across all samples",
   "type": "bug",
-  "updated_at": "2026-05-02T12:31:01Z"
+  "updated_at": "2026-05-02T14:21:07Z"
 }
