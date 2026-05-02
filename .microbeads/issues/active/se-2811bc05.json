@@ -1,0 +1,36 @@
+{
+  "acceptance_criteria": "scripts/generate-specs.py extracts @spec annotations; --check fails when SPECS.md is stale; initial FLOW-* annotations appear in generated SPECS.md; focused tests cover generator behavior",
+  "claimed_at": "2026-05-02T01:57:29Z",
+  "claimed_by": "leverage-on-quality",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-05-02T01:57:24Z",
+  "dependencies": [],
+  "description": "Add grep-able FLOW-* @spec annotations, a generated SPECS.md, and a generator/check script so flowchart compatibility requirements are traceable from tests.",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-05-02T01:57:29Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    },
+    {
+      "at": "2026-05-02T01:57:29Z",
+      "field": "claimed_by",
+      "new": "leverage-on-quality",
+      "old": null
+    }
+  ],
+  "id": "se-2811bc05",
+  "labels": [
+    "eval",
+    "specs"
+  ],
+  "notes": "",
+  "priority": 1,
+  "status": "in_progress",
+  "title": "Pilot FLOW spec annotations and generated SPECS",
+  "type": "task",
+  "updated_at": "2026-05-02T01:57:29Z"
+}
