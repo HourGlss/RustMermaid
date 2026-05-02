@@ -427,6 +427,47 @@ fn test_flowchart_with_subgraph() {
 }
 
 #[test]
+fn flowchart_quoted_subgraph_title_renders_as_cluster_label() {
+    let input = r#"flowchart TB
+    subgraph "Current Code (line 612)"
+        A[Start] --> B[End]
+    end"#;
+
+    let diagram = parse(input).expect("Failed to parse quoted subgraph title");
+    let svg = render(&diagram).expect("Failed to render quoted subgraph title");
+
+    assert!(
+        svg.contains("Current Code (line 612)"),
+        "SVG should render the quoted subgraph title as visible cluster text. SVG:\n{}",
+        svg
+    );
+}
+
+#[test]
+fn flowchart_subgraph_with_predeclared_nodes_renders_cluster_label() {
+    let input = r#"flowchart TD
+    F[First]
+    H[Second]
+    J[Third]
+
+    subgraph Problem
+    direction TB
+    F
+    H
+    J
+    end"#;
+
+    let diagram = parse(input).expect("Failed to parse subgraph with predeclared nodes");
+    let svg = render(&diagram).expect("Failed to render subgraph with predeclared nodes");
+
+    assert!(
+        svg.contains("Problem"),
+        "SVG should render a subgraph label when its body lists existing nodes. SVG:\n{}",
+        svg
+    );
+}
+
+#[test]
 fn test_arrow_markers_are_defined() {
     let input = r#"flowchart LR
     A --> B"#;

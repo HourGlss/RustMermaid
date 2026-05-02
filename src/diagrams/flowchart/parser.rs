@@ -563,6 +563,7 @@ fn process_subgraph(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> 
     let mut id = String::new();
     let mut title = None;
     let mut subgraph_dir: Option<String> = None;
+    let mut subgraph_nodes: Vec<String> = Vec::new();
 
     // Track existing vertices before processing subgraph content
     let existing_vertices: std::collections::HashSet<String> =
@@ -575,6 +576,10 @@ fn process_subgraph(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> 
                     match i.as_rule() {
                         Rule::identifier => {
                             id = i.as_str().to_string();
+                        }
+                        Rule::quoted_string => {
+                            let raw = i.as_str();
+                            title = Some(raw[1..raw.len() - 1].to_string());
                         }
                         Rule::text => {
                             let flow_text = process_text(i)?;
@@ -599,6 +604,9 @@ fn process_subgraph(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> 
                                     }
                                 }
                             } else {
+                                if stmt_inner.as_rule() == Rule::vertex_statement {
+                                    collect_vertex_ids(stmt_inner.clone(), &mut subgraph_nodes);
+                                }
                                 process_rule(stmt_inner, db)?;
                             }
                         }
@@ -609,6 +617,10 @@ fn process_subgraph(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> 
         }
     }
 
+    if id.is_empty() {
+        id = format!("subGraph{}", db.subgraphs().len());
+    }
+
     // Find vertices that were added during subgraph processing
     let new_vertices: Vec<String> = db
         .vertices()
@@ -617,13 +629,35 @@ fn process_subgraph(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> 
         .cloned()
         .collect();
 
+    for vertex in new_vertices {
+        if !subgraph_nodes.contains(&vertex) {
+            subgraph_nodes.push(vertex);
+        }
+    }
+
     db.add_subgraph_with_dir(
         &id,
         title.as_deref().unwrap_or(&id),
-        new_vertices,
+        subgraph_nodes,
         subgraph_dir,
     );
     Ok(())
+}
+
+fn collect_vertex_ids(pair: pest::iterators::Pair<Rule>, ids: &mut Vec<String>) {
+    if pair.as_rule() == Rule::vertex {
+        if let Some(identifier) = pair.into_inner().next() {
+            let id = identifier.as_str().to_string();
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        return;
+    }
+
+    for inner in pair.into_inner() {
+        collect_vertex_ids(inner, ids);
+    }
 }
 
 #[cfg(test)]

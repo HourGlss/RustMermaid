@@ -8,7 +8,7 @@ This file is generated from `@spec` annotations. Do not edit it manually.
 
 When a flowchart declares a named subgraph, the application shall preserve the subgraph title text in the parsed model.
 
-Source: `src/diagrams/flowchart/parser.rs:733`
+Source: `src/diagrams/flowchart/parser.rs:767`
 
 ### FLOW-1.2
 
@@ -74,7 +74,7 @@ Source: `src/eval/failure_families.rs:312`
 
 When a Mermaid flowchart applies a class to nodes, the application shall preserve the class assignment in the parsed node model.
 
-Source: `src/diagrams/flowchart/parser.rs:1861`
+Source: `src/diagrams/flowchart/parser.rs:1895`
 
 ### FLOW-4.2
 
