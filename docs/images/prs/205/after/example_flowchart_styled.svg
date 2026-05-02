@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1698.72" height="560.8" viewBox="-28 -28.000000000000014 1698.72 560.8" class="mermaid">
+  <style>
+
+.mermaid {
+  font-family: trebuchet ms, verdana, arial, sans-serif;
+  font-size: 16px;
+}
+
+.node rect,
+.node polygon,
+.node circle,
+.node ellipse,
+.node path {
+  fill: #ECECFF;
+  stroke: #9370DB;
+  stroke-width: 1px;
+}
+
+.node line {
+  stroke: #9370DB;
+  stroke-width: 1px;
+}
+
+.node .label {
+  fill: #333333;
+}
+
+.node text {
+  fill: #333333;
+  font-family: trebuchet ms, verdana, arial, sans-serif;
+  font-size: 16px;
+}
+
+.edge-path {
+  fill: none;
+  stroke: #333333;
+  stroke-width: 1px;
+}
+
+.edge-label {
+  fill: #333333;
+  font-family: trebuchet ms, verdana, arial, sans-serif;
+}
+
+.edge-label-bg {
+  fill: rgba(232, 232, 232, 0.8);
+}
+
+.subgraph {
+  fill: #ffffde;
+  stroke: #aaaa33;
+  stroke-width: 1px;
+}
+
+.subgraph-title {
+  fill: #333333;
+  font-weight: bold;
+}
+
+.cluster rect {
+  fill: #ffffde;
+  stroke: #aaaa33;
+  stroke-width: 1px;
+  rx: 5px;
+  ry: 5px;
+}
+
+.cluster-label {
+  fill: #333333;
+  font-family: trebuchet ms, verdana, arial, sans-serif;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+marker path {
+  fill: #333333;
+  stroke: #333333;
+}
+
+  </style>
+  <defs>
+    <marker id="arrow_point" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 10 5 L 0 10 z"/>
+    </marker>
+    <marker id="arrow_point_start" viewBox="0 0 10 10" refX="4.5" refY="5" markerWidth="8" markerHeight="8" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 5 L 10 10 L 10 0 z"/>
+    </marker>
+    <marker id="arrow_cross" viewBox="0 0 11 11" refX="12" refY="5.2" markerWidth="11" markerHeight="11" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 1 1 L 10 10 M 10 1 L 1 10" fill="none" stroke-width="2"/>
+    </marker>
+    <marker id="arrow_cross_start" viewBox="0 0 11 11" refX="-1" refY="5.2" markerWidth="11" markerHeight="11" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 1 1 L 10 10 M 10 1 L 1 10" fill="none" stroke-width="2"/>
+    </marker>
+    <marker id="arrow_circle" viewBox="0 0 10 10" refX="11" refY="5" markerWidth="11" markerHeight="11" orient="auto" markerUnits="userSpaceOnUse">
+      <circle cx="5" cy="5" r="5"/>
+    </marker>
+    <marker id="arrow_circle_start" viewBox="0 0 10 10" refX="-1" refY="5" markerWidth="11" markerHeight="11" orient="auto" markerUnits="userSpaceOnUse">
+      <circle cx="5" cy="5" r="5"/>
+    </marker>
+  </defs>
+  <g class="root">
+    <g class="clusters">
+      <g class="subgraph" id="subgraph-A">
+        <rect x="-20" y="-20.000000000000014" width="708.64" height="532.8" class="cluster"/>
+        <text x="334.32" y="-4.000000000000014" class="cluster-label" text-anchor="middle">A</text>
+      </g>
+    </g>
+    <g class="edgePaths">
+      <g class="edge" id="edge-L-sq-ci-0">
+        <path d="M 1589.12 158.60 C 1589.12 193.87, 1589.12 229.13, 1589.12 252.60 C 1589.12 276.07, 1589.12 287.73, 1589.12 305.00 C 1589.12 345.13, 1589.12 368.00, 1589.12 368.00" class="edge-path" marker-end="url(#arrow_point)" stroke-width="1" fill="none"/>
+      </g>
+      <g class="edge" id="edge-L-od-ro-0">
+        <path d="M 603.52 158.60 C 603.52 205.53, 603.52 252.47, 585.35 290.85 C 567.19 329.23, 530.85 359.05, 494.52 388.88" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
+      </g>
+      <g class="edge" id="edge-L-di-ro-0">
+        <path d="M 107.20 239.40 C 107.20 259.40, 107.20 279.40, 155.22 307.91 C 203.24 336.43, 299.28 373.45, 395.32 410.48" class="edge-path" stroke-dasharray="3,3" fill="none" marker-end="url(#arrow_point)" stroke-width="2"/>
+      </g>
+      <g class="edge" id="edge-L-di-ro2-0">
+        <path d="M 214.40000000000003 132.2 L 264.40000000000003 132.2" class="edge-path" fill="none" marker-end="url(#arrow_point)" stroke-width="3.5"/>
+      </g>
+      <g class="edge" id="edge-L-e-od3-0">
+        <path d="M 1258.95 184.16 C 1220.87 210.91, 1182.80 237.65, 1163.76 271.09 C 1144.72 304.53, 1144.72 344.67, 1144.72 384.80" class="edge-path" stroke-width="1" fill="none" marker-end="url(#arrow_point)"/>
+      </g>
+      <g class="edge" id="edge-L-e-f-0">
+        <path d="M 1373.40 213.03 L 1399.12 403.20" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
+      </g>
+      <g class="edge" id="edge-L-cyr-cyr2-0">
+        <path d="M 849.52 158.60 C 849.52 193.87, 849.52 229.13, 849.52 252.60 C 849.52 276.07, 849.52 287.73, 849.52 299.40 C 849.52 322.73, 849.52 334.40, 849.52 334.40" class="edge-path" marker-end="url(#arrow_point)" stroke-width="1" fill="none"/>
+      </g>
+    </g>
+    <g class="edgeLabels">
+      <g class="edgeLabel" id="edge-label-L-od-ro-0">
+        <rect x="556.2331476116933" y="279.4713000060373" width="94.39999999999999" height="40" class="edge-label-bg"/>
+        <text x="603.4331476116934" y="299.4713000060373" class="edge-label" text-anchor="middle" dominant-baseline="central"><tspan x="603.4331476116934" y="299.4713000060373" dy="-0.6em">Two line</tspan><tspan x="603.4331476116934" dy="1.2em">edge comment</tspan></text>
+      </g>
+    </g>
+    <g class="nodes">
+      <g class="node" id="node-ci">
+        <circle cx="1589.12" cy="429.6" r="61.599999999999994"/>
+        <text x="1589.12" y="429.6" class="label" dominant-baseline="central" text-anchor="middle">Circle shape</text>
+      </g>
+      <g class="node" id="node-cyr">
+        <rect x="795.12" y="105.79999999999998" width="108.8" height="52.8"/>
+        <text x="849.52" y="132.2" class="label" dominant-baseline="central" text-anchor="middle">Cyrillic</text>
+      </g>
+      <g class="node" id="node-cyr2">
+        <circle cx="849.52" cy="429.59999999999997" r="95.2"/>
+        <text x="849.52" y="429.59999999999997" class="label" dominant-baseline="central" text-anchor="middle">Circle shape Начало</text>
+      </g>
+      <g class="node" id="node-di">
+        <polygon points="107.2,24.999999999999986 214.4,132.2 107.2,239.39999999999998 0,132.2" style="fill:#f96 !important;stroke:#333 !important;stroke-width:4px !important"/>
+        <text x="107.2" y="132.2" class="label" text-anchor="middle" style="fill: #ffffff" dominant-baseline="central"><tspan x="107.2" y="132.2" dy="-0.6em">Diamond with </tspan><tspan x="107.2" dy="1.2em"> line break</tspan></text>
+      </g>
+      <g class="node" id="node-e">
+        <circle cx="1332.9199999999998" cy="132.2" r="90.39999999999999" style="fill:#9f6 !important;stroke:#333 !important;stroke-width:2px !important"/>
+        <text x="1332.9199999999998" y="132.2" class="label" style="fill: #000000" text-anchor="middle" dominant-baseline="central"><tspan x="1332.9199999999998" y="132.2" dy="-1.2em">Inner / circle</tspan><tspan x="1332.9199999999998" dy="1.2em">and some odd </tspan><tspan x="1332.9199999999998" dy="1.2em">special characters</tspan></text>
+      </g>
+      <g class="node" id="node-f">
+        <path d="M 1349.7199999999998 403.2 H 1448.5199999999998 A 5 5 0 0 1 1453.5199999999998 408.2 V 451 A 5 5 0 0 1 1448.5199999999998 456 H 1349.7199999999998 A 5 5 0 0 1 1344.7199999999998 451 V 408.2 A 5 5 0 0 1 1349.7199999999998 403.2 Z"/>
+        <text x="1399.12" y="429.59999999999997" class="label" text-anchor="middle" dominant-baseline="central">,.?!+-*ز</text>
+      </g>
+      <g class="node" id="node-od">
+        <path d="M 538.4 105.79999999999998 L 668.64 105.79999999999998 L 649.104 132.2 L 668.64 158.59999999999997 L 538.4 158.59999999999997 Z"/>
+        <text x="603.52" y="132.2" class="label" text-anchor="middle" dominant-baseline="central">Odd shape</text>
+      </g>
+      <g class="node" id="node-od3">
+        <path d="M 994.72 384.79999999999995 L 1294.72 384.79999999999995 L 1249.72 429.59999999999997 L 1294.72 474.4 L 994.72 474.4 Z"/>
+        <text x="1144.72" y="429.59999999999997" class="label" dominant-baseline="central" text-anchor="middle"><tspan x="1144.72" y="429.59999999999997" dy="-0.6em">Really long text with linebreak</tspan><tspan x="1144.72" dy="1.2em">in an Odd shape</tspan></text>
+      </g>
+      <g class="node" id="node-ro">
+        <path d="M 400.32000000000016 366.4 H 489.52000000000015 A 5 5 0 0 1 494.52000000000015 371.4 V 487.79999999999995 A 5 5 0 0 1 489.52000000000015 492.79999999999995 H 400.32000000000016 A 5 5 0 0 1 395.32000000000016 487.79999999999995 V 371.4 A 5 5 0 0 1 400.32000000000016 366.4 Z"/>
+        <text x="444.9200000000002" y="429.59999999999997" class="label" text-anchor="middle" dominant-baseline="central"><tspan x="444.9200000000002" y="429.59999999999997" dy="-1.2em">Rounded</tspan><tspan x="444.9200000000002" dy="1.2em">square</tspan><tspan x="444.9200000000002" dy="1.2em">shape</tspan></text>
+      </g>
+      <g class="node" id="node-ro2">
+        <path d="M 269.40000000000003 105.79999999999998 H 483.40000000000003 A 5 5 0 0 1 488.40000000000003 110.79999999999998 V 153.59999999999997 A 5 5 0 0 1 483.40000000000003 158.59999999999997 H 269.40000000000003 A 5 5 0 0 1 264.40000000000003 153.59999999999997 V 110.79999999999998 A 5 5 0 0 1 269.40000000000003 105.79999999999998 Z"/>
+        <text x="376.40000000000003" y="132.2" class="label" dominant-baseline="central" text-anchor="middle">Rounded square shape</text>
+      </g>
+      <g class="node" id="node-sq">
+        <rect x="1515.52" y="105.79999999999998" width="147.2" height="52.8" style="fill:#9f6 !important;stroke:#333 !important;stroke-width:2px !important"/>
+        <text x="1589.12" y="132.2" class="label" text-anchor="middle" dominant-baseline="central" style="fill: #000000">Square shape</text>
+      </g>
+    </g>
+  </g>
+</svg>
