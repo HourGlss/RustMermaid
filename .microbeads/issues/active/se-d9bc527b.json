@@ -44,6 +44,12 @@
       "field": "status",
       "new": "open",
       "old": "closed"
+    },
+    {
+      "at": "2026-05-02T00:55:43Z",
+      "field": "notes",
+      "new": "(changed)",
+      "old": "(changed)"
     }
   ],
   "id": "se-d9bc527b",
@@ -51,10 +57,10 @@
     "eval",
     "renderer"
   ],
-  "notes": "Fixed z-order issue: Fragment label shapes (polygons) now render in clusters layer before edgeLabels. Warnings reduced from 33 to 29.",
+  "notes": "Fixed z-order issue: Fragment label shapes (polygons) now render in clusters layer before edgeLabels. Warnings reduced from 33 to 29. Shared sequence SVG geometry helper work completed separately in se-aa55239a; broad sequence parity issues remain open.",
   "priority": 1,
   "status": "open",
   "title": "sequence: Multiple rendering issues",
   "type": "bug",
-  "updated_at": "2026-05-02T00:53:04Z"
+  "updated_at": "2026-05-02T00:55:43Z"
 }
