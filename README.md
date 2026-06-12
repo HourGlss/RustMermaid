@@ -155,6 +155,26 @@ The eval system generates an HTML report with:
 
 Requires [Mermaid CLI](https://github.com/mermaid-js/mermaid-cli) for reference rendering (`npm install -g @mermaid-js/mermaid-cli`).
 
+### Code Complexity
+
+Selkie includes a repo-local Rust tool for measuring McCabe-style cyclomatic complexity across Rust source files:
+
+```bash
+# Scan src/ and tests/ and print the highest-complexity functions
+./scripts/complexity.sh
+
+# Print more entries
+./scripts/complexity.sh --top 50
+
+# Fail if any function is above the threshold
+./scripts/complexity.sh --max 30
+
+# Scan specific paths
+./scripts/complexity.sh src/render src/layout
+```
+
+Each function starts at complexity 1. The tool adds one for each `if`, loop, `while`, `for`, `?`, boolean `&&`/`||`, and each additional `match` arm.
+
 ### As a Library
 
 ```rust
