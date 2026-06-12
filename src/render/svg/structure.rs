@@ -684,315 +684,349 @@ fn extract_css_stroke_widths(_doc: &roxmltree::Document) -> std::collections::Ha
 
 /// Analyze edge geometry - endpoints and attachment points
 fn analyze_edge_geometry(doc: &roxmltree::Document) -> EdgeGeometry {
-    let mut geometry = EdgeGeometry::default();
-
-    // Collect node bounding boxes from rects with node-related classes
-    for node in doc.descendants() {
-        if node.tag_name().name() == "rect" {
-            let class = node.attribute("class").unwrap_or("");
-            // Look for entity boxes, node boxes, etc.
-            if class.contains("entity-box")
-                || class.contains("node")
-                || class.contains("actor")
-                || class.contains("label-container")
-            {
-                let x = node
-                    .attribute("x")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0.0);
-                let y = node
-                    .attribute("y")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0.0);
-                let width = node
-                    .attribute("width")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0.0);
-                let height = node
-                    .attribute("height")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0.0);
-                let id = node.attribute("id").unwrap_or("").to_string();
-
-                if width > 0.0 && height > 0.0 {
-                    geometry.node_bounds.push(NodeBounds {
-                        x,
-                        y,
-                        width,
-                        height,
-                        id,
-                    });
-                }
-            }
-        }
-
-        // Also check for node containers (<g class="node" transform="translate(x,y)">)
-        // These contain child <path> or <rect> elements that define the box bounds
-        // Handles: ER diagrams (entity-*), block diagrams (block-*), mermaid.js nodes (id-*),
-        // and timeline diagrams (taskWrapper, eventWrapper, timeline-node)
-        if node.tag_name().name() == "g" {
-            let class = node.attribute("class").unwrap_or("");
-            let id = node.attribute("id").unwrap_or("");
-
-            // Match nodes from various diagram types including timeline
-            let is_timeline_node = class.contains("taskWrapper")
-                || class.contains("eventWrapper")
-                || class.contains("timeline-node");
-
-            let is_architecture_node =
-                class.contains("architecture-service") || class.contains("architecture-junction");
-
-            let is_node_group = is_timeline_node
-                || is_architecture_node
-                || (class.contains("node")
-                    && (id.contains("entity")
-                        || id.starts_with("block-")
-                        || id.starts_with("id-")
-                        || id.starts_with("id")
-                        || id.starts_with("node-")));
-
-            if is_node_group {
-                // Parse transform="translate(x, y)"
-                if let Some(transform) = node.attribute("transform") {
-                    if let Some((cx, cy)) = parse_translate(transform) {
-                        let mut found_bounds = false;
-
-                        // Find path element in children or grandchildren (timeline nodes nest paths deeper)
-                        let path_candidates: Vec<_> = node
-                            .descendants()
-                            .filter(|n| n.tag_name().name() == "path")
-                            .filter(|n| {
-                                // For timeline, look for node-bkg paths
-                                let path_class = n.attribute("class").unwrap_or("");
-                                path_class.contains("node-bkg") || !is_timeline_node
-                            })
-                            .collect();
-
-                        for path_node in path_candidates {
-                            if let Some(d) = path_node.attribute("d") {
-                                // Try mermaid-style rect path first
-                                if let Some((half_w, half_h)) = parse_rect_path_dimensions(d) {
-                                    geometry.node_bounds.push(NodeBounds {
-                                        x: cx - half_w,
-                                        y: cy - half_h,
-                                        width: half_w * 2.0,
-                                        height: half_h * 2.0,
-                                        id: id.to_string(),
-                                    });
-                                    found_bounds = true;
-                                    break;
-                                }
-                                // For timeline nodes, try timeline path parser
-                                // Timeline paths are in local coords (0,0 = transform origin)
-                                if is_timeline_node {
-                                    if let Some((w, h)) = parse_timeline_path_dimensions(d) {
-                                        geometry.node_bounds.push(NodeBounds {
-                                            x: cx,
-                                            y: cy,
-                                            width: w,
-                                            height: h,
-                                            id: if id.is_empty() {
-                                                class.to_string()
-                                            } else {
-                                                id.to_string()
-                                            },
-                                        });
-                                        found_bounds = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        if found_bounds {
-                            continue;
-                        }
-
-                        // Architecture nodes have icon SVGs nested deep;
-                        // detect them via the inner <svg> element's dimensions.
-                        if is_architecture_node {
-                            for desc in node.descendants() {
-                                if desc.tag_name().name() == "svg" {
-                                    let sw = desc
-                                        .attribute("width")
-                                        .and_then(|s| s.parse::<f64>().ok())
-                                        .unwrap_or(0.0);
-                                    let sh = desc
-                                        .attribute("height")
-                                        .and_then(|s| s.parse::<f64>().ok())
-                                        .unwrap_or(0.0);
-                                    if sw >= 80.0 && sh >= 80.0 {
-                                        geometry.node_bounds.push(NodeBounds {
-                                            x: cx,
-                                            y: cy,
-                                            width: sw,
-                                            height: sh,
-                                            id: id.to_string(),
-                                        });
-                                        found_bounds = true;
-                                        break;
-                                    }
-                                }
-                                // architecture-junction uses a rect descendant
-                                if desc.tag_name().name() == "rect" {
-                                    let rw = desc
-                                        .attribute("width")
-                                        .and_then(|s| s.parse::<f64>().ok())
-                                        .unwrap_or(0.0);
-                                    let rh = desc
-                                        .attribute("height")
-                                        .and_then(|s| s.parse::<f64>().ok())
-                                        .unwrap_or(0.0);
-                                    if rw >= 80.0 && rh >= 80.0 {
-                                        geometry.node_bounds.push(NodeBounds {
-                                            x: cx,
-                                            y: cy,
-                                            width: rw,
-                                            height: rh,
-                                            id: id.to_string(),
-                                        });
-                                        found_bounds = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        if found_bounds {
-                            continue;
-                        }
-
-                        // Also check for rect child (LINE-ITEM uses this)
-                        for child in node.children() {
-                            if child.tag_name().name() == "rect" {
-                                let rx = child
-                                    .attribute("x")
-                                    .and_then(|s| s.parse::<f64>().ok())
-                                    .unwrap_or(0.0);
-                                let ry = child
-                                    .attribute("y")
-                                    .and_then(|s| s.parse::<f64>().ok())
-                                    .unwrap_or(0.0);
-                                let rw = child
-                                    .attribute("width")
-                                    .and_then(|s| s.parse::<f64>().ok())
-                                    .unwrap_or(0.0);
-                                let rh = child
-                                    .attribute("height")
-                                    .and_then(|s| s.parse::<f64>().ok())
-                                    .unwrap_or(0.0);
-                                if rw > 0.0 && rh > 0.0 {
-                                    geometry.node_bounds.push(NodeBounds {
-                                        x: cx + rx,
-                                        y: cy + ry,
-                                        width: rw,
-                                        height: rh,
-                                        id: id.to_string(),
-                                    });
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Collect edge endpoints from paths
-    for node in doc.descendants() {
-        if node.tag_name().name() == "path" {
-            let class = node.attribute("class").unwrap_or("");
-            // Look for relationship/edge paths, but skip label backgrounds
-            // Label backgrounds have class like "transition-label-bg" which contains "transition"
-            if class.contains("label-bg") {
-                continue;
-            }
-            if class.contains("relationship")
-                || class.contains("relation")
-                || class.contains("edge")
-                || class.contains("link")
-                || class.contains("transition")
-            {
-                if let Some(d) = node.attribute("d") {
-                    // Use parse_path_with_directions to capture initial direction for curved paths
-                    if let Some((start, second_point, end)) = parse_path_with_directions(d) {
-                        geometry
-                            .edge_endpoints
-                            .push((start.0, start.1, end.0, end.1));
-                        geometry.edge_initial_directions.push(second_point);
-
-                        // Find best matching nodes for start and end
-                        let mut best_start: Option<AttachmentInfo> = None;
-                        let mut best_end: Option<AttachmentInfo> = None;
-
-                        for bounds in &geometry.node_bounds {
-                            let start_info = classify_attachment_detailed(start, bounds);
-                            let end_info = classify_attachment_detailed(end, bounds);
-
-                            if start_info.attach_type != AttachmentType::None
-                                && (best_start.is_none()
-                                    || start_info.distance < best_start.as_ref().unwrap().distance)
-                            {
-                                best_start = Some(start_info);
-                            }
-                            if end_info.attach_type != AttachmentType::None
-                                && (best_end.is_none()
-                                    || end_info.distance < best_end.as_ref().unwrap().distance)
-                            {
-                                best_end = Some(end_info);
-                            }
-
-                            // Count attachment types
-                            let (attach_type_start, _) = classify_attachment(start, bounds);
-                            let (attach_type_end, _) = classify_attachment(end, bounds);
-
-                            if attach_type_start == AttachmentType::Vertical
-                                || attach_type_end == AttachmentType::Vertical
-                            {
-                                geometry.vertical_attachments += 1;
-                            }
-                            if attach_type_start == AttachmentType::Horizontal
-                                || attach_type_end == AttachmentType::Horizontal
-                            {
-                                geometry.horizontal_attachments += 1;
-                            }
-                        }
-
-                        // Create edge detail
-                        let detail = EdgeDetail {
-                            start,
-                            end,
-                            start_node: best_start.as_ref().and_then(|i| i.node_id.clone()),
-                            end_node: best_end.as_ref().and_then(|i| i.node_id.clone()),
-                            start_edge: best_start
-                                .as_ref()
-                                .map(|i| i.edge_name.clone())
-                                .unwrap_or_else(|| "none".to_string()),
-                            end_edge: best_end
-                                .as_ref()
-                                .map(|i| i.edge_name.clone())
-                                .unwrap_or_else(|| "none".to_string()),
-                            start_center_offset: best_start
-                                .as_ref()
-                                .map(|i| i.center_offset)
-                                .unwrap_or(0.0),
-                            end_center_offset: best_end
-                                .as_ref()
-                                .map(|i| i.center_offset)
-                                .unwrap_or(0.0),
-                        };
-                        geometry.edge_details.push(detail);
-                    }
-                }
-            }
-        }
-    }
-
-    // Extract text bounds for overflow detection
+    let mut geometry = EdgeGeometry {
+        node_bounds: collect_node_bounds(doc),
+        ..Default::default()
+    };
+    collect_edge_paths(doc, &mut geometry);
     geometry.text_bounds = extract_text_bounds(doc, &geometry.node_bounds);
 
     geometry
+}
+
+fn collect_node_bounds(doc: &roxmltree::Document) -> Vec<NodeBounds> {
+    let mut node_bounds = Vec::new();
+
+    for node in doc.descendants() {
+        node_bounds.extend(node_bounds_from_element(node));
+    }
+
+    node_bounds
+}
+
+fn node_bounds_from_element(node: roxmltree::Node<'_, '_>) -> Vec<NodeBounds> {
+    match node.tag_name().name() {
+        "rect" => rect_node_bounds(node).into_iter().collect(),
+        "g" => group_node_bounds(node).into_iter().collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn rect_node_bounds(node: roxmltree::Node<'_, '_>) -> Option<NodeBounds> {
+    let class = node.attribute("class").unwrap_or("");
+    if !is_node_rect_class(class) {
+        return None;
+    }
+
+    node_bounds_from_rect(node, 0.0, 0.0, node.attribute("id").unwrap_or(""))
+}
+
+fn is_node_rect_class(class: &str) -> bool {
+    class.contains("entity-box")
+        || class.contains("node")
+        || class.contains("actor")
+        || class.contains("label-container")
+}
+
+fn group_node_bounds(node: roxmltree::Node<'_, '_>) -> Option<NodeBounds> {
+    let class = node.attribute("class").unwrap_or("");
+    let id = node.attribute("id").unwrap_or("");
+    let is_timeline_node = is_timeline_node_class(class);
+    let is_architecture_node = is_architecture_node_class(class);
+
+    if !is_node_group(class, id, is_timeline_node, is_architecture_node) {
+        return None;
+    }
+
+    let (cx, cy) = node.attribute("transform").and_then(parse_translate)?;
+    group_path_bounds(node, class, id, cx, cy, is_timeline_node)
+        .or_else(|| architecture_group_bounds(node, id, cx, cy, is_architecture_node))
+        .or_else(|| child_rect_group_bounds(node, id, cx, cy))
+}
+
+fn is_timeline_node_class(class: &str) -> bool {
+    class.contains("taskWrapper")
+        || class.contains("eventWrapper")
+        || class.contains("timeline-node")
+}
+
+fn is_architecture_node_class(class: &str) -> bool {
+    class.contains("architecture-service") || class.contains("architecture-junction")
+}
+
+fn is_node_group(
+    class: &str,
+    id: &str,
+    is_timeline_node: bool,
+    is_architecture_node: bool,
+) -> bool {
+    is_timeline_node
+        || is_architecture_node
+        || (class.contains("node")
+            && (id.contains("entity")
+                || id.starts_with("block-")
+                || id.starts_with("id-")
+                || id.starts_with("id")
+                || id.starts_with("node-")))
+}
+
+fn group_path_bounds(
+    node: roxmltree::Node<'_, '_>,
+    class: &str,
+    id: &str,
+    cx: f64,
+    cy: f64,
+    is_timeline_node: bool,
+) -> Option<NodeBounds> {
+    for path_node in group_path_candidates(node, is_timeline_node) {
+        if let Some(bounds) = bounds_from_group_path(path_node, class, id, cx, cy, is_timeline_node)
+        {
+            return Some(bounds);
+        }
+    }
+    None
+}
+
+fn group_path_candidates<'a, 'input>(
+    node: roxmltree::Node<'a, 'input>,
+    is_timeline_node: bool,
+) -> Vec<roxmltree::Node<'a, 'input>> {
+    node.descendants()
+        .filter(|node| node.tag_name().name() == "path")
+        .filter(move |node| {
+            let path_class = node.attribute("class").unwrap_or("");
+            path_class.contains("node-bkg") || !is_timeline_node
+        })
+        .collect()
+}
+
+fn bounds_from_group_path(
+    path_node: roxmltree::Node<'_, '_>,
+    class: &str,
+    id: &str,
+    cx: f64,
+    cy: f64,
+    is_timeline_node: bool,
+) -> Option<NodeBounds> {
+    let d = path_node.attribute("d")?;
+    if let Some((half_w, half_h)) = parse_rect_path_dimensions(d) {
+        Some(NodeBounds {
+            x: cx - half_w,
+            y: cy - half_h,
+            width: half_w * 2.0,
+            height: half_h * 2.0,
+            id: id.to_string(),
+        })
+    } else if is_timeline_node {
+        parse_timeline_path_dimensions(d).map(|(width, height)| NodeBounds {
+            x: cx,
+            y: cy,
+            width,
+            height,
+            id: if id.is_empty() {
+                class.to_string()
+            } else {
+                id.to_string()
+            },
+        })
+    } else {
+        None
+    }
+}
+
+fn architecture_group_bounds(
+    node: roxmltree::Node<'_, '_>,
+    id: &str,
+    cx: f64,
+    cy: f64,
+    is_architecture_node: bool,
+) -> Option<NodeBounds> {
+    if !is_architecture_node {
+        return None;
+    }
+
+    node.descendants()
+        .find_map(|desc| architecture_descendant_bounds(desc, id, cx, cy))
+}
+
+fn architecture_descendant_bounds(
+    desc: roxmltree::Node<'_, '_>,
+    id: &str,
+    cx: f64,
+    cy: f64,
+) -> Option<NodeBounds> {
+    let tag = desc.tag_name().name();
+    let width = parse_node_attr(desc, "width");
+    let height = parse_node_attr(desc, "height");
+
+    if matches!(tag, "svg" | "rect") && width >= 80.0 && height >= 80.0 {
+        Some(NodeBounds {
+            x: cx,
+            y: cy,
+            width,
+            height,
+            id: id.to_string(),
+        })
+    } else {
+        None
+    }
+}
+
+fn child_rect_group_bounds(
+    node: roxmltree::Node<'_, '_>,
+    id: &str,
+    cx: f64,
+    cy: f64,
+) -> Option<NodeBounds> {
+    node.children()
+        .find(|child| child.tag_name().name() == "rect")
+        .and_then(|child| node_bounds_from_rect(child, cx, cy, id))
+}
+
+fn node_bounds_from_rect(
+    node: roxmltree::Node<'_, '_>,
+    offset_x: f64,
+    offset_y: f64,
+    id: &str,
+) -> Option<NodeBounds> {
+    let width = parse_node_attr(node, "width");
+    let height = parse_node_attr(node, "height");
+
+    (width > 0.0 && height > 0.0).then(|| NodeBounds {
+        x: offset_x + parse_node_attr(node, "x"),
+        y: offset_y + parse_node_attr(node, "y"),
+        width,
+        height,
+        id: id.to_string(),
+    })
+}
+
+fn parse_node_attr(node: roxmltree::Node<'_, '_>, attr: &str) -> f64 {
+    node.attribute(attr)
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0.0)
+}
+
+fn collect_edge_paths(doc: &roxmltree::Document, geometry: &mut EdgeGeometry) {
+    for node in doc.descendants().filter(is_edge_path_node) {
+        if let Some(d) = node.attribute("d") {
+            collect_edge_path(d, geometry);
+        }
+    }
+}
+
+fn is_edge_path_node(node: &roxmltree::Node<'_, '_>) -> bool {
+    if node.tag_name().name() != "path" {
+        return false;
+    }
+
+    let class = node.attribute("class").unwrap_or("");
+    !class.contains("label-bg")
+        && (class.contains("relationship")
+            || class.contains("relation")
+            || class.contains("edge")
+            || class.contains("link")
+            || class.contains("transition"))
+}
+
+fn collect_edge_path(d: &str, geometry: &mut EdgeGeometry) {
+    let Some((start, second_point, end)) = parse_path_with_directions(d) else {
+        return;
+    };
+
+    geometry
+        .edge_endpoints
+        .push((start.0, start.1, end.0, end.1));
+    geometry.edge_initial_directions.push(second_point);
+    let (best_start, best_end, vertical_count, horizontal_count) =
+        best_edge_attachments(start, end, &geometry.node_bounds);
+    geometry.vertical_attachments += vertical_count;
+    geometry.horizontal_attachments += horizontal_count;
+    geometry
+        .edge_details
+        .push(edge_detail(start, end, best_start, best_end));
+}
+
+fn best_edge_attachments(
+    start: (f64, f64),
+    end: (f64, f64),
+    node_bounds: &[NodeBounds],
+) -> (Option<AttachmentInfo>, Option<AttachmentInfo>, usize, usize) {
+    let mut best_start = None;
+    let mut best_end = None;
+    let mut vertical_count = 0;
+    let mut horizontal_count = 0;
+
+    for bounds in node_bounds {
+        update_best_attachment(&mut best_start, classify_attachment_detailed(start, bounds));
+        update_best_attachment(&mut best_end, classify_attachment_detailed(end, bounds));
+        let (vertical, horizontal) = attachment_type_counts(start, end, bounds);
+        vertical_count += vertical;
+        horizontal_count += horizontal;
+    }
+
+    (best_start, best_end, vertical_count, horizontal_count)
+}
+
+fn update_best_attachment(best: &mut Option<AttachmentInfo>, candidate: AttachmentInfo) {
+    if candidate.attach_type == AttachmentType::None {
+        return;
+    }
+    if best
+        .as_ref()
+        .is_none_or(|current| candidate.distance < current.distance)
+    {
+        *best = Some(candidate);
+    }
+}
+
+fn attachment_type_counts(
+    start: (f64, f64),
+    end: (f64, f64),
+    bounds: &NodeBounds,
+) -> (usize, usize) {
+    let (attach_type_start, _) = classify_attachment(start, bounds);
+    let (attach_type_end, _) = classify_attachment(end, bounds);
+    let vertical = usize::from(
+        attach_type_start == AttachmentType::Vertical
+            || attach_type_end == AttachmentType::Vertical,
+    );
+    let horizontal = usize::from(
+        attach_type_start == AttachmentType::Horizontal
+            || attach_type_end == AttachmentType::Horizontal,
+    );
+
+    (vertical, horizontal)
+}
+
+fn edge_detail(
+    start: (f64, f64),
+    end: (f64, f64),
+    best_start: Option<AttachmentInfo>,
+    best_end: Option<AttachmentInfo>,
+) -> EdgeDetail {
+    EdgeDetail {
+        start,
+        end,
+        start_node: best_start.as_ref().and_then(|info| info.node_id.clone()),
+        end_node: best_end.as_ref().and_then(|info| info.node_id.clone()),
+        start_edge: best_start
+            .as_ref()
+            .map(|info| info.edge_name.clone())
+            .unwrap_or_else(|| "none".to_string()),
+        end_edge: best_end
+            .as_ref()
+            .map(|info| info.edge_name.clone())
+            .unwrap_or_else(|| "none".to_string()),
+        start_center_offset: best_start
+            .as_ref()
+            .map(|info| info.center_offset)
+            .unwrap_or(0.0),
+        end_center_offset: best_end
+            .as_ref()
+            .map(|info| info.center_offset)
+            .unwrap_or(0.0),
+    }
 }
 
 /// Extract text element bounding boxes with parent node association
@@ -1301,133 +1335,154 @@ fn parse_timeline_path_dimensions(d: &str) -> Option<(f64, f64)> {
     // We need to find the maximum extents
     let normalized = normalize_path_commands(d);
     let parts: Vec<&str> = normalized.split_whitespace().collect();
+    let mut bounds = TimelinePathBounds::default();
 
-    let mut x: f64 = 0.0;
-    let mut y: f64 = 0.0;
-    let mut min_x: f64 = 0.0;
-    let mut max_x: f64 = 0.0;
-    let mut min_y: f64 = 0.0;
-    let mut max_y: f64 = 0.0;
-    let mut i = 0;
+    while bounds.index < parts.len() {
+        bounds.apply_part(&parts)?;
+        bounds.index += 1;
+    }
 
-    while i < parts.len() {
-        let part = parts[i];
+    bounds.dimensions()
+}
+
+#[derive(Debug, Default)]
+struct TimelinePathBounds {
+    x: f64,
+    y: f64,
+    min_x: f64,
+    max_x: f64,
+    min_y: f64,
+    max_y: f64,
+    index: usize,
+}
+
+impl TimelinePathBounds {
+    fn apply_part(&mut self, parts: &[&str]) -> Option<()> {
+        let part = parts[self.index];
 
         if part == "M" || part.starts_with('M') {
-            // Move to absolute position
-            let (mx, my) = if part == "M" {
-                i += 1;
-                let mx_str = parts.get(i)?;
-                i += 1;
-                let my_str = parts.get(i)?;
-                (mx_str.parse::<f64>().ok()?, my_str.parse::<f64>().ok()?)
-            } else if let Some((px, py)) = parse_inline_coords(&part[1..]) {
-                // Handle M-x,-y or Mx,y format
-                (px, py)
-            } else {
-                // Handle Mx y format (x is inline, y is next part)
-                let mx = part[1..].parse::<f64>().ok()?;
-                i += 1;
-                let my = parts.get(i)?.parse::<f64>().ok()?;
-                (mx, my)
-            };
-            x = mx;
-            y = my;
-            min_x = min_x.min(x);
-            max_x = max_x.max(x);
-            min_y = min_y.min(y);
-            max_y = max_y.max(y);
+            self.apply_move(part, parts)?;
         } else if part == "v" || part.starts_with('v') {
-            // Relative vertical line
-            let dy = if part == "v" {
-                i += 1;
-                parts.get(i)?.parse::<f64>().ok()?
-            } else {
-                part[1..].parse::<f64>().ok()?
-            };
-            y += dy;
-            min_y = min_y.min(y);
-            max_y = max_y.max(y);
+            let dy = self.command_value(part, parts, 'v')?;
+            self.move_y_relative(dy);
         } else if part == "V" || part.starts_with('V') {
-            // Absolute vertical line
-            let new_y = if part == "V" {
-                i += 1;
-                parts.get(i)?.parse::<f64>().ok()?
-            } else {
-                part[1..].parse::<f64>().ok()?
-            };
-            y = new_y;
-            min_y = min_y.min(y);
-            max_y = max_y.max(y);
+            let y = self.command_value(part, parts, 'V')?;
+            self.move_y_absolute(y);
         } else if part == "h" || part.starts_with('h') {
-            // Relative horizontal line
-            let dx = if part == "h" {
-                i += 1;
-                parts.get(i)?.parse::<f64>().ok()?
-            } else {
-                part[1..].parse::<f64>().ok()?
-            };
-            x += dx;
-            min_x = min_x.min(x);
-            max_x = max_x.max(x);
+            let dx = self.command_value(part, parts, 'h')?;
+            self.move_x_relative(dx);
         } else if part == "H" || part.starts_with('H') {
-            // Absolute horizontal line
-            let new_x = if part == "H" {
-                i += 1;
-                parts.get(i)?.parse::<f64>().ok()?
-            } else {
-                part[1..].parse::<f64>().ok()?
-            };
-            x = new_x;
-            min_x = min_x.min(x);
-            max_x = max_x.max(x);
+            let x = self.command_value(part, parts, 'H')?;
+            self.move_x_absolute(x);
         } else if part == "q" || part.starts_with('q') {
-            // Relative quadratic curve - skip control point, move to endpoint
-            // Format: q cx,cy ex,ey OR q cx cy ex ey
-            if part == "q" {
-                // Skip 4 values (control x, y, end x, y)
-                i += 1; // cx
-                i += 1; // cy
-                i += 1; // ex
-                if let Some(ey_str) = parts.get(i) {
-                    // Get the endpoint relative offsets
-                    let ex_str = parts.get(i - 1)?;
-                    let ex = ex_str.trim_matches(',').parse::<f64>().ok()?;
-                    let ey = ey_str.trim_matches(',').parse::<f64>().ok()?;
-                    x += ex;
-                    y += ey;
-                    min_x = min_x.min(x);
-                    max_x = max_x.max(x);
-                    min_y = min_y.min(y);
-                    max_y = max_y.max(y);
-                }
-            } else {
-                // Inline control point like q0,-5 followed by endpoint 5,-5
-                // The control point is in this part, endpoint is in next part
-                i += 1;
-                if let Some(endpoint_str) = parts.get(i) {
-                    if let Some((ex, ey)) = parse_inline_coords(endpoint_str) {
-                        x += ex;
-                        y += ey;
-                        min_x = min_x.min(x);
-                        max_x = max_x.max(x);
-                        min_y = min_y.min(y);
-                        max_y = max_y.max(y);
-                    }
-                }
+            self.apply_relative_quadratic(part, parts)?;
+        }
+
+        Some(())
+    }
+
+    fn apply_move(&mut self, part: &str, parts: &[&str]) -> Option<()> {
+        let (x, y) = if part == "M" {
+            self.index += 1;
+            let mx = parts.get(self.index)?.parse::<f64>().ok()?;
+            self.index += 1;
+            let my = parts.get(self.index)?.parse::<f64>().ok()?;
+            (mx, my)
+        } else if let Some((px, py)) = parse_inline_coords(&part[1..]) {
+            (px, py)
+        } else {
+            let mx = part[1..].parse::<f64>().ok()?;
+            self.index += 1;
+            let my = parts.get(self.index)?.parse::<f64>().ok()?;
+            (mx, my)
+        };
+
+        self.x = x;
+        self.y = y;
+        self.update_bounds();
+        Some(())
+    }
+
+    fn command_value(&mut self, part: &str, parts: &[&str], command: char) -> Option<f64> {
+        if part == command.to_string() {
+            self.index += 1;
+            parts.get(self.index)?.parse::<f64>().ok()
+        } else {
+            part[1..].parse::<f64>().ok()
+        }
+    }
+
+    fn apply_relative_quadratic(&mut self, part: &str, parts: &[&str]) -> Option<()> {
+        if part == "q" {
+            self.index += 1; // cx
+            self.index += 1; // cy
+            self.index += 1; // ex
+            let ex = parts
+                .get(self.index - 1)?
+                .trim_matches(',')
+                .parse::<f64>()
+                .ok()?;
+            let ey = parts
+                .get(self.index)?
+                .trim_matches(',')
+                .parse::<f64>()
+                .ok()?;
+            self.move_relative(ex, ey);
+        } else {
+            self.index += 1;
+            if let Some((ex, ey)) = parts
+                .get(self.index)
+                .and_then(|part| parse_inline_coords(part))
+            {
+                self.move_relative(ex, ey);
             }
         }
 
-        i += 1;
+        Some(())
     }
 
-    let width = max_x - min_x;
-    let height = max_y - min_y;
+    fn move_x_relative(&mut self, dx: f64) {
+        self.x += dx;
+        self.update_bounds();
+    }
 
-    if width > 0.0 && height > 0.0 {
-        Some((width, height))
-    } else {
-        None
+    fn move_x_absolute(&mut self, x: f64) {
+        self.x = x;
+        self.update_bounds();
+    }
+
+    fn move_y_relative(&mut self, dy: f64) {
+        self.y += dy;
+        self.update_bounds();
+    }
+
+    fn move_y_absolute(&mut self, y: f64) {
+        self.y = y;
+        self.update_bounds();
+    }
+
+    fn move_relative(&mut self, dx: f64, dy: f64) {
+        self.x += dx;
+        self.y += dy;
+        self.update_bounds();
+    }
+
+    fn update_bounds(&mut self) {
+        self.min_x = self.min_x.min(self.x);
+        self.max_x = self.max_x.max(self.x);
+        self.min_y = self.min_y.min(self.y);
+        self.max_y = self.max_y.max(self.y);
+    }
+
+    fn dimensions(&self) -> Option<(f64, f64)> {
+        let width = self.max_x - self.min_x;
+        let height = self.max_y - self.min_y;
+
+        if width > 0.0 && height > 0.0 {
+            Some((width, height))
+        } else {
+            None
+        }
     }
 }
 
@@ -1443,134 +1498,150 @@ fn parse_path_with_directions(d: &str) -> Option<((f64, f64), Option<(f64, f64)>
         return None;
     }
 
-    let mut start: Option<(f64, f64)> = None;
-    let mut second_point: Option<(f64, f64)> = None;
-    let mut end: Option<(f64, f64)> = None;
-    let mut point_count = 0;
-    let mut i = 0;
-
-    while i < parts.len() {
-        let part = parts[i];
-
-        // Handle M (moveto) command - sets start point
-        if part == "M" || part.starts_with('M') {
-            let (x, y) = if part == "M" {
-                i += 1;
-                let coords = parse_coord_pair(&parts, &mut i)?;
-                // parse_coord_pair already advanced i, so continue to skip the i += 1 at end
-                if start.is_none() {
-                    start = Some(coords);
-                    point_count = 1;
-                }
-                end = Some(coords);
-                continue;
-            } else {
-                parse_inline_coords(&part[1..])?
-            };
-            if start.is_none() {
-                start = Some((x, y));
-                point_count = 1;
-            }
-            end = Some((x, y));
+    let mut cursor = PathDirectionCursor::default();
+    while cursor.index < parts.len() {
+        if cursor.apply_part(&parts)? {
+            cursor.index += 1;
         }
-        // Handle L (lineto) command
-        else if part == "L" || part.starts_with('L') {
-            let (x, y) = if part == "L" {
-                i += 1;
-                let coords = parse_coord_pair(&parts, &mut i)?;
-                point_count += 1;
-                if point_count == 2 && second_point.is_none() {
-                    second_point = Some(coords);
-                }
-                end = Some(coords);
-                continue;
-            } else {
-                parse_inline_coords(&part[1..])?
-            };
-            point_count += 1;
-            if point_count == 2 && second_point.is_none() {
-                second_point = Some((x, y));
-            }
-            end = Some((x, y));
-        }
-        // Handle C (curveto) command - takes 3 coordinate pairs
-        else if part == "C" || part.starts_with('C') {
-            if part == "C" {
-                i += 1;
-                // First control point - this is the initial direction for a curve
-                let (cx1, cy1) = parse_coord_pair(&parts, &mut i)?;
-                if point_count == 1 && second_point.is_none() {
-                    // Use first control point as direction indicator
-                    second_point = Some((cx1, cy1));
-                }
-                // Skip second control point
-                parse_coord_pair(&parts, &mut i)?;
-                // Third point is the endpoint
-                let (x, y) = parse_coord_pair(&parts, &mut i)?;
-                point_count += 1;
-                end = Some((x, y));
-                continue;
-            } else {
-                let coords_str = &part[1..];
-                let coords: Vec<f64> = coords_str
-                    .split([',', ' '])
-                    .filter_map(|s| s.parse().ok())
-                    .collect();
-                if coords.len() >= 6 {
-                    if point_count == 1 && second_point.is_none() {
-                        second_point = Some((coords[0], coords[1]));
-                    }
-                    point_count += 1;
-                    end = Some((coords[4], coords[5]));
-                }
-            }
-        }
-        // Handle Q (quadratic Bezier) command - takes 2 coordinate pairs (control point + endpoint)
-        else if part == "Q" || part.starts_with('Q') {
-            if part == "Q" {
-                i += 1;
-                // Control point - this is the initial direction for the curve
-                let (cx, cy) = parse_coord_pair(&parts, &mut i)?;
-                if point_count == 1 && second_point.is_none() {
-                    // Use control point as direction indicator
-                    second_point = Some((cx, cy));
-                }
-                // Endpoint
-                let (x, y) = parse_coord_pair(&parts, &mut i)?;
-                point_count += 1;
-                end = Some((x, y));
-                continue;
-            } else {
-                let coords_str = &part[1..];
-                let coords: Vec<f64> = coords_str
-                    .split([',', ' '])
-                    .filter_map(|s| s.parse().ok())
-                    .collect();
-                if coords.len() >= 4 {
-                    if point_count == 1 && second_point.is_none() {
-                        second_point = Some((coords[0], coords[1]));
-                    }
-                    point_count += 1;
-                    end = Some((coords[2], coords[3]));
-                }
-            }
-        }
-        // Handle numbers that might be continuation of previous command
-        else if let Some((x, y)) = parse_inline_coords(part) {
-            point_count += 1;
-            if point_count == 2 && second_point.is_none() {
-                second_point = Some((x, y));
-            }
-            end = Some((x, y));
-        }
-
-        i += 1;
     }
 
-    match (start, end) {
-        (Some(s), Some(e)) => Some((s, second_point, e)),
+    match (cursor.start, cursor.end) {
+        (Some(s), Some(e)) => Some((s, cursor.second_point, e)),
         _ => None,
     }
+}
+
+#[derive(Debug, Default)]
+struct PathDirectionCursor {
+    start: Option<(f64, f64)>,
+    second_point: Option<(f64, f64)>,
+    end: Option<(f64, f64)>,
+    point_count: usize,
+    index: usize,
+}
+
+impl PathDirectionCursor {
+    fn apply_part(&mut self, parts: &[&str]) -> Option<bool> {
+        let part = parts[self.index];
+
+        if part == "M" || part.starts_with('M') {
+            self.apply_move(part, parts)
+        } else if part == "L" || part.starts_with('L') {
+            self.apply_line(part, parts)
+        } else if part == "C" || part.starts_with('C') {
+            self.apply_cubic(part, parts)
+        } else if part == "Q" || part.starts_with('Q') {
+            self.apply_quadratic(part, parts)
+        } else if let Some(point) = parse_inline_coords(part) {
+            self.record_line_point(point);
+            Some(true)
+        } else {
+            Some(true)
+        }
+    }
+
+    fn apply_move(&mut self, part: &str, parts: &[&str]) -> Option<bool> {
+        let point = if part == "M" {
+            self.index += 1;
+            let point = parse_coord_pair(parts, &mut self.index)?;
+            self.record_move_point(point);
+            return Some(false);
+        } else {
+            parse_inline_coords(&part[1..])?
+        };
+
+        self.record_move_point(point);
+        Some(true)
+    }
+
+    fn apply_line(&mut self, part: &str, parts: &[&str]) -> Option<bool> {
+        let point = if part == "L" {
+            self.index += 1;
+            let point = parse_coord_pair(parts, &mut self.index)?;
+            self.record_line_point(point);
+            return Some(false);
+        } else {
+            parse_inline_coords(&part[1..])?
+        };
+
+        self.record_line_point(point);
+        Some(true)
+    }
+
+    fn apply_cubic(&mut self, part: &str, parts: &[&str]) -> Option<bool> {
+        if part == "C" {
+            self.index += 1;
+            let first_control = parse_coord_pair(parts, &mut self.index)?;
+            self.record_curve_control(first_control);
+            parse_coord_pair(parts, &mut self.index)?;
+            let endpoint = parse_coord_pair(parts, &mut self.index)?;
+            self.record_curve_endpoint(endpoint);
+            return Some(false);
+        }
+
+        let coords = parse_path_command_numbers(&part[1..]);
+        if coords.len() >= 6 {
+            self.record_curve_control((coords[0], coords[1]));
+            self.record_curve_endpoint((coords[4], coords[5]));
+        }
+        Some(true)
+    }
+
+    fn apply_quadratic(&mut self, part: &str, parts: &[&str]) -> Option<bool> {
+        if part == "Q" {
+            self.index += 1;
+            let control = parse_coord_pair(parts, &mut self.index)?;
+            self.record_curve_control(control);
+            let endpoint = parse_coord_pair(parts, &mut self.index)?;
+            self.record_curve_endpoint(endpoint);
+            return Some(false);
+        }
+
+        let coords = parse_path_command_numbers(&part[1..]);
+        if coords.len() >= 4 {
+            self.record_curve_control((coords[0], coords[1]));
+            self.record_curve_endpoint((coords[2], coords[3]));
+        }
+        Some(true)
+    }
+
+    fn record_move_point(&mut self, point: (f64, f64)) {
+        if self.start.is_none() {
+            self.start = Some(point);
+            self.point_count = 1;
+        }
+        self.end = Some(point);
+    }
+
+    fn record_line_point(&mut self, point: (f64, f64)) {
+        self.point_count += 1;
+        self.record_second_point_if_needed(point);
+        self.end = Some(point);
+    }
+
+    fn record_curve_control(&mut self, point: (f64, f64)) {
+        if self.point_count == 1 && self.second_point.is_none() {
+            self.second_point = Some(point);
+        }
+    }
+
+    fn record_curve_endpoint(&mut self, point: (f64, f64)) {
+        self.point_count += 1;
+        self.end = Some(point);
+    }
+
+    fn record_second_point_if_needed(&mut self, point: (f64, f64)) {
+        if self.point_count == 2 && self.second_point.is_none() {
+            self.second_point = Some(point);
+        }
+    }
+}
+
+fn parse_path_command_numbers(coords: &str) -> Vec<f64> {
+    coords
+        .split([',', ' '])
+        .filter_map(|part| part.parse().ok())
+        .collect()
 }
 
 /// Normalize SVG path commands by inserting spaces before command letters.
@@ -1731,79 +1802,24 @@ fn analyze_fonts(doc: &roxmltree::Document) -> FontAnalysis {
 
 /// Analyze colors (fill and stroke) used in the SVG
 fn analyze_colors(doc: &roxmltree::Document) -> ColorAnalysis {
-    use std::collections::HashSet;
-
-    let mut fill_colors: HashSet<String> = HashSet::new();
-    let mut stroke_colors: HashSet<String> = HashSet::new();
-    let mut fill_count = 0;
-    let mut stroke_count = 0;
-
-    // Elements that typically have meaningful fill/stroke colors
-    let shape_tags = [
-        "rect", "circle", "ellipse", "polygon", "path", "line", "polyline",
-    ];
+    let mut colors = SvgColorUsage::default();
 
     // First, extract colors from CSS <style> elements
     // This ensures we capture colors applied via CSS rules like .node rect { fill: #ECECFF }
     for node in doc.descendants() {
         if node.tag_name().name() == "style" {
             if let Some(css_text) = node.text() {
-                extract_css_colors(css_text, &mut fill_colors, &mut stroke_colors);
+                extract_css_colors(css_text, &mut colors.fill_colors, &mut colors.stroke_colors);
             }
         }
     }
 
     for node in doc.descendants() {
-        let tag = node.tag_name().name();
-
-        // Skip defs, markers, and other non-rendered elements
-        if tag == "defs" || tag == "marker" || tag == "clipPath" || tag == "mask" {
-            continue;
-        }
-
-        // Check fill attribute
-        if let Some(fill) = node.attribute("fill") {
-            if fill != "none" && !fill.is_empty() {
-                fill_colors.insert(normalize_color(fill));
-                if shape_tags.contains(&tag) {
-                    fill_count += 1;
-                }
-            }
-        }
-
-        // Check stroke attribute
-        if let Some(stroke) = node.attribute("stroke") {
-            if stroke != "none" && !stroke.is_empty() {
-                stroke_colors.insert(normalize_color(stroke));
-                if shape_tags.contains(&tag) {
-                    stroke_count += 1;
-                }
-            }
-        }
-
-        // Also check inline style attribute for fill/stroke
-        if let Some(style) = node.attribute("style") {
-            if let Some(fill) = extract_style_property(style, "fill") {
-                if fill != "none" && !fill.is_empty() {
-                    fill_colors.insert(normalize_color(&fill));
-                    if shape_tags.contains(&tag) {
-                        fill_count += 1;
-                    }
-                }
-            }
-            if let Some(stroke) = extract_style_property(style, "stroke") {
-                if stroke != "none" && !stroke.is_empty() {
-                    stroke_colors.insert(normalize_color(&stroke));
-                    if shape_tags.contains(&tag) {
-                        stroke_count += 1;
-                    }
-                }
-            }
-        }
+        colors.collect_node(&node);
     }
 
-    let mut fill_vec: Vec<String> = fill_colors.into_iter().collect();
-    let mut stroke_vec: Vec<String> = stroke_colors.into_iter().collect();
+    let mut fill_vec: Vec<String> = colors.fill_colors.into_iter().collect();
+    let mut stroke_vec: Vec<String> = colors.stroke_colors.into_iter().collect();
     fill_vec.sort();
     stroke_vec.sort();
 
@@ -1813,10 +1829,73 @@ fn analyze_colors(doc: &roxmltree::Document) -> ColorAnalysis {
     ColorAnalysis {
         fill_colors: fill_vec,
         stroke_colors: stroke_vec,
-        fill_count,
-        stroke_count,
+        fill_count: colors.fill_count,
+        stroke_count: colors.stroke_count,
         text_visibility_issues,
     }
+}
+
+#[derive(Debug, Default)]
+struct SvgColorUsage {
+    fill_colors: std::collections::HashSet<String>,
+    stroke_colors: std::collections::HashSet<String>,
+    fill_count: usize,
+    stroke_count: usize,
+}
+
+impl SvgColorUsage {
+    fn collect_node(&mut self, node: &roxmltree::Node<'_, '_>) {
+        let tag = node.tag_name().name();
+        if is_non_rendered_color_tag(tag) {
+            return;
+        }
+
+        let is_shape = is_color_shape_tag(tag);
+        self.collect_color_attr(node.attribute("fill"), is_shape, true);
+        self.collect_color_attr(node.attribute("stroke"), is_shape, false);
+
+        if let Some(style) = node.attribute("style") {
+            self.collect_style_colors(style, is_shape);
+        }
+    }
+
+    fn collect_style_colors(&mut self, style: &str, is_shape: bool) {
+        self.collect_color_attr(
+            extract_style_property(style, "fill").as_deref(),
+            is_shape,
+            true,
+        );
+        self.collect_color_attr(
+            extract_style_property(style, "stroke").as_deref(),
+            is_shape,
+            false,
+        );
+    }
+
+    fn collect_color_attr(&mut self, value: Option<&str>, is_shape: bool, is_fill: bool) {
+        let Some(color) = value.filter(|color| *color != "none" && !color.is_empty()) else {
+            return;
+        };
+
+        if is_fill {
+            self.fill_colors.insert(normalize_color(color));
+            self.fill_count += usize::from(is_shape);
+        } else {
+            self.stroke_colors.insert(normalize_color(color));
+            self.stroke_count += usize::from(is_shape);
+        }
+    }
+}
+
+fn is_non_rendered_color_tag(tag: &str) -> bool {
+    matches!(tag, "defs" | "marker" | "clipPath" | "mask")
+}
+
+fn is_color_shape_tag(tag: &str) -> bool {
+    matches!(
+        tag,
+        "rect" | "circle" | "ellipse" | "polygon" | "path" | "line" | "polyline"
+    )
 }
 
 /// Extract fill and stroke colors from CSS text

@@ -151,141 +151,136 @@ impl ClassMember {
 
     /// Parse the member from input string
     fn parse_member(&mut self, input: &str) {
-        let mut potential_classifier = Classifier::None;
-
-        if self.member_type == MemberType::Method {
-            // Regex: ([#+~-])?(.+)\((.*)\)([\s$*])?(.*)([$*])?
-            // Match method pattern: visibility? name(params) classifier? return_type? classifier?
-            if let Some(paren_start) = input.find('(') {
-                if let Some(paren_end) = input.rfind(')') {
-                    // Extract visibility from start
-                    let (vis_offset, visibility) = if let Some(first_char) = input.chars().next() {
-                        if let Some(v) = Visibility::from_char(first_char) {
-                            (1, v)
-                        } else {
-                            (0, Visibility::None)
-                        }
-                    } else {
-                        (0, Visibility::None)
-                    };
-                    self.visibility = visibility;
-
-                    // Extract method name
-                    self.id = input[vis_offset..paren_start].to_string();
-
-                    // Extract parameters
-                    self.parameters = input[paren_start + 1..paren_end].trim().to_string();
-
-                    // Extract return type and classifier after )
-                    let after_paren = &input[paren_end + 1..];
-                    let trimmed = after_paren.trim();
-
-                    if !trimmed.is_empty() {
-                        // Check for classifier at start
-                        let first = trimmed.chars().next().unwrap();
-                        let (classifier_offset, classifier) =
-                            if let Some(c) = Classifier::from_char(first) {
-                                (1, c)
-                            } else {
-                                (0, Classifier::None)
-                            };
-
-                        if classifier != Classifier::None {
-                            potential_classifier = classifier;
-                            self.return_type = trimmed[classifier_offset..].trim().to_string();
-                        } else {
-                            self.return_type = trimmed.to_string();
-                        }
-
-                        // Check for classifier at end of return type
-                        if potential_classifier == Classifier::None && !self.return_type.is_empty()
-                        {
-                            if let Some(last_char) = self.return_type.chars().last() {
-                                if let Some(c) = Classifier::from_char(last_char) {
-                                    potential_classifier = c;
-                                    self.return_type.pop();
-                                    self.return_type = self.return_type.trim().to_string();
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        self.classifier = if self.member_type == MemberType::Method {
+            self.parse_method_member(input)
         } else {
-            // Attribute parsing
-            let length = input.len();
-            let first_char = input.chars().next();
-            let last_char = input.chars().last();
+            self.parse_attribute_member(input)
+        };
 
-            // Check visibility
-            if let Some(c) = first_char {
-                if let Some(v) = Visibility::from_char(c) {
-                    self.visibility = v;
-                }
-            }
+        self.normalize_id();
+        self.text = self.escaped_text();
+    }
 
-            // Check classifier at end
-            if let Some(c) = last_char {
-                if let Some(classifier) = Classifier::from_char(c) {
-                    potential_classifier = classifier;
-                }
-            }
+    fn parse_method_member(&mut self, input: &str) -> Classifier {
+        let Some(paren_start) = input.find('(') else {
+            return Classifier::None;
+        };
+        let Some(paren_end) = input.rfind(')') else {
+            return Classifier::None;
+        };
 
-            // Extract id
-            let start = if self.visibility != Visibility::None {
-                1
-            } else {
-                0
-            };
-            let end = if potential_classifier != Classifier::None {
-                length - 1
-            } else {
-                length
-            };
-            self.id = input[start..end].to_string();
+        let (vis_offset, visibility) = parse_visibility_prefix(input);
+        self.visibility = visibility;
+        self.id = input[vis_offset..paren_start].to_string();
+        self.parameters = input[paren_start + 1..paren_end].trim().to_string();
+        self.parse_method_tail(&input[paren_end + 1..])
+    }
+
+    fn parse_method_tail(&mut self, after_paren: &str) -> Classifier {
+        let trimmed = after_paren.trim();
+        if trimmed.is_empty() {
+            return Classifier::None;
         }
 
-        self.classifier = potential_classifier;
+        let first = trimmed.chars().next().unwrap();
+        if let Some(classifier) = Classifier::from_char(first) {
+            self.return_type = trimmed[1..].trim().to_string();
+            return classifier;
+        }
 
-        // Preserve one leading space only
+        self.return_type = trimmed.to_string();
+        extract_trailing_classifier(&mut self.return_type)
+    }
+
+    fn parse_attribute_member(&mut self, input: &str) -> Classifier {
+        let (start, visibility) = parse_visibility_prefix(input);
+        let classifier = input
+            .chars()
+            .last()
+            .and_then(Classifier::from_char)
+            .unwrap_or(Classifier::None);
+
+        self.visibility = visibility;
+        let end = if classifier == Classifier::None {
+            input.len()
+        } else {
+            input.len() - 1
+        };
+        self.id = input[start..end].to_string();
+        classifier
+    }
+
+    fn normalize_id(&mut self) {
         self.id = if self.id.starts_with(' ') {
             format!(" {}", self.id.trim())
         } else {
             self.id.trim().to_string()
         };
+    }
 
-        // Build combined text (with HTML escaping)
-        let combined = if self.member_type == MemberType::Method {
-            let vis_str = if self.visibility != Visibility::None {
-                format!("\\{}", self.visibility.as_str())
-            } else {
-                String::new()
-            };
-            let ret_str = if !self.return_type.is_empty() {
-                format!(" : {}", parse_generic_types(&self.return_type))
-            } else {
-                String::new()
-            };
-            format!(
-                "{}{}({}){}",
-                vis_str,
-                parse_generic_types(&self.id),
-                parse_generic_types(&self.parameters),
-                ret_str
-            )
-        } else {
-            let vis_str = if self.visibility != Visibility::None {
-                format!("\\{}", self.visibility.as_str())
-            } else {
-                String::new()
-            };
-            format!("{}{}", vis_str, parse_generic_types(&self.id))
+    fn escaped_text(&self) -> String {
+        let combined = match self.member_type {
+            MemberType::Method => self.method_text(),
+            MemberType::Attribute => self.attribute_text(),
         };
 
-        self.text = combined.replace('<', "&lt;").replace('>', "&gt;");
-        if self.text.starts_with("\\&lt;") {
-            self.text = self.text.replacen("\\&lt;", "~", 1);
+        let mut text = combined.replace('<', "&lt;").replace('>', "&gt;");
+        if text.starts_with("\\&lt;") {
+            text = text.replacen("\\&lt;", "~", 1);
         }
+        text
+    }
+
+    fn method_text(&self) -> String {
+        let ret_str = if self.return_type.is_empty() {
+            String::new()
+        } else {
+            format!(" : {}", parse_generic_types(&self.return_type))
+        };
+        format!(
+            "{}{}({}){}",
+            escaped_visibility(self.visibility),
+            parse_generic_types(&self.id),
+            parse_generic_types(&self.parameters),
+            ret_str
+        )
+    }
+
+    fn attribute_text(&self) -> String {
+        format!(
+            "{}{}",
+            escaped_visibility(self.visibility),
+            parse_generic_types(&self.id)
+        )
+    }
+}
+
+fn parse_visibility_prefix(input: &str) -> (usize, Visibility) {
+    input
+        .chars()
+        .next()
+        .and_then(Visibility::from_char)
+        .map_or((0, Visibility::None), |visibility| (1, visibility))
+}
+
+fn extract_trailing_classifier(return_type: &mut String) -> Classifier {
+    let Some(last_char) = return_type.chars().last() else {
+        return Classifier::None;
+    };
+    let Some(classifier) = Classifier::from_char(last_char) else {
+        return Classifier::None;
+    };
+
+    return_type.pop();
+    *return_type = return_type.trim().to_string();
+    classifier
+}
+
+fn escaped_visibility(visibility: Visibility) -> String {
+    if visibility == Visibility::None {
+        String::new()
+    } else {
+        format!("\\{}", visibility.as_str())
     }
 }
 

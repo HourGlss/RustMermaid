@@ -48,6 +48,21 @@ pub struct SequenceGeometry {
     fragment_borders: Vec<SequenceBox>,
 }
 
+#[derive(Debug, Default)]
+struct SequenceGeometryParts {
+    notes: Vec<SequenceBox>,
+    message_texts: Vec<SequenceBox>,
+    note_texts: Vec<SequenceBox>,
+    loop_texts: Vec<SequenceBox>,
+    label_texts: Vec<SequenceBox>,
+    actor_boxes: Vec<SequenceBox>,
+    actor_lifelines: Vec<(f64, f64)>,
+    markers: Vec<SequenceMarker>,
+    self_message_path_boxes: Vec<SequenceBox>,
+    self_message_paths: Vec<String>,
+    loop_lines: Vec<SequenceLine>,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct SequenceLine {
     x1: f64,
@@ -134,6 +149,93 @@ impl SequenceBox {
     }
 }
 
+impl SequenceGeometryParts {
+    fn collect_node(&mut self, node: &roxmltree::Node<'_, '_>) {
+        match node.tag_name().name() {
+            "rect" if has_class(node, "note") => self.collect_note(node),
+            "text" if has_class(node, "messageText") || has_class(node, "message-label") => {
+                self.collect_message_text(node);
+            }
+            "text" if has_class(node, "noteText") => self.collect_text(node, "noteText"),
+            "text" if has_class(node, "loopText") => self.collect_text(node, "loopText"),
+            "text" if has_class(node, "labelText") => self.collect_text(node, "labelText"),
+            "rect" if has_class(node, "actor-box") => self.collect_actor_box(node),
+            "line" if has_class(node, "actor-line") => self.collect_actor_lifeline(node),
+            "line" if has_class(node, "loopLine") => self.collect_loop_line(node),
+            "path" if node.attribute("marker-end").is_some() && is_message_path(node) => {
+                self.collect_self_message_path(node);
+            }
+            "marker" => self.collect_marker(node),
+            _ => {}
+        }
+    }
+
+    fn collect_note(&mut self, node: &roxmltree::Node<'_, '_>) {
+        if let Some(note) = rect_sequence_box(node, "note", note_label(node)) {
+            self.notes.push(note);
+        }
+    }
+
+    fn collect_message_text(&mut self, node: &roxmltree::Node<'_, '_>) {
+        let kind = if has_class(node, "message-label") {
+            "message-label"
+        } else {
+            "messageText"
+        };
+        if let Some(text) = text_sequence_box(node, kind) {
+            self.message_texts.push(text);
+        }
+    }
+
+    fn collect_text(&mut self, node: &roxmltree::Node<'_, '_>, kind: &'static str) {
+        if let Some(text) = text_sequence_box(node, kind) {
+            match kind {
+                "noteText" => self.note_texts.push(text),
+                "loopText" => self.loop_texts.push(text),
+                "labelText" => self.label_texts.push(text),
+                _ => {}
+            }
+        }
+    }
+
+    fn collect_actor_box(&mut self, node: &roxmltree::Node<'_, '_>) {
+        if let Some(actor) = rect_sequence_box(node, "actor", actor_label(node)) {
+            self.actor_boxes.push(actor);
+        }
+    }
+
+    fn collect_actor_lifeline(&mut self, node: &roxmltree::Node<'_, '_>) {
+        if let Some((x1, _, x2, _)) = line_coords(node) {
+            self.actor_lifelines.push((x1, x2));
+        }
+    }
+
+    fn collect_loop_line(&mut self, node: &roxmltree::Node<'_, '_>) {
+        if let Some((x1, y1, x2, y2)) = line_coords(node) {
+            self.loop_lines.push(SequenceLine::new(x1, y1, x2, y2));
+        }
+    }
+
+    fn collect_self_message_path(&mut self, node: &roxmltree::Node<'_, '_>) {
+        let path = node.attribute("d").unwrap_or("");
+        let points = path_points(path);
+        if points.len() >= 3 {
+            self.self_message_paths.push(path.to_string());
+            self.self_message_path_boxes.push(box_from_points(
+                "self_message_path",
+                "self-message path",
+                &points,
+            ));
+        }
+    }
+
+    fn collect_marker(&mut self, node: &roxmltree::Node<'_, '_>) {
+        if let Some(marker) = marker_geometry(node) {
+            self.markers.push(marker);
+        }
+    }
+}
+
 impl SequenceGeometry {
     pub fn parse(svg: &str) -> Option<Self> {
         let doc = roxmltree::Document::parse(svg).ok()?;
@@ -145,88 +247,14 @@ impl SequenceGeometry {
             .and_then(parse_f64)
             .unwrap_or(0.0);
 
-        let mut notes = Vec::new();
-        let mut message_texts = Vec::new();
-        let mut note_texts = Vec::new();
-        let mut loop_texts = Vec::new();
-        let mut label_texts = Vec::new();
-        let mut actor_boxes = Vec::new();
-        let mut actor_lifelines = Vec::new();
-        let mut markers = Vec::new();
-        let mut self_message_path_boxes = Vec::new();
-        let mut self_message_paths = Vec::new();
-        let mut loop_lines = Vec::new();
+        let mut parts = SequenceGeometryParts::default();
 
         for node in doc.descendants().filter(|node| node.is_element()) {
-            match node.tag_name().name() {
-                "rect" if has_class(&node, "note") => {
-                    if let Some(note) = rect_sequence_box(&node, "note", note_label(&node)) {
-                        notes.push(note);
-                    }
-                }
-                "text" if has_class(&node, "messageText") || has_class(&node, "message-label") => {
-                    let kind = if has_class(&node, "message-label") {
-                        "message-label"
-                    } else {
-                        "messageText"
-                    };
-                    if let Some(text) = text_sequence_box(&node, kind) {
-                        message_texts.push(text);
-                    }
-                }
-                "text" if has_class(&node, "noteText") => {
-                    if let Some(text) = text_sequence_box(&node, "noteText") {
-                        note_texts.push(text);
-                    }
-                }
-                "text" if has_class(&node, "loopText") => {
-                    if let Some(text) = text_sequence_box(&node, "loopText") {
-                        loop_texts.push(text);
-                    }
-                }
-                "text" if has_class(&node, "labelText") => {
-                    if let Some(text) = text_sequence_box(&node, "labelText") {
-                        label_texts.push(text);
-                    }
-                }
-                "rect" if has_class(&node, "actor-box") => {
-                    if let Some(actor) = rect_sequence_box(&node, "actor", actor_label(&node)) {
-                        actor_boxes.push(actor);
-                    }
-                }
-                "line" if has_class(&node, "actor-line") => {
-                    if let Some((x1, _, x2, _)) = line_coords(&node) {
-                        actor_lifelines.push((x1, x2));
-                    }
-                }
-                "line" if has_class(&node, "loopLine") => {
-                    if let Some((x1, y1, x2, y2)) = line_coords(&node) {
-                        loop_lines.push(SequenceLine::new(x1, y1, x2, y2));
-                    }
-                }
-                "path" if node.attribute("marker-end").is_some() && is_message_path(&node) => {
-                    let path = node.attribute("d").unwrap_or("");
-                    let points = path_points(path);
-                    if points.len() >= 3 {
-                        self_message_paths.push(path.to_string());
-                        self_message_path_boxes.push(box_from_points(
-                            "self_message_path",
-                            "self-message path",
-                            &points,
-                        ));
-                    }
-                }
-                "marker" => {
-                    if let Some(marker) = marker_geometry(&node) {
-                        markers.push(marker);
-                    }
-                }
-                _ => {}
-            }
+            parts.collect_node(&node);
         }
 
-        let aggregate_fragment_frame = aggregate_fragment_box(&loop_lines);
-        let fragments = fragment_boxes_from_lines(&loop_lines);
+        let aggregate_fragment_frame = aggregate_fragment_box(&parts.loop_lines);
+        let fragments = fragment_boxes_from_lines(&parts.loop_lines);
         let fragment_frame_groups = fragment_frame_groups(&doc);
         let fragment_headers: Vec<_> = fragments
             .iter()
@@ -246,16 +274,16 @@ impl SequenceGeometry {
         Some(Self {
             svg_width,
             view_box_min_x,
-            notes,
-            message_texts,
-            note_texts,
-            loop_texts,
-            label_texts,
-            actor_boxes,
-            actor_lifelines,
-            markers,
-            self_message_path_boxes,
-            self_message_paths,
+            notes: parts.notes,
+            message_texts: parts.message_texts,
+            note_texts: parts.note_texts,
+            loop_texts: parts.loop_texts,
+            label_texts: parts.label_texts,
+            actor_boxes: parts.actor_boxes,
+            actor_lifelines: parts.actor_lifelines,
+            markers: parts.markers,
+            self_message_path_boxes: parts.self_message_path_boxes,
+            self_message_paths: parts.self_message_paths,
             aggregate_fragment_frame,
             fragments,
             fragment_frame_groups,

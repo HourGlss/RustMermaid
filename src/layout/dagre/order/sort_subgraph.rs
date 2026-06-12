@@ -79,35 +79,15 @@ pub fn sort_subgraph(
         barycenter_down(g, &movable)
     };
 
-    // Store results from nested subgraph sorts
     let mut subgraph_results: HashMap<String, SortResult> = HashMap::new();
-
-    // For each child that is a subgraph, recursively sort and merge barycenters
-    for entry in &mut barycenters {
-        let child_children = g.children(&entry.v);
-        if !child_children.is_empty() {
-            // This child is itself a subgraph - recursively sort it
-            let subgraph_result =
-                sort_subgraph(g, Some(&entry.v), cg, bias_right, use_predecessors);
-
-            // Merge barycenters
-            if let Some(sub_bc) = subgraph_result.barycenter {
-                if let Some(entry_bc) = entry.barycenter {
-                    // Weighted average
-                    entry.barycenter = Some(
-                        (entry_bc * entry.weight + sub_bc * subgraph_result.weight)
-                            / (entry.weight + subgraph_result.weight),
-                    );
-                    entry.weight += subgraph_result.weight;
-                } else {
-                    entry.barycenter = Some(sub_bc);
-                    entry.weight = subgraph_result.weight;
-                }
-            }
-
-            subgraph_results.insert(entry.v.clone(), subgraph_result);
-        }
-    }
+    merge_nested_subgraphs(
+        g,
+        cg,
+        bias_right,
+        use_predecessors,
+        &mut barycenters,
+        &mut subgraph_results,
+    );
 
     // Resolve conflicts with constraint graph
     let resolved = resolve_conflicts(barycenters, cg);
@@ -130,45 +110,89 @@ pub fn sort_subgraph(
         }
     }
 
-    // Update barycenter based on border node predecessors
-    if border_left.is_some() {
-        if let Some(bl) = &border_left {
-            let bl_preds: Vec<_> = if use_predecessors {
-                g.in_edges(bl).iter().map(|e| e.v.clone()).collect()
-            } else {
-                g.out_edges(bl).iter().map(|e| e.w.clone()).collect()
-            };
-
-            if let Some(br) = &border_right {
-                let br_preds: Vec<_> = if use_predecessors {
-                    g.in_edges(br).iter().map(|e| e.v.clone()).collect()
-                } else {
-                    g.out_edges(br).iter().map(|e| e.w.clone()).collect()
-                };
-
-                if !bl_preds.is_empty() && !br_preds.is_empty() {
-                    let bl_pred_order = bl_preds
-                        .first()
-                        .and_then(|p| g.node(p))
-                        .and_then(|n| n.order)
-                        .unwrap_or(0) as f64;
-                    let br_pred_order = br_preds
-                        .first()
-                        .and_then(|p| g.node(p))
-                        .and_then(|n| n.order)
-                        .unwrap_or(0) as f64;
-
-                    let bc = sorted.barycenter.unwrap_or(0.0);
-                    let w = sorted.weight;
-
-                    sorted.barycenter = Some((bc * w + bl_pred_order + br_pred_order) / (w + 2.0));
-                    sorted.weight = w + 2.0;
-                }
-            }
-        }
-    }
+    update_border_barycenter(
+        g,
+        &mut sorted,
+        border_left.as_deref(),
+        border_right.as_deref(),
+        use_predecessors,
+    );
 
     sorted
+}
+
+fn merge_nested_subgraphs(
+    g: &DagreGraph,
+    cg: &ConstraintGraph,
+    bias_right: bool,
+    use_predecessors: bool,
+    barycenters: &mut [BarycenterEntry],
+    subgraph_results: &mut HashMap<String, SortResult>,
+) {
+    for entry in barycenters {
+        if g.children(&entry.v).is_empty() {
+            continue;
+        }
+
+        let subgraph_result = sort_subgraph(g, Some(&entry.v), cg, bias_right, use_predecessors);
+        merge_barycenter(entry, &subgraph_result);
+        subgraph_results.insert(entry.v.clone(), subgraph_result);
+    }
+}
+
+fn merge_barycenter(entry: &mut BarycenterEntry, subgraph_result: &SortResult) {
+    if let Some(sub_bc) = subgraph_result.barycenter {
+        if let Some(entry_bc) = entry.barycenter {
+            entry.barycenter = Some(
+                (entry_bc * entry.weight + sub_bc * subgraph_result.weight)
+                    / (entry.weight + subgraph_result.weight),
+            );
+            entry.weight += subgraph_result.weight;
+        } else {
+            entry.barycenter = Some(sub_bc);
+            entry.weight = subgraph_result.weight;
+        }
+    }
+}
+
+fn update_border_barycenter(
+    g: &DagreGraph,
+    sorted: &mut SortResult,
+    border_left: Option<&str>,
+    border_right: Option<&str>,
+    use_predecessors: bool,
+) {
+    let (Some(bl), Some(br)) = (border_left, border_right) else {
+        return;
+    };
+    let bl_preds = border_neighbors(g, bl, use_predecessors);
+    let br_preds = border_neighbors(g, br, use_predecessors);
+    if bl_preds.is_empty() || br_preds.is_empty() {
+        return;
+    }
+
+    let bl_pred_order = first_order(g, &bl_preds);
+    let br_pred_order = first_order(g, &br_preds);
+    let bc = sorted.barycenter.unwrap_or(0.0);
+    let w = sorted.weight;
+    sorted.barycenter = Some((bc * w + bl_pred_order + br_pred_order) / (w + 2.0));
+    sorted.weight = w + 2.0;
+}
+
+fn border_neighbors(g: &DagreGraph, node: &str, use_predecessors: bool) -> Vec<String> {
+    if use_predecessors {
+        g.in_edges(node).iter().map(|e| e.v.clone()).collect()
+    } else {
+        g.out_edges(node).iter().map(|e| e.w.clone()).collect()
+    }
+}
+
+fn first_order(g: &DagreGraph, nodes: &[String]) -> f64 {
+    nodes
+        .first()
+        .and_then(|p| g.node(p))
+        .and_then(|n| n.order)
+        .unwrap_or(0) as f64
 }
 
 /// Expand resolved entries by replacing subgraph nodes with their sorted children

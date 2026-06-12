@@ -8,7 +8,9 @@
 //! graph, since there is no mermaid.js ASCII reference.
 
 use super::Issue;
+use crate::diagrams::gantt::Task;
 use crate::layout::{LayoutGraph, NodeShape};
+use std::collections::HashSet;
 
 /// Structure extracted from ASCII character-art output.
 #[derive(Debug, Clone)]
@@ -962,51 +964,63 @@ fn extract_sequence_message_labels(
     participant_labels: &[String],
 ) -> Vec<String> {
     let mut labels = Vec::new();
-    let participant_set: std::collections::HashSet<&str> =
-        participant_labels.iter().map(|s| s.as_str()).collect();
+    let participant_set: HashSet<&str> = participant_labels.iter().map(|s| s.as_str()).collect();
 
     for row in grid {
-        // Find contiguous text runs
-        let mut run_start = None;
-        for (col_idx, &ch) in row.iter().enumerate() {
-            let is_structure = BOX_HORIZONTAL.contains(&ch)
-                || BOX_VERTICAL.contains(&ch)
-                || BOX_CORNERS.contains(&ch)
-                || ch == '>'
-                || ch == '<'
-                || ch == '─'
-                || ch == '·'
-                || ch == '┐'
-                || ch == '┘';
-            // Text is anything that's not a structural character and not a braille dot
-            let is_text = !is_structure && !('\u{2800}'..='\u{28FF}').contains(&ch) && ch != '\0';
-
-            if is_text {
-                if run_start.is_none() {
-                    run_start = Some(col_idx);
-                }
-            } else if let Some(start) = run_start {
-                let text: String = row[start..col_idx].iter().collect();
-                let trimmed = text.trim().to_string();
-                if !trimmed.is_empty() && !participant_set.contains(trimmed.as_str()) {
-                    labels.push(trimmed);
-                }
-                run_start = None;
-            }
-        }
-        if let Some(start) = run_start {
-            let text: String = row[start..].iter().collect();
-            let trimmed = text.trim().to_string();
-            if !trimmed.is_empty() && !participant_set.contains(trimmed.as_str()) {
-                labels.push(trimmed);
-            }
-        }
+        extract_sequence_message_row_labels(row, &participant_set, &mut labels);
     }
 
     // Deduplicate
     labels.sort();
     labels.dedup();
     labels
+}
+
+fn extract_sequence_message_row_labels(
+    row: &[char],
+    participant_set: &HashSet<&str>,
+    labels: &mut Vec<String>,
+) {
+    let mut run_start = None;
+
+    for (col_idx, &ch) in row.iter().enumerate() {
+        if is_sequence_message_text(ch) {
+            run_start.get_or_insert(col_idx);
+        } else if let Some(start) = run_start.take() {
+            push_sequence_message_label(&row[start..col_idx], participant_set, labels);
+        }
+    }
+
+    if let Some(start) = run_start {
+        push_sequence_message_label(&row[start..], participant_set, labels);
+    }
+}
+
+fn is_sequence_message_text(ch: char) -> bool {
+    !is_sequence_structure_char(ch) && !is_braille_char(ch) && ch != '\0'
+}
+
+fn is_sequence_structure_char(ch: char) -> bool {
+    BOX_HORIZONTAL.contains(&ch)
+        || BOX_VERTICAL.contains(&ch)
+        || BOX_CORNERS.contains(&ch)
+        || matches!(ch, '>' | '<' | '─' | '·' | '┐' | '┘')
+}
+
+fn is_braille_char(ch: char) -> bool {
+    ('\u{2800}'..='\u{28FF}').contains(&ch)
+}
+
+fn push_sequence_message_label(
+    chars: &[char],
+    participant_set: &HashSet<&str>,
+    labels: &mut Vec<String>,
+) {
+    let text: String = chars.iter().collect();
+    let trimmed = text.trim();
+    if !trimmed.is_empty() && !participant_set.contains(trimmed) {
+        labels.push(trimmed.to_string());
+    }
 }
 
 /// Extract fragment labels like [loop], [alt], [end] from the output.
@@ -1297,7 +1311,25 @@ pub fn check_ascii_gantt_structure(
     let mut issues = Vec::new();
     let tasks = db.get_tasks();
 
-    // Check title
+    check_ascii_gantt_title(output, db, &mut issues);
+
+    if tasks.is_empty() {
+        return issues;
+    }
+
+    check_ascii_gantt_tasks(output, &tasks, &mut issues);
+    check_ascii_gantt_sections(output, db, &mut issues);
+    check_ascii_gantt_status_indicators(output, &tasks, &mut issues);
+    check_ascii_gantt_bars(output, &mut issues);
+
+    issues
+}
+
+fn check_ascii_gantt_title(
+    output: &str,
+    db: &crate::diagrams::gantt::GanttDb,
+    issues: &mut Vec<Issue>,
+) {
     let title = db.get_diagram_title();
     if !title.is_empty() && !output.contains(title) {
         issues.push(Issue::error(
@@ -1305,16 +1337,10 @@ pub fn check_ascii_gantt_structure(
             format!("ASCII gantt output missing title: '{}'", title),
         ));
     }
+}
 
-    if tasks.is_empty() {
-        return issues;
-    }
-
-    // Check task names (skip vert markers)
-    for task in &tasks {
-        if task.flags.vert {
-            continue;
-        }
+fn check_ascii_gantt_tasks(output: &str, tasks: &[Task], issues: &mut Vec<Issue>) {
+    for task in tasks.iter().filter(|task| !task.flags.vert) {
         if !output.contains(&task.task) {
             issues.push(Issue::error(
                 "ascii_gantt_missing_task",
@@ -1322,8 +1348,13 @@ pub fn check_ascii_gantt_structure(
             ));
         }
     }
+}
 
-    // Check section names
+fn check_ascii_gantt_sections(
+    output: &str,
+    db: &crate::diagrams::gantt::GanttDb,
+    issues: &mut Vec<Issue>,
+) {
     for section in db.get_sections() {
         if !output.contains(section.as_str()) {
             issues.push(Issue::warning(
@@ -1332,8 +1363,9 @@ pub fn check_ascii_gantt_structure(
             ));
         }
     }
+}
 
-    // Check status indicators
+fn check_ascii_gantt_status_indicators(output: &str, tasks: &[Task], issues: &mut Vec<Issue>) {
     let has_done = tasks.iter().any(|t| t.flags.done && !t.flags.vert);
     let has_active = tasks.iter().any(|t| t.flags.active && !t.flags.vert);
     let has_milestone = tasks.iter().any(|t| t.flags.milestone && !t.flags.vert);
@@ -1356,8 +1388,9 @@ pub fn check_ascii_gantt_structure(
             "ASCII gantt output has milestones but no milestone indicator (◆)".to_string(),
         ));
     }
+}
 
-    // Check bar characters are present
+fn check_ascii_gantt_bars(output: &str, issues: &mut Vec<Issue>) {
     let has_bars = output.contains('█') || output.contains('░');
     if !has_bars {
         issues.push(Issue::error(
@@ -1365,8 +1398,6 @@ pub fn check_ascii_gantt_structure(
             "ASCII gantt output has no bar characters (█/░)".to_string(),
         ));
     }
-
-    issues
 }
 
 /// Calculate a similarity score (0.0–1.0) for ASCII gantt chart output.

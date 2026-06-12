@@ -61,12 +61,15 @@ impl Color {
     pub fn parse(s: &str) -> Option<Self> {
         let s = s.trim();
 
-        // Hex format
         if s.starts_with('#') {
             return Self::from_hex(s);
         }
+        Self::parse_rgba_function(s)
+            .or_else(|| Self::parse_rgb_function(s))
+            .or_else(|| Self::parse_named(s))
+    }
 
-        // rgba() format
+    fn parse_rgba_function(s: &str) -> Option<Self> {
         if s.starts_with("rgba(") && s.ends_with(')') {
             let inner = &s[5..s.len() - 1];
             let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
@@ -78,8 +81,10 @@ impl Color {
                 return Some(Self::rgba(r, g, b, a));
             }
         }
+        None
+    }
 
-        // rgb() format
+    fn parse_rgb_function(s: &str) -> Option<Self> {
         if s.starts_with("rgb(") && s.ends_with(')') {
             let inner = &s[4..s.len() - 1];
             let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
@@ -90,8 +95,10 @@ impl Color {
                 return Some(Self::rgb(r, g, b));
             }
         }
+        None
+    }
 
-        // Named colors (basic set)
+    fn parse_named(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "white" => Some(Self::rgb(255, 255, 255)),
             "black" => Some(Self::rgb(0, 0, 0)),

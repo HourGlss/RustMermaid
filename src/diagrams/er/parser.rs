@@ -38,59 +38,67 @@ pub fn parse_into(input: &str, db: &mut ErDb) -> Result<()> {
 }
 
 fn process_rule(pair: pest::iterators::Pair<Rule>, db: &mut ErDb) -> Result<()> {
-    match pair.as_rule() {
-        Rule::frontmatter => {
-            process_frontmatter(pair, db)?;
-        }
-        Rule::document => {
-            for inner in pair.into_inner() {
-                process_rule(inner, db)?;
-            }
-        }
-        Rule::statement => {
-            for inner in pair.into_inner() {
-                process_rule(inner, db)?;
-            }
-        }
-        Rule::direction_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::direction {
-                    let dir = Direction::from_str(inner.as_str());
-                    db.set_direction(dir);
-                }
-            }
-        }
-        Rule::acc_title_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::line_content {
-                    db.acc_title = inner.as_str().trim().to_string();
-                }
-            }
-        }
-        Rule::acc_descr_stmt => {
-            process_acc_descr(pair, db)?;
-        }
-        Rule::entity_stmt => {
-            process_entity_stmt(pair, db)?;
-        }
-        Rule::entity_with_attrs => {
-            process_entity_with_attrs(pair, db)?;
-        }
-        Rule::relationship_stmt => {
-            process_relationship(pair, db)?;
-        }
-        Rule::class_def_stmt => {
-            process_class_def(pair, db)?;
-        }
-        Rule::class_stmt => {
-            process_class_stmt(pair, db)?;
-        }
-        Rule::style_stmt => {
-            process_style_stmt(pair, db)?;
-        }
+    let rule = pair.as_rule();
+    if process_primary_rule(rule, pair.clone(), db)? {
+        return Ok(());
+    }
+    process_secondary_rule(rule, pair, db)
+}
+
+fn process_primary_rule(
+    rule: Rule,
+    pair: pest::iterators::Pair<Rule>,
+    db: &mut ErDb,
+) -> Result<bool> {
+    match rule {
+        Rule::frontmatter => process_frontmatter(pair, db)?,
+        Rule::document | Rule::statement => process_nested_rule(pair, db)?,
+        Rule::direction_stmt => process_direction_stmt(pair, db),
+        Rule::acc_title_stmt => process_acc_title_stmt(pair, db),
+        Rule::acc_descr_stmt => process_acc_descr(pair, db)?,
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
+fn process_secondary_rule(
+    rule: Rule,
+    pair: pest::iterators::Pair<Rule>,
+    db: &mut ErDb,
+) -> Result<()> {
+    match rule {
+        Rule::entity_stmt => process_entity_stmt(pair, db)?,
+        Rule::entity_with_attrs => process_entity_with_attrs(pair, db)?,
+        Rule::relationship_stmt => process_relationship(pair, db)?,
+        Rule::class_def_stmt => process_class_def(pair, db)?,
+        Rule::class_stmt => process_class_stmt(pair, db)?,
+        Rule::style_stmt => process_style_stmt(pair, db)?,
         _ => {}
     }
     Ok(())
+}
+
+fn process_nested_rule(pair: pest::iterators::Pair<Rule>, db: &mut ErDb) -> Result<()> {
+    for inner in pair.into_inner() {
+        process_rule(inner, db)?;
+    }
+    Ok(())
+}
+
+fn process_direction_stmt(pair: pest::iterators::Pair<Rule>, db: &mut ErDb) {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::direction {
+            db.set_direction(Direction::from_str(inner.as_str()));
+        }
+    }
+}
+
+fn process_acc_title_stmt(pair: pest::iterators::Pair<Rule>, db: &mut ErDb) {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::line_content {
+            db.acc_title = inner.as_str().trim().to_string();
+        }
+    }
 }
 
 fn process_acc_descr(pair: pest::iterators::Pair<Rule>, db: &mut ErDb) -> Result<()> {

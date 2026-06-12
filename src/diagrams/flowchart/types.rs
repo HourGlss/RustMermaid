@@ -259,9 +259,15 @@ impl Default for FlowchartDb {
 /// - With starts: `<-->`, `x--x`, `o--o`
 fn parse_arrow(arrow: &str) -> (String, EdgeStroke, u32) {
     let arrow = arrow.trim();
+    let stroke = parse_arrow_stroke(arrow);
+    let edge_type = parse_arrow_edge_type(arrow);
+    let length = parse_arrow_length(arrow, &stroke, edge_type == "arrow_open");
 
-    // Determine stroke type based on characters
-    let stroke = if arrow.contains("-.") || arrow.contains(".-") {
+    (edge_type.to_string(), stroke, length)
+}
+
+fn parse_arrow_stroke(arrow: &str) -> EdgeStroke {
+    if arrow.contains("-.") || arrow.contains(".-") {
         EdgeStroke::Dotted
     } else if arrow.contains('=') {
         EdgeStroke::Thick
@@ -269,50 +275,52 @@ fn parse_arrow(arrow: &str) -> (String, EdgeStroke, u32) {
         EdgeStroke::Invisible
     } else {
         EdgeStroke::Normal
-    };
+    }
+}
 
-    // Determine edge type based on start/end markers
-    let has_start_arrow = arrow.starts_with('<')
-        || arrow.starts_with("x-")
-        || arrow.starts_with("o-")
-        || arrow.starts_with("x=")
-        || arrow.starts_with("o=")
-        || arrow.starts_with("<-")
-        || arrow.starts_with("<=");
+fn parse_arrow_edge_type(arrow: &str) -> &'static str {
+    let has_start_arrow = has_start_arrow_marker(arrow);
     let has_end_arrow = arrow.ends_with('>');
     let has_end_cross = arrow.ends_with('x') && !arrow.starts_with('x');
     let has_end_circle = arrow.ends_with('o') && !arrow.starts_with('o');
-    let has_start_cross = arrow.starts_with("x-") || arrow.starts_with("x=");
-    let has_start_circle = arrow.starts_with("o-") || arrow.starts_with("o=");
-    let has_end_cross_double = arrow.ends_with('x') && has_start_cross;
-    let has_end_circle_double = arrow.ends_with('o') && has_start_circle;
+    let has_double_cross = has_double_cross_marker(arrow);
+    let has_double_circle = has_double_circle_marker(arrow);
 
-    let edge_type = if has_start_arrow && has_end_arrow {
-        "double_arrow_point".to_string()
-    } else if has_end_cross_double || (has_start_cross && arrow.ends_with('x')) {
-        "double_arrow_cross".to_string()
-    } else if has_end_circle_double || (has_start_circle && arrow.ends_with('o')) {
-        "double_arrow_circle".to_string()
+    if has_start_arrow && has_end_arrow {
+        "double_arrow_point"
+    } else if has_double_cross {
+        "double_arrow_cross"
+    } else if has_double_circle {
+        "double_arrow_circle"
     } else if has_end_arrow {
-        "arrow_point".to_string()
+        "arrow_point"
     } else if has_end_cross {
-        "arrow_cross".to_string()
+        "arrow_cross"
     } else if has_end_circle {
-        "arrow_circle".to_string()
+        "arrow_circle"
     } else {
-        "arrow_open".to_string()
-    };
+        "arrow_open"
+    }
+}
 
-    // Calculate length based on repeated characters
-    // Mermaid's algorithm: for open edges (no arrow head), remove last char then subtract 1
-    // For arrows with heads, just subtract 1 from the dash count
-    let is_open_edge = edge_type == "arrow_open";
-    let length = match stroke {
+fn has_start_arrow_marker(arrow: &str) -> bool {
+    ["<", "x-", "o-", "x=", "o=", "<-", "<="]
+        .iter()
+        .any(|prefix| arrow.starts_with(prefix))
+}
+
+fn has_double_cross_marker(arrow: &str) -> bool {
+    arrow.ends_with('x') && (arrow.starts_with("x-") || arrow.starts_with("x="))
+}
+
+fn has_double_circle_marker(arrow: &str) -> bool {
+    arrow.ends_with('o') && (arrow.starts_with("o-") || arrow.starts_with("o="))
+}
+
+fn parse_arrow_length(arrow: &str, stroke: &EdgeStroke, is_open_edge: bool) -> u32 {
+    match stroke {
         EdgeStroke::Normal | EdgeStroke::Invisible => {
-            // Count consecutive dashes or tildes
             let dash_count = arrow.chars().filter(|&c| c == '-' || c == '~').count();
-            // Open edges subtract 2 (like mermaid's slice(-1) then length-1)
-            // Arrow edges subtract 1
             let subtract = if is_open_edge { 2 } else { 1 };
             dash_count.saturating_sub(subtract).clamp(1, 10) as u32
         }
@@ -325,9 +333,7 @@ fn parse_arrow(arrow: &str) -> (String, EdgeStroke, u32) {
             let dot_count = arrow.chars().filter(|&c| c == '.').count();
             dot_count.clamp(1, 10) as u32
         }
-    };
-
-    (edge_type, stroke, length)
+    }
 }
 
 impl FlowchartDb {

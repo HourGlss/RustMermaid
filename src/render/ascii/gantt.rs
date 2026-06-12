@@ -6,7 +6,7 @@
 
 use chrono::NaiveDateTime;
 
-use crate::diagrams::gantt::GanttDb;
+use crate::diagrams::gantt::{GanttDb, Task};
 use crate::error::Result;
 
 /// Width of the timeline bar area in characters.
@@ -22,17 +22,47 @@ pub fn render_gantt_ascii(db: &mut GanttDb) -> Result<String> {
 
     if tasks.is_empty() {
         let title = db.get_diagram_title();
-        if !title.is_empty() {
-            return Ok(format!("{}\n\n(empty gantt chart)\n", title));
-        }
-        return Ok("(empty gantt chart)\n".to_string());
+        return Ok(empty_gantt_output(title));
     }
 
-    // Find the overall time range
+    let Some(range) = task_time_range(&tasks) else {
+        return Ok("(no resolved dates)\n".to_string());
+    };
+    let total_duration = (range.end - range.start).num_seconds().max(1) as f64;
+    let max_task_name_len = max_task_name_len(&tasks);
+    let label_col_width = max_task_name_len + 3;
+
+    let mut lines: Vec<String> = Vec::new();
+    push_gantt_header(&mut lines, db, label_col_width, &range);
+    push_task_rows(
+        &mut lines,
+        &tasks,
+        max_task_name_len,
+        &range,
+        total_duration,
+    );
+    lines.push(String::new());
+    Ok(lines.join("\n"))
+}
+
+fn empty_gantt_output(title: &str) -> String {
+    if title.is_empty() {
+        "(empty gantt chart)\n".to_string()
+    } else {
+        format!("{}\n\n(empty gantt chart)\n", title)
+    }
+}
+
+struct GanttRange {
+    start: NaiveDateTime,
+    end: NaiveDateTime,
+}
+
+fn task_time_range(tasks: &[Task]) -> Option<GanttRange> {
     let mut min_time: Option<NaiveDateTime> = None;
     let mut max_time: Option<NaiveDateTime> = None;
 
-    for task in &tasks {
+    for task in tasks {
         if task.flags.vert {
             continue; // Skip vertical markers for range calculation
         }
@@ -44,45 +74,39 @@ pub fn render_gantt_ascii(db: &mut GanttDb) -> Result<String> {
         }
     }
 
-    let (chart_start, chart_end) = match (min_time, max_time) {
-        (Some(s), Some(e)) => {
-            if s == e {
-                // Single-point timeline — extend by 1 day
-                (s, e + chrono::Duration::days(1))
-            } else {
-                (s, e)
-            }
-        }
-        _ => {
-            return Ok("(no resolved dates)\n".to_string());
-        }
-    };
+    match (min_time, max_time) {
+        (Some(s), Some(e)) if s == e => Some(GanttRange {
+            start: s,
+            end: e + chrono::Duration::days(1),
+        }),
+        (Some(s), Some(e)) => Some(GanttRange { start: s, end: e }),
+        _ => None,
+    }
+}
 
-    let total_duration = (chart_end - chart_start).num_seconds().max(1) as f64;
-
-    // Calculate label widths for alignment
-    let max_task_name_len = tasks
+fn max_task_name_len(tasks: &[Task]) -> usize {
+    tasks
         .iter()
         .filter(|t| !t.flags.vert)
         .map(|t| t.task.chars().count())
         .max()
-        .unwrap_or(0);
+        .unwrap_or(0)
+}
 
-    // Add space for status prefix (e.g., "✓ " or "► ")
-    let label_col_width = max_task_name_len + 3;
-
-    let mut lines: Vec<String> = Vec::new();
-
-    // Title
+fn push_gantt_header(
+    lines: &mut Vec<String>,
+    db: &GanttDb,
+    label_col_width: usize,
+    range: &GanttRange,
+) {
     let title = db.get_diagram_title();
     if !title.is_empty() {
         lines.push(title.to_string());
         lines.push("─".repeat(label_col_width + 1 + TIMELINE_WIDTH));
     }
 
-    // Date axis header
-    let start_str = chart_start.format("%Y-%m-%d").to_string();
-    let end_str = chart_end.format("%Y-%m-%d").to_string();
+    let start_str = range.start.format("%Y-%m-%d").to_string();
+    let end_str = range.end.format("%Y-%m-%d").to_string();
     let axis_padding = TIMELINE_WIDTH.saturating_sub(start_str.len() + end_str.len());
     lines.push(format!(
         "{:width$} │{}{}{}",
@@ -98,12 +122,17 @@ pub fn render_gantt_ascii(db: &mut GanttDb) -> Result<String> {
         "─".repeat(TIMELINE_WIDTH),
         width = label_col_width
     ));
+}
 
-    // Track current section for headers
+fn push_task_rows(
+    lines: &mut Vec<String>,
+    tasks: &[Task],
+    max_task_name_len: usize,
+    range: &GanttRange,
+    total_duration: f64,
+) {
     let mut current_section = String::new();
-
-    for task in &tasks {
-        // Section header (emit even for vert-only sections)
+    for task in tasks {
         if task.section != current_section && !task.section.is_empty() {
             current_section = task.section.clone();
             lines.push(format!("  [{}]", current_section));
@@ -114,85 +143,80 @@ pub fn render_gantt_ascii(db: &mut GanttDb) -> Result<String> {
             continue;
         }
 
-        // Status prefix
-        let prefix = if task.flags.milestone {
-            "◆"
-        } else if task.flags.done {
-            "✓"
-        } else if task.flags.active {
-            "►"
-        } else if task.flags.critical {
-            "!"
-        } else {
-            " "
-        };
-
-        // Task name with padding
+        let prefix = task_prefix(task);
         let label = format!("{} {:width$}", prefix, task.task, width = max_task_name_len);
-
-        // Calculate bar position
-        let (bar_start_col, bar_end_col) = match (task.start_time, task.end_time) {
-            (Some(start), Some(end)) => {
-                let start_offset = (start - chart_start).num_seconds() as f64;
-                let end_offset = (end - chart_start).num_seconds() as f64;
-                let col_start =
-                    ((start_offset / total_duration) * TIMELINE_WIDTH as f64).round() as usize;
-                let col_end =
-                    ((end_offset / total_duration) * TIMELINE_WIDTH as f64).round() as usize;
-                (
-                    col_start.min(TIMELINE_WIDTH),
-                    col_end.min(TIMELINE_WIDTH).max(col_start + 1),
-                )
-            }
-            (Some(start), None) => {
-                // No end — show a single marker
-                let start_offset = (start - chart_start).num_seconds() as f64;
-                let col =
-                    ((start_offset / total_duration) * TIMELINE_WIDTH as f64).round() as usize;
-                (
-                    col.min(TIMELINE_WIDTH.saturating_sub(1)),
-                    col.min(TIMELINE_WIDTH.saturating_sub(1)) + 1,
-                )
-            }
-            _ => (0, 1),
-        };
-
-        // Build the timeline bar
-        let mut bar = String::with_capacity(TIMELINE_WIDTH);
-        let bar_char = if task.flags.milestone {
-            '◆'
-        } else if task.flags.done {
-            LIGHT_BLOCK
-        } else {
-            FULL_BLOCK
-        };
-
-        for col in 0..TIMELINE_WIDTH {
-            if col >= bar_start_col && col < bar_end_col {
-                bar.push(bar_char);
-            } else {
-                bar.push(' ');
-            }
-        }
-
-        // Date range suffix
-        let date_suffix = match (task.start_time, task.end_time) {
-            (Some(s), Some(e)) => {
-                let days = (e - s).num_days();
-                if task.flags.milestone {
-                    s.format("%m-%d").to_string()
-                } else {
-                    format!("{}d", days)
-                }
-            }
-            _ => String::new(),
-        };
+        let (bar_start_col, bar_end_col) = task_bar_span(task, range, total_duration);
+        let bar = task_bar(task, bar_start_col, bar_end_col);
+        let date_suffix = task_date_suffix(task);
 
         lines.push(format!("{} │{} {}", label, bar, date_suffix));
     }
+}
 
-    lines.push(String::new());
-    Ok(lines.join("\n"))
+fn task_prefix(task: &Task) -> &'static str {
+    if task.flags.milestone {
+        "◆"
+    } else if task.flags.done {
+        "✓"
+    } else if task.flags.active {
+        "►"
+    } else if task.flags.critical {
+        "!"
+    } else {
+        " "
+    }
+}
+
+fn task_bar_span(task: &Task, range: &GanttRange, total_duration: f64) -> (usize, usize) {
+    match (task.start_time, task.end_time) {
+        (Some(start), Some(end)) => {
+            let col_start = timeline_col(start, range.start, total_duration);
+            let col_end = timeline_col(end, range.start, total_duration);
+            (
+                col_start.min(TIMELINE_WIDTH),
+                col_end.min(TIMELINE_WIDTH).max(col_start + 1),
+            )
+        }
+        (Some(start), None) => {
+            let col = timeline_col(start, range.start, total_duration)
+                .min(TIMELINE_WIDTH.saturating_sub(1));
+            (col, col + 1)
+        }
+        _ => (0, 1),
+    }
+}
+
+fn timeline_col(time: NaiveDateTime, chart_start: NaiveDateTime, total_duration: f64) -> usize {
+    let offset = (time - chart_start).num_seconds() as f64;
+    ((offset / total_duration) * TIMELINE_WIDTH as f64).round() as usize
+}
+
+fn task_bar(task: &Task, bar_start_col: usize, bar_end_col: usize) -> String {
+    let mut bar = String::with_capacity(TIMELINE_WIDTH);
+    let bar_char = if task.flags.milestone {
+        '◆'
+    } else if task.flags.done {
+        LIGHT_BLOCK
+    } else {
+        FULL_BLOCK
+    };
+
+    for col in 0..TIMELINE_WIDTH {
+        if col >= bar_start_col && col < bar_end_col {
+            bar.push(bar_char);
+        } else {
+            bar.push(' ');
+        }
+    }
+    bar
+}
+
+fn task_date_suffix(task: &Task) -> String {
+    match (task.start_time, task.end_time) {
+        (Some(s), Some(_)) if task.flags.milestone => s.format("%m-%d").to_string(),
+        (Some(s), Some(e)) => format!("{}d", (e - s).num_days()),
+        _ => String::new(),
+    }
 }
 
 #[cfg(test)]

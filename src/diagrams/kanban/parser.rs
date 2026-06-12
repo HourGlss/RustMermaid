@@ -171,68 +171,34 @@ fn process_shape(pair: pest::iterators::Pair<Rule>) -> (NodeShape, Option<String
     let mut label: Option<String> = None;
 
     for inner in pair.into_inner() {
-        match inner.as_rule() {
-            Rule::square_shape => {
-                shape = NodeShape::Rect;
-                for descr in inner.into_inner() {
-                    if descr.as_rule() == Rule::node_descr {
-                        label = Some(extract_descr(descr));
-                    }
-                }
-            }
-            Rule::rounded_shape => {
-                shape = NodeShape::RoundedRect;
-                for descr in inner.into_inner() {
-                    if descr.as_rule() == Rule::node_descr {
-                        label = Some(extract_descr(descr));
-                    }
-                }
-            }
-            Rule::circle_shape => {
-                shape = NodeShape::Circle;
-                for descr in inner.into_inner() {
-                    if descr.as_rule() == Rule::node_descr {
-                        label = Some(extract_descr(descr));
-                    }
-                }
-            }
-            Rule::double_circle_shape => {
-                shape = NodeShape::Circle; // Treat double circle as circle
-                for descr in inner.into_inner() {
-                    if descr.as_rule() == Rule::node_descr {
-                        label = Some(extract_descr(descr));
-                    }
-                }
-            }
-            Rule::hexagon_shape => {
-                shape = NodeShape::Hexagon;
-                for descr in inner.into_inner() {
-                    if descr.as_rule() == Rule::node_descr {
-                        label = Some(extract_descr(descr));
-                    }
-                }
-            }
-            Rule::cloud_shape => {
-                shape = NodeShape::Cloud;
-                for descr in inner.into_inner() {
-                    if descr.as_rule() == Rule::node_descr {
-                        label = Some(extract_descr(descr));
-                    }
-                }
-            }
-            Rule::bang_shape => {
-                shape = NodeShape::Bang;
-                for descr in inner.into_inner() {
-                    if descr.as_rule() == Rule::node_descr {
-                        label = Some(extract_descr(descr));
-                    }
-                }
-            }
-            _ => {}
+        if let Some(node_shape) = shape_for_rule(inner.as_rule()) {
+            shape = node_shape;
+            label = extract_shape_label(inner);
         }
     }
 
     (shape, label)
+}
+
+fn shape_for_rule(rule: Rule) -> Option<NodeShape> {
+    match rule {
+        Rule::square_shape => Some(NodeShape::Rect),
+        Rule::rounded_shape => Some(NodeShape::RoundedRect),
+        Rule::circle_shape | Rule::double_circle_shape => Some(NodeShape::Circle),
+        Rule::hexagon_shape => Some(NodeShape::Hexagon),
+        Rule::cloud_shape => Some(NodeShape::Cloud),
+        Rule::bang_shape => Some(NodeShape::Bang),
+        _ => None,
+    }
+}
+
+fn extract_shape_label(pair: pest::iterators::Pair<Rule>) -> Option<String> {
+    for descr in pair.into_inner() {
+        if descr.as_rule() == Rule::node_descr {
+            return Some(extract_descr(descr));
+        }
+    }
+    None
 }
 
 fn extract_descr(pair: pest::iterators::Pair<Rule>) -> String {

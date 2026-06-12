@@ -1300,8 +1300,16 @@ marker path {{
     /// Variable names follow mermaid.js conventions (camelCase).
     /// Returns true if the variable was found and set.
     pub fn set_variable(&mut self, name: &str, value: &str) -> bool {
+        self.set_common_variable(name, value)
+            || self.set_flowchart_variable(name, value)
+            || self.set_pie_variable(name, value)
+            || self.set_sequence_variable(name, value)
+            || self.set_gantt_variable(name, value)
+            || self.set_quadrant_variable(name, value)
+    }
+
+    fn set_common_variable(&mut self, name: &str, value: &str) -> bool {
         match name {
-            // Common colors
             "primaryColor" => {
                 self.primary_color = value.to_string();
                 true
@@ -1342,8 +1350,12 @@ marker path {{
                 self.font_size = value.to_string();
                 true
             }
+            _ => false,
+        }
+    }
 
-            // Flowchart aliases (mermaid.js compatibility)
+    fn set_flowchart_variable(&mut self, name: &str, value: &str) -> bool {
+        match name {
             "nodeBkg" | "mainBkg" => {
                 self.primary_color = value.to_string();
                 true
@@ -1360,8 +1372,12 @@ marker path {{
                 self.background = value.to_string();
                 true
             }
+            _ => false,
+        }
+    }
 
-            // Pie chart colors
+    fn set_pie_variable(&mut self, name: &str, value: &str) -> bool {
+        match name {
             "pieStrokeColor" => {
                 self.pie_stroke_color = value.to_string();
                 true
@@ -1382,8 +1398,21 @@ marker path {{
                 self.pie_legend_text_color = value.to_string();
                 true
             }
+            name if name.starts_with("pie") && name.len() <= 5 => {
+                if let Ok(idx) = name[3..].parse::<usize>() {
+                    if idx >= 1 && idx <= self.pie_colors.len() {
+                        self.pie_colors[idx - 1] = value.to_string();
+                        return true;
+                    }
+                }
+                false
+            }
+            _ => false,
+        }
+    }
 
-            // Sequence diagram colors
+    fn set_sequence_variable(&mut self, name: &str, value: &str) -> bool {
+        match name {
             "actorBkg" => {
                 self.actor_bkg = value.to_string();
                 true
@@ -1436,8 +1465,12 @@ marker path {{
                 self.label_box_border_color = value.to_string();
                 true
             }
+            _ => false,
+        }
+    }
 
-            // Gantt chart colors
+    fn set_gantt_variable(&mut self, name: &str, value: &str) -> bool {
+        match name {
             "sectionBkgColor" => {
                 self.section_bkg_color = value.to_string();
                 true
@@ -1494,19 +1527,12 @@ marker path {{
                 self.today_line_color = value.to_string();
                 true
             }
+            _ => false,
+        }
+    }
 
-            // Pie colors (pie1-pie12)
-            name if name.starts_with("pie") && name.len() <= 5 => {
-                if let Ok(idx) = name[3..].parse::<usize>() {
-                    if idx >= 1 && idx <= self.pie_colors.len() {
-                        self.pie_colors[idx - 1] = value.to_string();
-                        return true;
-                    }
-                }
-                false
-            }
-
-            // Quadrant chart colors
+    fn set_quadrant_variable(&mut self, name: &str, value: &str) -> bool {
+        match name {
             "quadrant1Fill" => {
                 self.quadrant1_fill = value.to_string();
                 true
@@ -1580,6 +1606,12 @@ marker path {{
     ///
     /// Returns None if the variable name is not recognized.
     pub fn get_variable(&self, name: &str) -> Option<&str> {
+        self.get_common_variable(name)
+            .or_else(|| self.get_flowchart_variable(name))
+            .or_else(|| self.get_quadrant_variable(name))
+    }
+
+    fn get_common_variable(&self, name: &str) -> Option<&str> {
         match name {
             "primaryColor" => Some(&self.primary_color),
             "primaryTextColor" => Some(&self.primary_text_color),
@@ -1591,13 +1623,24 @@ marker path {{
             "background" => Some(&self.background),
             "fontFamily" => Some(&self.font_family),
             "fontSize" => Some(&self.font_size),
-            "nodeBkg" | "mainBkg" => Some(&self.primary_color),
-            "nodeBorder" | "border1" => Some(&self.primary_border_color),
-            "clusterBkg" | "secondBkg" => Some(&self.secondary_color),
             "pieStrokeColor" => Some(&self.pie_stroke_color),
             "actorBkg" => Some(&self.actor_bkg),
             "taskBkgColor" => Some(&self.task_bkg_color),
-            // Quadrant chart colors
+            _ => None,
+        }
+    }
+
+    fn get_flowchart_variable(&self, name: &str) -> Option<&str> {
+        match name {
+            "nodeBkg" | "mainBkg" => Some(&self.primary_color),
+            "nodeBorder" | "border1" => Some(&self.primary_border_color),
+            "clusterBkg" | "secondBkg" => Some(&self.secondary_color),
+            _ => None,
+        }
+    }
+
+    fn get_quadrant_variable(&self, name: &str) -> Option<&str> {
+        match name {
             "quadrant1Fill" => Some(&self.quadrant1_fill),
             "quadrant2Fill" => Some(&self.quadrant2_fill),
             "quadrant3Fill" => Some(&self.quadrant3_fill),

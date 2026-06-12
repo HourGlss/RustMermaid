@@ -45,15 +45,52 @@ fn process_statement(
     pair: pest::iterators::Pair<Rule>,
     current_namespace: Option<&str>,
 ) -> Result<(), String> {
+    let rule = pair.as_rule();
+    if matches!(rule, Rule::statement | Rule::namespace_statement) {
+        for inner in pair.into_inner() {
+            process_statement(db, inner, current_namespace)?;
+        }
+        return Ok(());
+    }
+    if rule == Rule::comment_stmt {
+        return Ok(());
+    }
+    if is_class_metadata_rule(rule) {
+        return process_metadata_statement(db, pair);
+    }
+
+    match rule {
+        Rule::namespace_stmt => process_namespace_stmt(db, pair),
+        Rule::class_stmt => process_class_stmt(db, pair, current_namespace),
+        Rule::member_stmt => process_member_stmt(db, pair),
+        Rule::relationship_stmt => process_relationship_stmt(db, pair, current_namespace),
+        Rule::annotation_stmt => {
+            process_annotation_stmt(db, pair);
+            Ok(())
+        }
+        Rule::note_stmt => process_note_stmt(db, pair),
+        Rule::click_stmt => process_click_stmt(db, pair),
+        Rule::link_stmt => process_link_stmt(db, pair),
+        Rule::callback_stmt => process_callback_stmt(db, pair),
+        Rule::class_def_stmt => process_class_def_stmt(db, pair),
+        Rule::css_class_stmt => process_css_class_stmt(db, pair),
+        Rule::style_stmt => process_style_stmt(db, pair),
+        _ => Ok(()),
+    }
+}
+
+fn is_class_metadata_rule(rule: Rule) -> bool {
+    matches!(
+        rule,
+        Rule::direction_stmt | Rule::acc_title_stmt | Rule::acc_descr_stmt
+    )
+}
+
+fn process_metadata_statement(
+    db: &mut ClassDb,
+    pair: pest::iterators::Pair<Rule>,
+) -> Result<(), String> {
     match pair.as_rule() {
-        Rule::statement | Rule::namespace_statement => {
-            for inner in pair.into_inner() {
-                process_statement(db, inner, current_namespace)?;
-            }
-        }
-        Rule::comment_stmt => {
-            // Ignore comments
-        }
         Rule::direction_stmt => {
             for inner in pair.into_inner() {
                 if inner.as_rule() == Rule::direction {
@@ -68,100 +105,73 @@ fn process_statement(
                 }
             }
         }
-        Rule::acc_descr_stmt => {
-            for inner in pair.into_inner() {
-                match inner.as_rule() {
-                    Rule::acc_descr_single => {
-                        for content in inner.into_inner() {
-                            if content.as_rule() == Rule::line_content {
-                                db.acc_descr = content.as_str().trim().to_string();
-                            }
-                        }
-                    }
-                    Rule::acc_descr_multi => {
-                        for content in inner.into_inner() {
-                            if content.as_rule() == Rule::multiline_content {
-                                // Normalize line endings and trim
-                                db.acc_descr = content
-                                    .as_str()
-                                    .trim()
-                                    .lines()
-                                    .map(|l| l.trim())
-                                    .collect::<Vec<_>>()
-                                    .join("\n");
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Rule::namespace_stmt => {
-            let mut ns_name = String::new();
-            for inner in pair.into_inner() {
-                match inner.as_rule() {
-                    Rule::namespace_name => {
-                        ns_name = inner.as_str().to_string();
-                        db.add_namespace(&ns_name);
-                    }
-                    Rule::namespace_body => {
-                        process_document(db, inner, Some(&ns_name))?;
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Rule::class_stmt => {
-            process_class_stmt(db, pair, current_namespace)?;
-        }
-        Rule::member_stmt => {
-            process_member_stmt(db, pair)?;
-        }
-        Rule::relationship_stmt => {
-            process_relationship_stmt(db, pair, current_namespace)?;
-        }
-        Rule::annotation_stmt => {
-            let mut annotation = String::new();
-            let mut class_name = String::new();
-            for inner in pair.into_inner() {
-                match inner.as_rule() {
-                    Rule::annotation_text => {
-                        annotation = inner.as_str().to_string();
-                    }
-                    Rule::class_name => {
-                        class_name = cleanup_class_name(inner.as_str());
-                    }
-                    _ => {}
-                }
-            }
-            if !class_name.is_empty() {
-                db.add_annotation(&class_name, &annotation);
-            }
-        }
-        Rule::note_stmt => {
-            process_note_stmt(db, pair)?;
-        }
-        Rule::click_stmt => {
-            process_click_stmt(db, pair)?;
-        }
-        Rule::link_stmt => {
-            process_link_stmt(db, pair)?;
-        }
-        Rule::callback_stmt => {
-            process_callback_stmt(db, pair)?;
-        }
-        Rule::class_def_stmt => {
-            process_class_def_stmt(db, pair)?;
-        }
-        Rule::css_class_stmt => {
-            process_css_class_stmt(db, pair)?;
-        }
-        Rule::style_stmt => {
-            process_style_stmt(db, pair)?;
-        }
+        Rule::acc_descr_stmt => process_acc_descr_stmt(db, pair),
         _ => {}
     }
     Ok(())
+}
+
+fn process_acc_descr_stmt(db: &mut ClassDb, pair: pest::iterators::Pair<Rule>) {
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::acc_descr_single => {
+                for content in inner.into_inner() {
+                    if content.as_rule() == Rule::line_content {
+                        db.acc_descr = content.as_str().trim().to_string();
+                    }
+                }
+            }
+            Rule::acc_descr_multi => {
+                for content in inner.into_inner() {
+                    if content.as_rule() == Rule::multiline_content {
+                        db.acc_descr = content
+                            .as_str()
+                            .trim()
+                            .lines()
+                            .map(|l| l.trim())
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn process_namespace_stmt(
+    db: &mut ClassDb,
+    pair: pest::iterators::Pair<Rule>,
+) -> Result<(), String> {
+    let mut ns_name = String::new();
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::namespace_name => {
+                ns_name = inner.as_str().to_string();
+                db.add_namespace(&ns_name);
+            }
+            Rule::namespace_body => {
+                process_document(db, inner, Some(&ns_name))?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn process_annotation_stmt(db: &mut ClassDb, pair: pest::iterators::Pair<Rule>) {
+    let mut annotation = String::new();
+    let mut class_name = String::new();
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::annotation_text => annotation = inner.as_str().to_string(),
+            Rule::class_name => class_name = cleanup_class_name(inner.as_str()),
+            _ => {}
+        }
+    }
+    if !class_name.is_empty() {
+        db.add_annotation(&class_name, &annotation);
+    }
 }
 
 fn process_class_stmt(
@@ -169,105 +179,123 @@ fn process_class_stmt(
     pair: pest::iterators::Pair<Rule>,
     namespace: Option<&str>,
 ) -> Result<(), String> {
-    let mut class_name = String::new();
-    let mut generic_type = String::new();
-    let mut text_label = String::new();
-    let mut css_class = String::new();
-    let mut members: Vec<String> = Vec::new();
-    let mut annotations: Vec<String> = Vec::new();
+    let mut parts = ClassStatementParts::default();
 
     for inner in pair.into_inner() {
         match inner.as_rule() {
-            Rule::class_name => {
-                class_name = cleanup_class_name(inner.as_str());
-            }
-            Rule::generic_type => {
-                // Extract content between ~ markers
-                let s = inner.as_str();
-                generic_type = s[1..s.len() - 1].to_string();
-            }
-            Rule::text_label => {
-                for label in inner.into_inner() {
-                    if label.as_rule() == Rule::quoted_text {
-                        let s = label.as_str();
-                        text_label = s[1..s.len() - 1].to_string();
-                    }
-                }
-            }
-            Rule::css_shorthand => {
-                for id in inner.into_inner() {
-                    if id.as_rule() == Rule::identifier {
-                        css_class = id.as_str().to_string();
-                    }
-                }
-            }
-            Rule::class_body => {
-                for line in inner.into_inner() {
-                    if line.as_rule() == Rule::class_body_line {
-                        for content in line.into_inner() {
-                            match content.as_rule() {
-                                Rule::annotation_line => {
-                                    for ann in content.into_inner() {
-                                        if ann.as_rule() == Rule::annotation_text {
-                                            annotations.push(ann.as_str().to_string());
-                                        }
-                                    }
-                                }
-                                Rule::member_line => {
-                                    let member = content.as_str().trim();
-                                    if !member.is_empty() {
-                                        members.push(member.to_string());
-                                    }
-                                }
-                                Rule::separator_line | Rule::bracket_comment => {
-                                    // Ignore separators and comments
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                }
-            }
+            Rule::class_name => parts.class_name = cleanup_class_name(inner.as_str()),
+            Rule::generic_type => parts.generic_type = unquote_tildes(inner.as_str()),
+            Rule::text_label => parts.text_label = extract_quoted_text(inner),
+            Rule::css_shorthand => parts.css_class = extract_identifier_child(inner),
+            Rule::class_body => process_class_body(inner, &mut parts),
             _ => {}
         }
     }
 
-    if !class_name.is_empty() {
-        db.add_class(&class_name);
-
-        if let Some(class) = db.get_class_mut(&class_name) {
-            if !generic_type.is_empty() {
-                class.type_param = generic_type;
-            }
-            if !text_label.is_empty() {
-                class.label = text_label;
-            } else {
-                class.label = class_name.clone();
-            }
-            if !css_class.is_empty() {
-                if class.css_classes.is_empty() {
-                    class.css_classes = "default".to_string();
-                }
-                class.css_classes.push(' ');
-                class.css_classes.push_str(&css_class);
-            } else if class.css_classes.is_empty() {
-                class.css_classes = "default".to_string();
-            }
-            if let Some(ns) = namespace {
-                class.parent = Some(ns.to_string());
-            }
-            for ann in annotations {
-                class.annotations.push(ann);
-            }
-        }
-
-        // Add members after class is set up
-        for member in members {
-            db.add_member(&class_name, &member);
-        }
+    if !parts.class_name.is_empty() {
+        apply_class_statement(db, parts, namespace);
     }
 
     Ok(())
+}
+
+#[derive(Default)]
+struct ClassStatementParts {
+    class_name: String,
+    generic_type: String,
+    text_label: String,
+    css_class: String,
+    members: Vec<String>,
+    annotations: Vec<String>,
+}
+
+fn unquote_tildes(value: &str) -> String {
+    value[1..value.len() - 1].to_string()
+}
+
+fn extract_quoted_text(pair: pest::iterators::Pair<Rule>) -> String {
+    for label in pair.into_inner() {
+        if label.as_rule() == Rule::quoted_text {
+            let s = label.as_str();
+            return s[1..s.len() - 1].to_string();
+        }
+    }
+    String::new()
+}
+
+fn extract_identifier_child(pair: pest::iterators::Pair<Rule>) -> String {
+    for id in pair.into_inner() {
+        if id.as_rule() == Rule::identifier {
+            return id.as_str().to_string();
+        }
+    }
+    String::new()
+}
+
+fn process_class_body(pair: pest::iterators::Pair<Rule>, parts: &mut ClassStatementParts) {
+    for line in pair.into_inner() {
+        if line.as_rule() == Rule::class_body_line {
+            process_class_body_line(line, parts);
+        }
+    }
+}
+
+fn process_class_body_line(pair: pest::iterators::Pair<Rule>, parts: &mut ClassStatementParts) {
+    for content in pair.into_inner() {
+        match content.as_rule() {
+            Rule::annotation_line => collect_annotation_line(content, parts),
+            Rule::member_line => {
+                let member = content.as_str().trim();
+                if !member.is_empty() {
+                    parts.members.push(member.to_string());
+                }
+            }
+            Rule::separator_line | Rule::bracket_comment => {}
+            _ => {}
+        }
+    }
+}
+
+fn collect_annotation_line(pair: pest::iterators::Pair<Rule>, parts: &mut ClassStatementParts) {
+    for ann in pair.into_inner() {
+        if ann.as_rule() == Rule::annotation_text {
+            parts.annotations.push(ann.as_str().to_string());
+        }
+    }
+}
+
+fn apply_class_statement(db: &mut ClassDb, parts: ClassStatementParts, namespace: Option<&str>) {
+    db.add_class(&parts.class_name);
+
+    if let Some(class) = db.get_class_mut(&parts.class_name) {
+        if !parts.generic_type.is_empty() {
+            class.type_param = parts.generic_type;
+        }
+        class.label = if parts.text_label.is_empty() {
+            parts.class_name.clone()
+        } else {
+            parts.text_label
+        };
+        apply_css_class(&mut class.css_classes, &parts.css_class);
+        if let Some(ns) = namespace {
+            class.parent = Some(ns.to_string());
+        }
+        class.annotations.extend(parts.annotations);
+    }
+
+    for member in parts.members {
+        db.add_member(&parts.class_name, &member);
+    }
+}
+
+fn apply_css_class(css_classes: &mut String, css_class: &str) {
+    if css_classes.is_empty() {
+        *css_classes = "default".to_string();
+    }
+    if !css_class.is_empty() {
+        css_classes.push(' ');
+        css_classes.push_str(css_class);
+    }
 }
 
 fn process_member_stmt(db: &mut ClassDb, pair: pest::iterators::Pair<Rule>) -> Result<(), String> {
@@ -316,129 +344,40 @@ fn process_relationship_stmt(
     pair: pest::iterators::Pair<Rule>,
     namespace: Option<&str>,
 ) -> Result<(), String> {
-    let mut id1 = String::new();
-    let mut id2 = String::new();
-    let mut card1 = String::new();
-    let mut card2 = String::new();
-    let mut rel_type_str = String::new();
-    let mut label = String::new();
-    let mut generic1 = String::new();
-    let mut generic2 = String::new();
-    let mut css1 = String::new();
-    let mut css2 = String::new();
+    let mut parts = RelationshipStatementParts::default();
     let mut class_ref_count = 0;
 
     for inner in pair.into_inner() {
         match inner.as_rule() {
             Rule::class_ref => {
                 class_ref_count += 1;
-                for ref_inner in inner.into_inner() {
-                    match ref_inner.as_rule() {
-                        Rule::class_name => {
-                            let name = cleanup_class_name(ref_inner.as_str());
-                            if class_ref_count == 1 {
-                                id1 = name;
-                            } else {
-                                id2 = name;
-                            }
-                        }
-                        Rule::generic_type => {
-                            let s = ref_inner.as_str();
-                            let gt = s[1..s.len() - 1].to_string();
-                            if class_ref_count == 1 {
-                                generic1 = gt;
-                            } else {
-                                generic2 = gt;
-                            }
-                        }
-                        Rule::css_shorthand => {
-                            for id in ref_inner.into_inner() {
-                                if id.as_rule() == Rule::identifier {
-                                    if class_ref_count == 1 {
-                                        css1 = id.as_str().to_string();
-                                    } else {
-                                        css2 = id.as_str().to_string();
-                                    }
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
+                collect_class_ref(inner, class_ref_count, &mut parts);
             }
             Rule::cardinality_left => {
                 let s = inner.as_str();
-                card1 = s[1..s.len() - 1].to_string();
+                parts.card1 = s[1..s.len() - 1].to_string();
             }
             Rule::cardinality_right => {
                 let s = inner.as_str();
-                card2 = s[1..s.len() - 1].to_string();
+                parts.card2 = s[1..s.len() - 1].to_string();
             }
-            Rule::rel_type => {
-                rel_type_str = inner.as_str().to_string();
-            }
-            Rule::relation_label => {
-                label = inner.as_str().trim().to_string();
-            }
+            Rule::rel_type => parts.rel_type = inner.as_str().to_string(),
+            Rule::relation_label => parts.label = inner.as_str().trim().to_string(),
             _ => {}
         }
     }
 
-    // Add classes if they don't exist
-    if !id1.is_empty() {
-        db.add_class(&id1);
-        if let Some(class) = db.get_class_mut(&id1) {
-            if !generic1.is_empty() && class.type_param.is_empty() {
-                class.type_param = generic1;
-            }
-            if class.label.is_empty() {
-                class.label = id1.clone();
-            }
-            if class.css_classes.is_empty() {
-                class.css_classes = "default".to_string();
-            }
-            if !css1.is_empty() {
-                class.css_classes.push(' ');
-                class.css_classes.push_str(&css1);
-            }
-            if namespace.is_some() && class.parent.is_none() {
-                class.parent = namespace.map(|s| s.to_string());
-            }
-        }
-    }
-
-    if !id2.is_empty() {
-        db.add_class(&id2);
-        if let Some(class) = db.get_class_mut(&id2) {
-            if !generic2.is_empty() && class.type_param.is_empty() {
-                class.type_param = generic2;
-            }
-            if class.label.is_empty() {
-                class.label = id2.clone();
-            }
-            if class.css_classes.is_empty() {
-                class.css_classes = "default".to_string();
-            }
-            if !css2.is_empty() {
-                class.css_classes.push(' ');
-                class.css_classes.push_str(&css2);
-            }
-            if namespace.is_some() && class.parent.is_none() {
-                class.parent = namespace.map(|s| s.to_string());
-            }
-        }
-    }
-
-    // Parse the relationship type
-    let (type1, type2, line_type) = parse_relation_type(&rel_type_str);
+    apply_relationship_class(db, &parts.id1, &parts.generic1, &parts.css1, namespace);
+    apply_relationship_class(db, &parts.id2, &parts.generic2, &parts.css2, namespace);
+    let (type1, type2, line_type) = parse_relation_type(&parts.rel_type);
 
     let relation = ClassRelation {
-        id1,
-        id2,
-        relation_title1: card1,
-        relation_title2: card2,
-        relation_type: rel_type_str,
-        title: label,
+        id1: parts.id1,
+        id2: parts.id2,
+        relation_title1: parts.card1,
+        relation_title2: parts.card2,
+        relation_type: parts.rel_type,
+        title: parts.label,
         text: String::new(),
         style: Vec::new(),
         relation: RelationDetails {
@@ -451,6 +390,98 @@ fn process_relationship_stmt(
     db.add_relation(relation);
 
     Ok(())
+}
+
+#[derive(Default)]
+struct RelationshipStatementParts {
+    id1: String,
+    id2: String,
+    card1: String,
+    card2: String,
+    rel_type: String,
+    label: String,
+    generic1: String,
+    generic2: String,
+    css1: String,
+    css2: String,
+}
+
+fn collect_class_ref(
+    pair: pest::iterators::Pair<Rule>,
+    class_ref_count: usize,
+    parts: &mut RelationshipStatementParts,
+) {
+    for ref_inner in pair.into_inner() {
+        match ref_inner.as_rule() {
+            Rule::class_name => {
+                set_rel_side(
+                    class_ref_count,
+                    parts,
+                    cleanup_class_name(ref_inner.as_str()),
+                    "",
+                );
+            }
+            Rule::generic_type => {
+                set_rel_side(
+                    class_ref_count,
+                    parts,
+                    unquote_tildes(ref_inner.as_str()),
+                    "generic",
+                );
+            }
+            Rule::css_shorthand => {
+                set_rel_side(
+                    class_ref_count,
+                    parts,
+                    extract_identifier_child(ref_inner),
+                    "css",
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+fn set_rel_side(
+    class_ref_count: usize,
+    parts: &mut RelationshipStatementParts,
+    value: String,
+    field: &str,
+) {
+    match (class_ref_count, field) {
+        (1, "generic") => parts.generic1 = value,
+        (_, "generic") => parts.generic2 = value,
+        (1, "css") => parts.css1 = value,
+        (_, "css") => parts.css2 = value,
+        (1, _) => parts.id1 = value,
+        (_, _) => parts.id2 = value,
+    }
+}
+
+fn apply_relationship_class(
+    db: &mut ClassDb,
+    class_id: &str,
+    generic: &str,
+    css_class: &str,
+    namespace: Option<&str>,
+) {
+    if class_id.is_empty() {
+        return;
+    }
+
+    db.add_class(class_id);
+    if let Some(class) = db.get_class_mut(class_id) {
+        if !generic.is_empty() && class.type_param.is_empty() {
+            class.type_param = generic.to_string();
+        }
+        if class.label.is_empty() {
+            class.label = class_id.to_string();
+        }
+        apply_css_class(&mut class.css_classes, css_class);
+        if namespace.is_some() && class.parent.is_none() {
+            class.parent = namespace.map(|s| s.to_string());
+        }
+    }
 }
 
 fn parse_relation_type(rel: &str) -> (i32, i32, LineType) {

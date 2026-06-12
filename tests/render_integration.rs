@@ -1672,68 +1672,11 @@ fn test_state_diagram_fork_join_centered() {
     let diagram = parse(input).expect("Failed to parse state diagram");
     let svg = render(&diagram).expect("Failed to render state diagram");
 
-    // Extract center x-coordinate from a state's path or rect element
-    let extract_center_x = |svg: &str, state_id: &str| -> Option<f64> {
-        let state_marker = format!(r#"id="state-{}""#, state_id);
-        let state_start = svg.find(&state_marker)?;
-        let state_section = &svg[state_start..];
-        let state_end = state_section.find("</g>")?;
-        let state_section = &state_section[..state_end];
-
-        // For path (state boxes): d="M {x+rx} {y} H {right-rx} ..."
-        if state_section.contains("<path") && state_section.contains("state-box") {
-            let path_pattern =
-                regex::Regex::new(r#"<path[^>]*d="M ([0-9.]+) [0-9.]+ H ([0-9.]+)"#).ok()?;
-            if let Some(caps) = path_pattern.captures(state_section) {
-                let x_plus_rx: f64 = caps.get(1)?.as_str().parse().ok()?;
-                let right_minus_rx: f64 = caps.get(2)?.as_str().parse().ok()?;
-                let rx = 5.0;
-                let x = x_plus_rx - rx;
-                let w = right_minus_rx + rx - x;
-                return Some(x + w / 2.0);
-            }
-        }
-
-        // For path (fork/join bars): d="M {x+rx} {y} H {right-rx} ..."
-        if state_section.contains("<path") && state_section.contains("state-fork-join") {
-            let path_pattern =
-                regex::Regex::new(r#"<path[^>]*d="M ([0-9.]+) [0-9.]+ H ([0-9.]+)"#).ok()?;
-            if let Some(caps) = path_pattern.captures(state_section) {
-                let x_plus_rx: f64 = caps.get(1)?.as_str().parse().ok()?;
-                let right_minus_rx: f64 = caps.get(2)?.as_str().parse().ok()?;
-                let rx = 2.0; // fork/join uses rx=2.0
-                let x = x_plus_rx - rx;
-                let w = right_minus_rx + rx - x;
-                return Some(x + w / 2.0);
-            }
-        }
-
-        // For rect (fork/join bars): x="..." width="..."
-        if let Some(x_start) = state_section.find(r#" x=""#) {
-            let x_value_start = x_start + 4;
-            let remaining = &state_section[x_value_start..];
-            let x_end = remaining.find('"')?;
-            let x_str = &remaining[..x_end];
-            if let Ok(x) = x_str.parse::<f64>() {
-                if let Some(w_start) = state_section.find(r#" width=""#) {
-                    let w_value_start = w_start + 8;
-                    let remaining = &state_section[w_value_start..];
-                    let w_end = remaining.find('"')?;
-                    let w_str = &remaining[..w_end];
-                    if let Ok(w) = w_str.parse::<f64>() {
-                        return Some(x + w / 2.0);
-                    }
-                }
-            }
-        }
-        None
-    };
-
     // Get centers
-    let branch_a_center = extract_center_x(&svg, "BranchA").expect("Should find BranchA");
-    let branch_b_center = extract_center_x(&svg, "BranchB").expect("Should find BranchB");
-    let fork_center = extract_center_x(&svg, "fork_state").expect("Should find fork_state");
-    let join_center = extract_center_x(&svg, "join_state").expect("Should find join_state");
+    let branch_a_center = extract_state_center_x(&svg, "BranchA").expect("Should find BranchA");
+    let branch_b_center = extract_state_center_x(&svg, "BranchB").expect("Should find BranchB");
+    let fork_center = extract_state_center_x(&svg, "fork_state").expect("Should find fork_state");
+    let join_center = extract_state_center_x(&svg, "join_state").expect("Should find join_state");
 
     eprintln!(
         "Branch centers: A={}, B={}",
@@ -1758,6 +1701,53 @@ fn test_state_diagram_fork_join_centered() {
         expected_center,
         join_center
     );
+}
+
+fn extract_state_center_x(svg: &str, state_id: &str) -> Option<f64> {
+    let section = state_svg_section(svg, state_id)?;
+    state_path_center_x(section).or_else(|| state_rect_center_x(section))
+}
+
+fn state_svg_section<'a>(svg: &'a str, state_id: &str) -> Option<&'a str> {
+    let state_marker = format!(r#"id="state-{}""#, state_id);
+    let state_start = svg.find(&state_marker)?;
+    let state_section = &svg[state_start..];
+    let state_end = state_section.find("</g>")?;
+    Some(&state_section[..state_end])
+}
+
+fn state_path_center_x(state_section: &str) -> Option<f64> {
+    if state_section.contains("state-box") {
+        return rounded_path_center_x(state_section, 5.0);
+    }
+    if state_section.contains("state-fork-join") {
+        return rounded_path_center_x(state_section, 2.0);
+    }
+    None
+}
+
+fn rounded_path_center_x(state_section: &str, rx: f64) -> Option<f64> {
+    let path_pattern = regex::Regex::new(r#"<path[^>]*d="M ([0-9.]+) [0-9.]+ H ([0-9.]+)"#).ok()?;
+    let caps = path_pattern.captures(state_section)?;
+    let x_plus_rx: f64 = caps.get(1)?.as_str().parse().ok()?;
+    let right_minus_rx: f64 = caps.get(2)?.as_str().parse().ok()?;
+    let x = x_plus_rx - rx;
+    let width = right_minus_rx + rx - x;
+    Some(x + width / 2.0)
+}
+
+fn state_rect_center_x(state_section: &str) -> Option<f64> {
+    let x = svg_attr_f64(state_section, "x")?;
+    let width = svg_attr_f64(state_section, "width")?;
+    Some(x + width / 2.0)
+}
+
+fn svg_attr_f64(section: &str, attr: &str) -> Option<f64> {
+    let marker = format!(r#" {}=""#, attr);
+    let value_start = section.find(&marker)? + marker.len();
+    let remaining = &section[value_start..];
+    let value_end = remaining.find('"')?;
+    remaining[..value_end].parse().ok()
 }
 
 #[test]

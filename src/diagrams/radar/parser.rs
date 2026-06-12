@@ -150,71 +150,92 @@ fn process_curve(
     pair: pest::iterators::Pair<Rule>,
     db: &mut RadarDb,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut name = String::new();
-    let mut label: Option<String> = None;
-    let mut simple_entries: Vec<f64> = Vec::new();
-    let mut detailed_entries: Vec<RadarEntry> = Vec::new();
-    let mut is_detailed = false;
+    let mut curve = ParsedCurve::default();
 
     for inner in pair.into_inner() {
         match inner.as_rule() {
-            Rule::curve_name => {
-                name = inner.as_str().to_string();
-            }
-            Rule::curve_label => {
-                for label_inner in inner.into_inner() {
-                    if label_inner.as_rule() == Rule::curve_label_text {
-                        let text = label_inner.as_str();
-                        // Remove surrounding quotes if present
-                        label = Some(if text.starts_with('"') && text.ends_with('"') {
-                            text[1..text.len() - 1].to_string()
-                        } else {
-                            text.to_string()
-                        });
-                    }
-                }
-            }
-            Rule::entries => {
-                for entry_inner in inner.into_inner() {
-                    match entry_inner.as_rule() {
-                        Rule::number_entry => {
-                            for val in entry_inner.into_inner() {
-                                if val.as_rule() == Rule::entry_value {
-                                    simple_entries.push(val.as_str().parse()?);
-                                }
-                            }
-                        }
-                        Rule::detailed_entry => {
-                            is_detailed = true;
-                            let mut axis: Option<String> = None;
-                            let mut value: f64 = 0.0;
-                            for detail_inner in entry_inner.into_inner() {
-                                match detail_inner.as_rule() {
-                                    Rule::entry_axis => {
-                                        axis = Some(detail_inner.as_str().to_string());
-                                    }
-                                    Rule::entry_value => {
-                                        value = detail_inner.as_str().parse()?;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                            detailed_entries.push(RadarEntry { axis, value });
-                        }
-                        _ => {}
-                    }
-                }
-            }
+            Rule::curve_name => curve.name = inner.as_str().to_string(),
+            Rule::curve_label => curve.label = extract_curve_label(inner),
+            Rule::entries => collect_curve_entries(inner, &mut curve)?,
             _ => {}
         }
     }
 
-    if is_detailed {
-        db.add_curve_with_axis_refs(&name, label.as_deref(), detailed_entries)?;
+    if curve.is_detailed {
+        db.add_curve_with_axis_refs(&curve.name, curve.label.as_deref(), curve.detailed_entries)?;
     } else {
-        db.add_curve(&name, label.as_deref(), simple_entries);
+        db.add_curve(&curve.name, curve.label.as_deref(), curve.simple_entries);
     }
 
+    Ok(())
+}
+
+#[derive(Default)]
+struct ParsedCurve {
+    name: String,
+    label: Option<String>,
+    simple_entries: Vec<f64>,
+    detailed_entries: Vec<RadarEntry>,
+    is_detailed: bool,
+}
+
+fn extract_curve_label(pair: pest::iterators::Pair<Rule>) -> Option<String> {
+    for label_inner in pair.into_inner() {
+        if label_inner.as_rule() == Rule::curve_label_text {
+            let text = label_inner.as_str();
+            return Some(if text.starts_with('"') && text.ends_with('"') {
+                text[1..text.len() - 1].to_string()
+            } else {
+                text.to_string()
+            });
+        }
+    }
+    None
+}
+
+fn collect_curve_entries(
+    pair: pest::iterators::Pair<Rule>,
+    curve: &mut ParsedCurve,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for entry_inner in pair.into_inner() {
+        match entry_inner.as_rule() {
+            Rule::number_entry => collect_number_entry(entry_inner, curve)?,
+            Rule::detailed_entry => collect_detailed_entry(entry_inner, curve)?,
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn collect_number_entry(
+    pair: pest::iterators::Pair<Rule>,
+    curve: &mut ParsedCurve,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for val in pair.into_inner() {
+        if val.as_rule() == Rule::entry_value {
+            curve.simple_entries.push(val.as_str().parse()?);
+        }
+    }
+    Ok(())
+}
+
+fn collect_detailed_entry(
+    pair: pest::iterators::Pair<Rule>,
+    curve: &mut ParsedCurve,
+) -> Result<(), Box<dyn std::error::Error>> {
+    curve.is_detailed = true;
+    let mut axis: Option<String> = None;
+    let mut value: f64 = 0.0;
+
+    for detail_inner in pair.into_inner() {
+        match detail_inner.as_rule() {
+            Rule::entry_axis => axis = Some(detail_inner.as_str().to_string()),
+            Rule::entry_value => value = detail_inner.as_str().parse()?,
+            _ => {}
+        }
+    }
+
+    curve.detailed_entries.push(RadarEntry { axis, value });
     Ok(())
 }
 

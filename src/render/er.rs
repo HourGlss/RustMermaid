@@ -645,194 +645,58 @@ pub fn render_er(db: &ErDb, config: &RenderConfig) -> Result<String> {
     let entities = db.get_entities();
 
     if entities.is_empty() {
-        // Empty diagram
-        doc.set_size(400.0, 200.0);
-        if !db.diagram_title.is_empty() {
-            let title_elem = SvgElement::Text {
-                x: 200.0,
-                y: 30.0,
-                content: db.diagram_title.clone(),
-                attrs: Attrs::new()
-                    .with_attr("text-anchor", "middle")
-                    .with_class("er-title")
-                    .with_attr("font-size", "20")
-                    .with_attr("font-weight", "bold"),
-            };
-            doc.add_element(title_elem);
-        }
-        return Ok(doc.to_string());
+        return Ok(render_empty_er(db));
     }
 
-    // Calculate entity dimensions (width, height, column widths)
-    let mut entity_dimensions: HashMap<String, EntityDimensions> = HashMap::new();
-    for (name, entity) in entities {
-        let display_name = if !entity.alias.is_empty() {
-            &entity.alias
-        } else {
-            &entity.label
-        };
-        let dims = calculate_entity_dimensions(
-            entity,
-            display_name,
-            entity_header_height,
-            attr_row_height,
-            attr_font_size,
-            padding,
-        );
-        entity_dimensions.insert(name.clone(), dims);
-    }
-
-    // Sort entities for consistent ordering
-    let mut sorted_entities: Vec<_> = entities.iter().collect();
-    sorted_entities.sort_by(|a, b| a.0.cmp(b.0));
-
-    // Use proper DAG layout based on relationships
+    let entity_dimensions = entity_dimensions_map(
+        entities,
+        entity_header_height,
+        attr_row_height,
+        attr_font_size,
+        padding,
+    );
+    let sorted_entities = sorted_entities(entities);
     let size_estimator = CharacterSizeEstimator::default();
     let layout_input = db.to_layout_graph(&size_estimator)?;
     let layout_result = layout(layout_input)?;
-
-    // Extract positions from layout, mapping entity IDs to (x, y)
-    let mut entity_positions: HashMap<String, (f64, f64)> = HashMap::new();
-
-    // Create a reverse mapping from entity ID to entity name
-    let id_to_name: HashMap<String, String> = entities
-        .iter()
-        .map(|(name, entity)| (entity.id.clone(), name.clone()))
-        .collect();
-
-    for node in &layout_result.nodes {
-        if let (Some(x), Some(y)) = (node.x, node.y) {
-            // Map entity ID back to entity name
-            if let Some(entity_name) = id_to_name.get(&node.id) {
-                entity_positions.insert(entity_name.clone(), (x, y));
-            }
-        }
-    }
-
-    // Extract edge bend_points from layout result (dagre-computed paths)
-    // The edge ID format is "relationship-{idx}" as defined in to_layout_graph
-    let mut edge_bend_points: HashMap<String, Vec<Point>> = HashMap::new();
-    for edge in &layout_result.edges {
-        if !edge.bend_points.is_empty() {
-            edge_bend_points.insert(edge.id.clone(), edge.bend_points.clone());
-        }
-    }
-
-    // Title offset
-    let title_offset = if !db.diagram_title.is_empty() {
-        40.0
-    } else {
+    let entity_id_to_name = entity_id_to_name(entities);
+    let entity_positions = entity_positions_from_layout(&layout_result, &entity_id_to_name);
+    let edge_bend_points = edge_bend_points_from_layout(&layout_result);
+    let title_offset = if db.diagram_title.is_empty() {
         0.0
+    } else {
+        40.0
     };
-
-    // Calculate diagram bounds from layout
     let max_width = layout_result.width.unwrap_or(400.0) + margin * 2.0;
     let max_height = layout_result.height.unwrap_or(200.0) + margin * 2.0 + title_offset;
 
     doc.set_size(max_width, max_height);
-
-    // Add theme styles
-    if config.embed_css {
-        doc.add_style(&config.theme.generate_css());
-        doc.add_style(&generate_er_css(&config.theme));
-    }
-
-    // Add ER marker definitions
+    add_er_styles(&mut doc, config);
     doc.add_defs(generate_er_markers());
+    render_er_title(&mut doc, &db.diagram_title, max_width);
 
-    // Render title
-    if !db.diagram_title.is_empty() {
-        let title_elem = SvgElement::Text {
-            x: max_width / 2.0,
-            y: 25.0,
-            content: db.diagram_title.clone(),
-            attrs: Attrs::new()
-                .with_attr("text-anchor", "middle")
-                .with_class("er-title")
-                .with_attr("font-size", "20")
-                .with_attr("font-weight", "bold"),
-        };
-        doc.add_element(title_elem);
-    }
-
-    // Create entity id to name mapping for relationship rendering
-    let entity_id_to_name: HashMap<String, String> = entities
-        .iter()
-        .map(|(name, entity)| (entity.id.clone(), name.clone()))
-        .collect();
-
-    // Marker offset for edge endpoints (space for marker symbols)
     let marker_offset = 18.0;
-
-    // First pass: collect all edge attachments to calculate distributed positions
-    let mut edge_attachments = Vec::new();
     let relationships = db.get_relationships();
-
-    for (idx, relationship) in relationships.iter().enumerate() {
-        let entity_a_name = entity_id_to_name.get(&relationship.entity_a);
-        let entity_b_name = entity_id_to_name.get(&relationship.entity_b);
-
-        if let (Some(a_name), Some(b_name)) = (entity_a_name, entity_b_name) {
-            if let (Some(&(x1, y1)), Some(&(x2, y2))) =
-                (entity_positions.get(a_name), entity_positions.get(b_name))
-            {
-                let dims1 = entity_dimensions.get(a_name);
-                let dims2 = entity_dimensions.get(b_name);
-                let h1 = dims1.map(|d| d.height).unwrap_or(entity_header_height);
-                let h2 = dims2.map(|d| d.height).unwrap_or(entity_header_height);
-                let w1 = dims1.map(|d| d.width).unwrap_or(188.0);
-                let w2 = dims2.map(|d| d.width).unwrap_or(188.0);
-
-                let (side_a, side_b) = determine_attachment_sides(x1, y1, w1, h1, x2, y2, w2, h2);
-
-                edge_attachments.push(EdgeAttachment {
-                    relationship_idx: idx,
-                    side_a,
-                    side_b,
-                    entity_a: a_name.clone(),
-                    entity_b: b_name.clone(),
-                });
-            }
-        }
-    }
-
-    // Calculate distributed attachment positions
+    let edge_attachments = collect_edge_attachments(
+        relationships,
+        &entity_id_to_name,
+        &entity_positions,
+        &entity_dimensions,
+        entity_header_height,
+    );
     let distributed_positions = calculate_distributed_attachments(
         &edge_attachments,
         &entity_positions,
         &entity_dimensions,
         marker_offset,
     );
-
-    // First pass: compute adjusted bend points for all edges with dagre routing.
-    // We need all edges to detect and fix converging endpoints on the same entity side.
-    let mut all_adjusted_points: HashMap<usize, Vec<Point>> = HashMap::new();
-
-    for (idx, relationship) in relationships.iter().enumerate() {
-        let edge_id = format!("relationship-{}", idx);
-        let entity_a_name = entity_id_to_name.get(&relationship.entity_a);
-        let entity_b_name = entity_id_to_name.get(&relationship.entity_b);
-
-        if let Some(bend_points) = edge_bend_points.get(&edge_id) {
-            let adjusted = if let (Some(a_name), Some(b_name)) = (entity_a_name, entity_b_name) {
-                adjust_bend_points_for_intersection(
-                    bend_points,
-                    a_name,
-                    b_name,
-                    &entity_positions,
-                    &entity_dimensions,
-                )
-            } else {
-                bend_points.clone()
-            };
-            all_adjusted_points.insert(idx, adjusted);
-        }
-    }
-
-    // Second pass: redistribute converging edge endpoints.
-    // When multiple edges arrive at the same side of the same entity (e.g., both
-    // hitting the top of LINE-ITEM), redistribute them to left/right sides based
-    // on horizontal offset. This matches how mermaid distributes converging edges.
+    let mut all_adjusted_points = adjusted_relationship_points(
+        relationships,
+        &entity_id_to_name,
+        &entity_positions,
+        &entity_dimensions,
+        &edge_bend_points,
+    );
     redistribute_converging_endpoints(
         &mut all_adjusted_points,
         relationships,
@@ -840,70 +704,306 @@ pub fn render_er(db: &ErDb, config: &RenderConfig) -> Result<String> {
         &entity_positions,
         &entity_dimensions,
     );
+    render_er_relationships(
+        &mut doc,
+        relationships,
+        &all_adjusted_points,
+        &entity_id_to_name,
+        &edge_attachments,
+        &distributed_positions,
+    );
+    render_er_entities(
+        &mut doc,
+        &sorted_entities,
+        &entity_positions,
+        &entity_dimensions,
+        entity_header_height,
+        attr_row_height,
+        padding,
+    );
 
-    // Render relationships FIRST so entity boxes paint on top and clip markers
-    // (SVG renders later elements on top of earlier ones)
+    Ok(doc.to_string())
+}
+
+fn render_empty_er(db: &ErDb) -> String {
+    let mut doc = SvgDocument::new();
+    doc.set_size(400.0, 200.0);
+    render_er_title(&mut doc, &db.diagram_title, 400.0);
+    doc.to_string()
+}
+
+fn entity_dimensions_map(
+    entities: &HashMap<String, Entity>,
+    entity_header_height: f64,
+    attr_row_height: f64,
+    attr_font_size: f64,
+    padding: f64,
+) -> HashMap<String, EntityDimensions> {
+    entities
+        .iter()
+        .map(|(name, entity)| {
+            let display_name = er_entity_display_name(entity);
+            let dims = calculate_entity_dimensions(
+                entity,
+                display_name,
+                entity_header_height,
+                attr_row_height,
+                attr_font_size,
+                padding,
+            );
+            (name.clone(), dims)
+        })
+        .collect()
+}
+
+fn er_entity_display_name(entity: &Entity) -> &str {
+    if entity.alias.is_empty() {
+        &entity.label
+    } else {
+        &entity.alias
+    }
+}
+
+fn sorted_entities(entities: &HashMap<String, Entity>) -> Vec<(&String, &Entity)> {
+    let mut sorted_entities: Vec<_> = entities.iter().collect();
+    sorted_entities.sort_by(|a, b| a.0.cmp(b.0));
+    sorted_entities
+}
+
+fn entity_id_to_name(entities: &HashMap<String, Entity>) -> HashMap<String, String> {
+    entities
+        .iter()
+        .map(|(name, entity)| (entity.id.clone(), name.clone()))
+        .collect()
+}
+
+fn entity_positions_from_layout(
+    layout_result: &LayoutGraph,
+    id_to_name: &HashMap<String, String>,
+) -> HashMap<String, (f64, f64)> {
+    layout_result
+        .nodes
+        .iter()
+        .filter_map(|node| {
+            let entity_name = id_to_name.get(&node.id)?;
+            Some((entity_name.clone(), (node.x?, node.y?)))
+        })
+        .collect()
+}
+
+fn edge_bend_points_from_layout(layout_result: &LayoutGraph) -> HashMap<String, Vec<Point>> {
+    layout_result
+        .edges
+        .iter()
+        .filter(|edge| !edge.bend_points.is_empty())
+        .map(|edge| (edge.id.clone(), edge.bend_points.clone()))
+        .collect()
+}
+
+fn add_er_styles(doc: &mut SvgDocument, config: &RenderConfig) {
+    if config.embed_css {
+        doc.add_style(&config.theme.generate_css());
+        doc.add_style(&generate_er_css(&config.theme));
+    }
+}
+
+fn render_er_title(doc: &mut SvgDocument, title: &str, max_width: f64) {
+    if title.is_empty() {
+        return;
+    }
+
+    doc.add_element(SvgElement::Text {
+        x: max_width / 2.0,
+        y: 25.0,
+        content: title.to_string(),
+        attrs: Attrs::new()
+            .with_attr("text-anchor", "middle")
+            .with_class("er-title")
+            .with_attr("font-size", "20")
+            .with_attr("font-weight", "bold"),
+    });
+}
+
+fn collect_edge_attachments(
+    relationships: &[Relationship],
+    entity_id_to_name: &HashMap<String, String>,
+    entity_positions: &HashMap<String, (f64, f64)>,
+    entity_dimensions: &HashMap<String, EntityDimensions>,
+    entity_header_height: f64,
+) -> Vec<EdgeAttachment> {
+    relationships
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, relationship)| {
+            edge_attachment(
+                idx,
+                relationship,
+                entity_id_to_name,
+                entity_positions,
+                entity_dimensions,
+                entity_header_height,
+            )
+        })
+        .collect()
+}
+
+fn edge_attachment(
+    idx: usize,
+    relationship: &Relationship,
+    entity_id_to_name: &HashMap<String, String>,
+    entity_positions: &HashMap<String, (f64, f64)>,
+    entity_dimensions: &HashMap<String, EntityDimensions>,
+    entity_header_height: f64,
+) -> Option<EdgeAttachment> {
+    let a_name = entity_id_to_name.get(&relationship.entity_a)?;
+    let b_name = entity_id_to_name.get(&relationship.entity_b)?;
+    let &(x1, y1) = entity_positions.get(a_name)?;
+    let &(x2, y2) = entity_positions.get(b_name)?;
+    let dims1 = entity_dimensions.get(a_name);
+    let dims2 = entity_dimensions.get(b_name);
+    let h1 = dims1.map(|d| d.height).unwrap_or(entity_header_height);
+    let h2 = dims2.map(|d| d.height).unwrap_or(entity_header_height);
+    let w1 = dims1.map(|d| d.width).unwrap_or(188.0);
+    let w2 = dims2.map(|d| d.width).unwrap_or(188.0);
+    let (side_a, side_b) = determine_attachment_sides(x1, y1, w1, h1, x2, y2, w2, h2);
+
+    Some(EdgeAttachment {
+        relationship_idx: idx,
+        side_a,
+        side_b,
+        entity_a: a_name.clone(),
+        entity_b: b_name.clone(),
+    })
+}
+
+fn adjusted_relationship_points(
+    relationships: &[Relationship],
+    entity_id_to_name: &HashMap<String, String>,
+    entity_positions: &HashMap<String, (f64, f64)>,
+    entity_dimensions: &HashMap<String, EntityDimensions>,
+    edge_bend_points: &HashMap<String, Vec<Point>>,
+) -> HashMap<usize, Vec<Point>> {
+    relationships
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, relationship)| {
+            adjusted_relationship_point(
+                idx,
+                relationship,
+                entity_id_to_name,
+                entity_positions,
+                entity_dimensions,
+                edge_bend_points,
+            )
+        })
+        .collect()
+}
+
+fn adjusted_relationship_point(
+    idx: usize,
+    relationship: &Relationship,
+    entity_id_to_name: &HashMap<String, String>,
+    entity_positions: &HashMap<String, (f64, f64)>,
+    entity_dimensions: &HashMap<String, EntityDimensions>,
+    edge_bend_points: &HashMap<String, Vec<Point>>,
+) -> Option<(usize, Vec<Point>)> {
+    let edge_id = format!("relationship-{}", idx);
+    let bend_points = edge_bend_points.get(&edge_id)?;
+    let adjusted = match (
+        entity_id_to_name.get(&relationship.entity_a),
+        entity_id_to_name.get(&relationship.entity_b),
+    ) {
+        (Some(a_name), Some(b_name)) => adjust_bend_points_for_intersection(
+            bend_points,
+            a_name,
+            b_name,
+            entity_positions,
+            entity_dimensions,
+        ),
+        _ => bend_points.clone(),
+    };
+    Some((idx, adjusted))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_er_relationships(
+    doc: &mut SvgDocument,
+    relationships: &[Relationship],
+    all_adjusted_points: &HashMap<usize, Vec<Point>>,
+    entity_id_to_name: &HashMap<String, String>,
+    edge_attachments: &[EdgeAttachment],
+    distributed_positions: &HashMap<(String, AttachmentSide, usize), AttachmentPosition>,
+) {
     for (idx, relationship) in relationships.iter().enumerate() {
         if let Some(adjusted_points) = all_adjusted_points.get(&idx) {
-            let rel_elem = render_relationship_from_bend_points(
+            doc.add_element(render_relationship_from_bend_points(
                 adjusted_points,
                 &relationship.role_a,
                 relationship.rel_spec.card_a,
                 relationship.rel_spec.card_b,
                 relationship.rel_spec.rel_type,
-            );
+            ));
+        } else if let Some(rel_elem) = fallback_relationship_element(
+            idx,
+            relationship,
+            entity_id_to_name,
+            edge_attachments,
+            distributed_positions,
+        ) {
             doc.add_element(rel_elem);
-        } else {
-            // Fallback: use manual attachment calculation if dagre didn't provide points
-            let entity_a_name = entity_id_to_name.get(&relationship.entity_a);
-            let entity_b_name = entity_id_to_name.get(&relationship.entity_b);
-
-            if let (Some(a_name), Some(b_name)) = (entity_a_name, entity_b_name) {
-                let attachment = edge_attachments.iter().find(|a| a.relationship_idx == idx);
-
-                if let Some(attachment) = attachment {
-                    let start_pos =
-                        distributed_positions.get(&(a_name.clone(), attachment.side_a, idx));
-                    let end_pos =
-                        distributed_positions.get(&(b_name.clone(), attachment.side_b, idx));
-
-                    if let (Some(start), Some(end)) = (start_pos, end_pos) {
-                        let is_side_attachment = matches!(
-                            attachment.side_a,
-                            AttachmentSide::Left | AttachmentSide::Right
-                        );
-
-                        let rel_elem = render_relationship_with_positions(
-                            start.x,
-                            start.y,
-                            end.x,
-                            end.y,
-                            is_side_attachment,
-                            &relationship.role_a,
-                            relationship.rel_spec.card_a,
-                            relationship.rel_spec.card_b,
-                            relationship.rel_spec.rel_type,
-                        );
-                        doc.add_element(rel_elem);
-                    }
-                }
-            }
         }
     }
+}
 
-    // Render entities AFTER relationships so entity boxes paint on top,
-    // clipping the crow's feet markers behind the entity boxes
-    for (name, entity) in &sorted_entities {
+fn fallback_relationship_element(
+    idx: usize,
+    relationship: &Relationship,
+    entity_id_to_name: &HashMap<String, String>,
+    edge_attachments: &[EdgeAttachment],
+    distributed_positions: &HashMap<(String, AttachmentSide, usize), AttachmentPosition>,
+) -> Option<SvgElement> {
+    let a_name = entity_id_to_name.get(&relationship.entity_a)?;
+    let b_name = entity_id_to_name.get(&relationship.entity_b)?;
+    let attachment = edge_attachments
+        .iter()
+        .find(|attachment| attachment.relationship_idx == idx)?;
+    let start = distributed_positions.get(&(a_name.clone(), attachment.side_a, idx))?;
+    let end = distributed_positions.get(&(b_name.clone(), attachment.side_b, idx))?;
+    let is_side_attachment = matches!(
+        attachment.side_a,
+        AttachmentSide::Left | AttachmentSide::Right
+    );
+
+    Some(render_relationship_with_positions(
+        start.x,
+        start.y,
+        end.x,
+        end.y,
+        is_side_attachment,
+        &relationship.role_a,
+        relationship.rel_spec.card_a,
+        relationship.rel_spec.card_b,
+        relationship.rel_spec.rel_type,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_er_entities(
+    doc: &mut SvgDocument,
+    sorted_entities: &[(&String, &Entity)],
+    entity_positions: &HashMap<String, (f64, f64)>,
+    entity_dimensions: &HashMap<String, EntityDimensions>,
+    entity_header_height: f64,
+    attr_row_height: f64,
+    padding: f64,
+) {
+    for (name, entity) in sorted_entities {
         if let Some(&(x, y)) = entity_positions.get(*name) {
             let dims = entity_dimensions
                 .get(*name)
                 .cloned()
-                .unwrap_or(EntityDimensions {
-                    width: 188.0,
-                    height: entity_header_height + padding * 2.0,
-                    col_widths: [65.8, 75.2, 47.0],
-                });
-            let entity_elem = render_entity(
+                .unwrap_or_else(|| default_entity_dimensions(entity_header_height, padding));
+            doc.add_element(render_entity(
                 entity,
                 x,
                 y,
@@ -913,12 +1013,17 @@ pub fn render_er(db: &ErDb, config: &RenderConfig) -> Result<String> {
                 attr_row_height,
                 padding,
                 &dims.col_widths,
-            );
-            doc.add_element(entity_elem);
+            ));
         }
     }
+}
 
-    Ok(doc.to_string())
+fn default_entity_dimensions(entity_header_height: f64, padding: f64) -> EntityDimensions {
+    EntityDimensions {
+        width: 188.0,
+        height: entity_header_height + padding * 2.0,
+        col_widths: [65.8, 75.2, 47.0],
+    }
 }
 
 /// Render an entity box with attributes in table-style layout

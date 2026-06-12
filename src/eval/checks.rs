@@ -9,7 +9,7 @@ use super::Issue;
 use crate::render::svg::sequence_geometry::{
     SequenceBox, SequenceGeometry, SEQUENCE_OVERLAP_TOLERANCE,
 };
-use crate::render::svg::structure::{EdgeGeometry, NodeBounds};
+use crate::render::svg::structure::{EdgeDetail, EdgeGeometry, NodeBounds};
 use crate::render::svg::SvgStructure;
 use std::collections::HashSet;
 
@@ -91,14 +91,19 @@ pub fn check_sequence_overlaps(selkie: &SvgStructure, issues: &mut Vec<Issue>) {
         return;
     };
 
+    check_sequence_message_overlaps(&geometry, issues);
+    check_sequence_note_text_overlaps(&geometry, issues);
+    check_sequence_loop_text_overlaps(&geometry, issues);
+    check_sequence_note_box_overlaps(&geometry, issues);
+    check_sequence_markers(&geometry, issues);
+    check_sequence_self_messages(&geometry, issues);
+}
+
+fn check_sequence_message_overlaps(geometry: &SequenceGeometry, issues: &mut Vec<Issue>) {
     let notes = geometry.notes();
     let message_texts = geometry.message_texts();
-    let note_texts = geometry.note_texts();
-    let loop_texts = geometry.loop_texts();
-    let label_texts = geometry.label_texts();
     let fragments = geometry.fragments();
     let headers = geometry.fragment_headers();
-    let borders = geometry.fragment_borders();
 
     for message in message_texts {
         for note in notes {
@@ -113,6 +118,13 @@ pub fn check_sequence_overlaps(selkie: &SvgStructure, issues: &mut Vec<Issue>) {
             }
         }
     }
+}
+
+fn check_sequence_note_text_overlaps(geometry: &SequenceGeometry, issues: &mut Vec<Issue>) {
+    let notes = geometry.notes();
+    let note_texts = geometry.note_texts();
+    let headers = geometry.fragment_headers();
+    let label_texts = geometry.label_texts();
 
     for text in note_texts {
         let inside_own_note = is_note_text_inside_own_note(text, notes);
@@ -143,6 +155,13 @@ pub fn check_sequence_overlaps(selkie: &SvgStructure, issues: &mut Vec<Issue>) {
             report_overlap_if_intersects(text, label, issues);
         }
     }
+}
+
+fn check_sequence_loop_text_overlaps(geometry: &SequenceGeometry, issues: &mut Vec<Issue>) {
+    let notes = geometry.notes();
+    let loop_texts = geometry.loop_texts();
+    let headers = geometry.fragment_headers();
+    let label_texts = geometry.label_texts();
 
     for text in loop_texts {
         let inside_own_header = is_loop_text_inside_own_header(text, headers);
@@ -163,6 +182,12 @@ pub fn check_sequence_overlaps(selkie: &SvgStructure, issues: &mut Vec<Issue>) {
             report_overlap_if_intersects(text, label, issues);
         }
     }
+}
+
+fn check_sequence_note_box_overlaps(geometry: &SequenceGeometry, issues: &mut Vec<Issue>) {
+    let notes = geometry.notes();
+    let headers = geometry.fragment_headers();
+    let borders = geometry.fragment_borders();
 
     for note in notes {
         for header in headers {
@@ -173,12 +198,18 @@ pub fn check_sequence_overlaps(selkie: &SvgStructure, issues: &mut Vec<Issue>) {
             report_overlap_if_intersects(note, border, issues);
         }
     }
+}
 
+fn check_sequence_markers(geometry: &SequenceGeometry, issues: &mut Vec<Issue>) {
     for marker_id in ["arrow-filled", "arrow-open"] {
         if let Some(marker) = geometry.marker(marker_id) {
             report_stroke_scaled_sequence_marker(marker, issues);
         }
     }
+}
+
+fn check_sequence_self_messages(geometry: &SequenceGeometry, issues: &mut Vec<Issue>) {
+    let message_texts = geometry.message_texts();
 
     for path in geometry.self_message_paths() {
         report_square_self_message_path(path, issues);
@@ -929,293 +960,345 @@ fn check_edge_attachments(
         return;
     }
 
-    // Build a summary of edge attachments for clear comparison
-    let mut selkie_summary = Vec::new();
-    let mut ref_summary = Vec::new();
+    report_edge_endpoint_differences(selkie_geo, ref_geo, issues);
+    report_attachment_side_mismatches(selkie_geo, ref_geo, issues);
+    report_edge_details_summary(selkie_geo, ref_geo, issues);
+    report_edge_attachment_pattern(selkie_geo, ref_geo, issues);
+}
 
-    for (i, edge) in selkie_geo.edge_details.iter().enumerate() {
-        let start_desc = if edge.start_center_offset.abs() < 5.0 {
-            format!("{} (centered)", edge.start_edge)
-        } else {
-            format!(
-                "{} (offset {:.0}px)",
-                edge.start_edge, edge.start_center_offset
+fn edge_attachment_summary(details: &[EdgeDetail]) -> Vec<String> {
+    details
+        .iter()
+        .enumerate()
+        .map(|(i, edge)| format_edge_attachment_summary(i, edge))
+        .collect()
+}
+
+fn format_edge_attachment_summary(i: usize, edge: &EdgeDetail) -> String {
+    format!(
+        "Edge {}: {} → {}",
+        i + 1,
+        edge_endpoint_summary(
+            &edge.start_node,
+            edge.start,
+            edge_side_desc(&edge.start_edge, edge.start_center_offset)
+        ),
+        edge_endpoint_summary(
+            &edge.end_node,
+            edge.end,
+            edge_side_desc(&edge.end_edge, edge.end_center_offset)
+        ),
+    )
+}
+
+fn edge_side_desc(side: &str, center_offset: f64) -> String {
+    if center_offset.abs() < 5.0 {
+        format!("{side} (centered)")
+    } else {
+        format!("{side} (offset {center_offset:.0}px)")
+    }
+}
+
+fn edge_endpoint_summary(node: &Option<String>, point: (f64, f64), side_desc: String) -> String {
+    node.as_ref()
+        .map(|name| format!("{name}.{side_desc}"))
+        .unwrap_or_else(|| format!("({:.0},{:.0})", point.0, point.1))
+}
+
+fn report_edge_endpoint_differences(
+    selkie_geo: &EdgeGeometry,
+    ref_geo: &EdgeGeometry,
+    issues: &mut Vec<Issue>,
+) {
+    if selkie_geo.edge_endpoints.is_empty() && ref_geo.edge_endpoints.is_empty() {
+        return;
+    }
+
+    report_edge_endpoint_count(selkie_geo, ref_geo, issues);
+    let edge_diffs = edge_position_differences(selkie_geo, ref_geo);
+    if !edge_diffs.is_empty() {
+        let message = format!("EDGE POSITION DIFFERENCES:\n  {}", edge_diffs.join("\n  "));
+        issues.push(Issue::warning("edge_positions", message));
+    }
+}
+
+fn report_edge_endpoint_count(
+    selkie_geo: &EdgeGeometry,
+    ref_geo: &EdgeGeometry,
+    issues: &mut Vec<Issue>,
+) {
+    let selkie_count = selkie_geo.edge_endpoints.len();
+    let ref_count = ref_geo.edge_endpoints.len();
+
+    if selkie_count != ref_count {
+        issues.push(
+            Issue::warning(
+                "edge_count",
+                format!(
+                    "Edge count differs: expected {}, got {}",
+                    ref_count, selkie_count
+                ),
             )
-        };
-        let end_desc = if edge.end_center_offset.abs() < 5.0 {
-            format!("{} (centered)", edge.end_edge)
-        } else {
-            format!("{} (offset {:.0}px)", edge.end_edge, edge.end_center_offset)
-        };
-
-        selkie_summary.push(format!(
-            "Edge {}: {} → {}",
-            i + 1,
-            edge.start_node
-                .as_ref()
-                .map(|n| format!("{}.{}", n, start_desc))
-                .unwrap_or_else(|| format!("({:.0},{:.0})", edge.start.0, edge.start.1)),
-            edge.end_node
-                .as_ref()
-                .map(|n| format!("{}.{}", n, end_desc))
-                .unwrap_or_else(|| format!("({:.0},{:.0})", edge.end.0, edge.end.1)),
-        ));
+            .with_values(ref_count.to_string(), selkie_count.to_string()),
+        );
     }
+}
 
-    for (i, edge) in ref_geo.edge_details.iter().enumerate() {
-        let start_desc = if edge.start_center_offset.abs() < 5.0 {
-            format!("{} (centered)", edge.start_edge)
-        } else {
-            format!(
-                "{} (offset {:.0}px)",
-                edge.start_edge, edge.start_center_offset
-            )
-        };
-        let end_desc = if edge.end_center_offset.abs() < 5.0 {
-            format!("{} (centered)", edge.end_edge)
-        } else {
-            format!("{} (offset {:.0}px)", edge.end_edge, edge.end_center_offset)
-        };
-
-        ref_summary.push(format!(
-            "Edge {}: {} → {}",
-            i + 1,
-            edge.start_node
-                .as_ref()
-                .map(|n| format!("{}.{}", n, start_desc))
-                .unwrap_or_else(|| format!("({:.0},{:.0})", edge.start.0, edge.start.1)),
-            edge.end_node
-                .as_ref()
-                .map(|n| format!("{}.{}", n, end_desc))
-                .unwrap_or_else(|| format!("({:.0},{:.0})", edge.end.0, edge.end.1)),
-        ));
-    }
-
-    // Analyze edge differences for clear AI feedback
-    let has_edges = !selkie_geo.edge_endpoints.is_empty() || !ref_geo.edge_endpoints.is_empty();
-
-    if has_edges {
-        // Check for edge count mismatch
-        let selkie_count = selkie_geo.edge_endpoints.len();
-        let ref_count = ref_geo.edge_endpoints.len();
-
-        if selkie_count != ref_count {
-            issues.push(
-                Issue::warning(
-                    "edge_count",
-                    format!(
-                        "Edge count differs: expected {}, got {}",
-                        ref_count, selkie_count
-                    ),
-                )
-                .with_values(ref_count.to_string(), selkie_count.to_string()),
-            );
-        }
-
-        // Build concise edge comparison
-        let min_count = selkie_count.min(ref_count);
-        let mut edge_diffs = Vec::new();
-
-        for i in 0..min_count {
-            let (sx1, sy1, sx2, sy2) = selkie_geo.edge_endpoints[i];
-            let (rx1, ry1, rx2, ry2) = ref_geo.edge_endpoints[i];
-
-            // Check if edge paths differ significantly (>10px)
-            let start_diff = ((sx1 - rx1).powi(2) + (sy1 - ry1).powi(2)).sqrt();
-            let end_diff = ((sx2 - rx2).powi(2) + (sy2 - ry2).powi(2)).sqrt();
-
-            if start_diff > 10.0 || end_diff > 10.0 {
-                // Classify the edge direction
-                let selkie_dir = classify_edge_direction((sx1, sy1), (sx2, sy2));
-                let ref_dir = classify_edge_direction((rx1, ry1), (rx2, ry2));
-
-                edge_diffs.push(format!(
-                    "Edge {}: selkie={} ref={} (start diff={:.0}px, end diff={:.0}px)",
-                    i + 1,
-                    selkie_dir,
-                    ref_dir,
-                    start_diff,
-                    end_diff
-                ));
-            }
-        }
-
-        if !edge_diffs.is_empty() {
-            let message = format!("EDGE POSITION DIFFERENCES:\n  {}", edge_diffs.join("\n  "));
-            issues.push(Issue::warning("edge_positions", message));
-        }
-    }
-
-    // Check for attachment SIDE mismatches (e.g., selkie attaches to "top" but reference to "left")
-    // This is a critical issue because it means edges are connecting to the wrong sides of entities
-    let selkie_details = &selkie_geo.edge_details;
-    let ref_details = &ref_geo.edge_details;
-    let selkie_endpoints = &selkie_geo.edge_endpoints;
-    let ref_endpoints = &ref_geo.edge_endpoints;
-
-    // Use whichever data source is available
-    let edge_count = selkie_details
+fn edge_position_differences(selkie_geo: &EdgeGeometry, ref_geo: &EdgeGeometry) -> Vec<String> {
+    let min_count = selkie_geo
+        .edge_endpoints
         .len()
-        .min(ref_details.len())
-        .max(selkie_endpoints.len().min(ref_endpoints.len()));
+        .min(ref_geo.edge_endpoints.len());
+    (0..min_count)
+        .filter_map(|i| {
+            edge_position_difference(i, selkie_geo.edge_endpoints[i], ref_geo.edge_endpoints[i])
+        })
+        .collect()
+}
 
-    let mut side_mismatches = Vec::new();
-    for i in 0..edge_count {
-        // Get selkie START attachment side (from edge_details or inferred from endpoints)
-        let selkie_start_side = if i < selkie_details.len() {
-            normalize_edge_side(&selkie_details[i].start_edge)
-        } else if i < selkie_endpoints.len() {
-            let (sx, sy, ex, ey) = selkie_endpoints[i];
-            infer_start_attachment_side((sx, sy), (ex, ey))
-        } else {
-            "unknown".to_string()
-        };
+fn edge_position_difference(
+    i: usize,
+    selkie_endpoint: (f64, f64, f64, f64),
+    ref_endpoint: (f64, f64, f64, f64),
+) -> Option<String> {
+    let (sx1, sy1, sx2, sy2) = selkie_endpoint;
+    let (rx1, ry1, rx2, ry2) = ref_endpoint;
+    let start_diff = ((sx1 - rx1).powi(2) + (sy1 - ry1).powi(2)).sqrt();
+    let end_diff = ((sx2 - rx2).powi(2) + (sy2 - ry2).powi(2)).sqrt();
 
-        // Get reference START attachment side (from edge_details or inferred from endpoints)
-        // Use initial direction (second point) for accurate inference on curved paths
-        let ref_initial_dirs = &ref_geo.edge_initial_directions;
-        let ref_start_side = if i < ref_details.len() && ref_details[i].start_edge != "none" {
-            normalize_edge_side(&ref_details[i].start_edge)
-        } else if i < ref_endpoints.len() {
-            let (sx, sy, ex, ey) = ref_endpoints[i];
-            let second_point = ref_initial_dirs.get(i).copied().flatten();
-            infer_start_attachment_with_direction((sx, sy), second_point, (ex, ey))
-        } else {
-            "unknown".to_string()
-        };
+    (start_diff > 10.0 || end_diff > 10.0).then(|| {
+        format!(
+            "Edge {}: selkie={} ref={} (start diff={:.0}px, end diff={:.0}px)",
+            i + 1,
+            classify_edge_direction((sx1, sy1), (sx2, sy2)),
+            classify_edge_direction((rx1, ry1), (rx2, ry2)),
+            start_diff,
+            end_diff
+        )
+    })
+}
 
-        // Get selkie END attachment side (from edge_details or inferred from endpoints)
-        let selkie_end_side = if i < selkie_details.len() {
-            normalize_edge_side(&selkie_details[i].end_edge)
-        } else if i < selkie_endpoints.len() {
-            let (sx, sy, ex, ey) = selkie_endpoints[i];
-            infer_end_attachment_side((sx, sy), (ex, ey))
-        } else {
-            "unknown".to_string()
-        };
-
-        // Get reference END attachment side (from edge_details or inferred from endpoints)
-        let ref_end_side = if i < ref_details.len() && ref_details[i].end_edge != "none" {
-            normalize_edge_side(&ref_details[i].end_edge)
-        } else if i < ref_endpoints.len() {
-            let (sx, sy, ex, ey) = ref_endpoints[i];
-            infer_end_attachment_side((sx, sy), (ex, ey))
-        } else {
-            "unknown".to_string()
-        };
-
-        // Check if START attachment sides are categorically different
-        // top/bottom are "vertical", left/right are "horizontal"
-        let selkie_start_is_vertical = matches!(selkie_start_side.as_str(), "top" | "bottom");
-        let ref_start_is_vertical = matches!(ref_start_side.as_str(), "top" | "bottom");
-
-        if selkie_start_side != "unknown"
-            && ref_start_side != "unknown"
-            && selkie_start_is_vertical != ref_start_is_vertical
-        {
-            side_mismatches.push(format!(
-                "Edge {} start: leaves from {} in selkie but {} in reference",
-                i + 1,
-                selkie_start_side,
-                ref_start_side
-            ));
-        }
-
-        // Check if END attachment sides are categorically different
-        let selkie_end_is_vertical = matches!(selkie_end_side.as_str(), "top" | "bottom");
-        let ref_end_is_vertical = matches!(ref_end_side.as_str(), "top" | "bottom");
-
-        if selkie_end_side != "unknown"
-            && ref_end_side != "unknown"
-            && selkie_end_is_vertical != ref_end_is_vertical
-        {
-            side_mismatches.push(format!(
-                "Edge {} end: attaches to {} in selkie but {} in reference",
-                i + 1,
-                selkie_end_side,
-                ref_end_side
-            ));
-        }
-    }
-
+fn report_attachment_side_mismatches(
+    selkie_geo: &EdgeGeometry,
+    ref_geo: &EdgeGeometry,
+    issues: &mut Vec<Issue>,
+) {
+    let side_mismatches = attachment_side_mismatches(selkie_geo, ref_geo);
     if !side_mismatches.is_empty() {
         let message = format!(
             "ATTACHMENT SIDE MISMATCHES (edges connect to wrong entity sides):\n  {}",
             side_mismatches.join("\n  ")
         );
-        // This is an ERROR because attaching to the wrong side is a significant visual bug
-        // (e.g., crow's feet pointing at top instead of left/right)
         issues.push(Issue::error("edge_attachment_sides", message));
     }
+}
 
-    // Compare edges if we have detailed info
-    if !selkie_summary.is_empty() || !ref_summary.is_empty() {
-        // Output detailed edge attachment info for AI analysis
-        if !selkie_summary.is_empty() || !ref_summary.is_empty() {
-            let message = format!(
-                "EDGE ATTACHMENTS:\n  Reference:\n    {}\n  Selkie:\n    {}",
-                if ref_summary.is_empty() {
-                    "(none)".to_string()
-                } else {
-                    ref_summary.join("\n    ")
-                },
-                if selkie_summary.is_empty() {
-                    "(none)".to_string()
-                } else {
-                    selkie_summary.join("\n    ")
-                }
-            );
-            issues.push(Issue::info("edge_details", message));
-        }
+fn attachment_side_mismatches(selkie_geo: &EdgeGeometry, ref_geo: &EdgeGeometry) -> Vec<String> {
+    (0..attachment_comparison_count(selkie_geo, ref_geo))
+        .flat_map(|i| edge_attachment_side_mismatches(i, selkie_geo, ref_geo))
+        .collect()
+}
+
+fn attachment_comparison_count(selkie_geo: &EdgeGeometry, ref_geo: &EdgeGeometry) -> usize {
+    selkie_geo
+        .edge_details
+        .len()
+        .min(ref_geo.edge_details.len())
+        .max(
+            selkie_geo
+                .edge_endpoints
+                .len()
+                .min(ref_geo.edge_endpoints.len()),
+        )
+}
+
+fn edge_attachment_side_mismatches(
+    i: usize,
+    selkie_geo: &EdgeGeometry,
+    ref_geo: &EdgeGeometry,
+) -> Vec<String> {
+    let selkie_start_side = selkie_start_attachment_side(selkie_geo, i);
+    let ref_start_side = reference_start_attachment_side(ref_geo, i);
+    let selkie_end_side = selkie_end_attachment_side(selkie_geo, i);
+    let ref_end_side = reference_end_attachment_side(ref_geo, i);
+    let mut mismatches = Vec::new();
+
+    if is_attachment_orientation_mismatch(&selkie_start_side, &ref_start_side) {
+        mismatches.push(format!(
+            "Edge {} start: leaves from {} in selkie but {} in reference",
+            i + 1,
+            selkie_start_side,
+            ref_start_side
+        ));
+    }
+    if is_attachment_orientation_mismatch(&selkie_end_side, &ref_end_side) {
+        mismatches.push(format!(
+            "Edge {} end: attaches to {} in selkie but {} in reference",
+            i + 1,
+            selkie_end_side,
+            ref_end_side
+        ));
     }
 
-    // Also check overall pattern
+    mismatches
+}
+
+fn selkie_start_attachment_side(geo: &EdgeGeometry, i: usize) -> String {
+    if let Some(detail) = geo.edge_details.get(i) {
+        normalize_edge_side(&detail.start_edge)
+    } else {
+        geo.edge_endpoints
+            .get(i)
+            .map(|&(sx, sy, ex, ey)| infer_start_attachment_side((sx, sy), (ex, ey)))
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+}
+
+fn reference_start_attachment_side(geo: &EdgeGeometry, i: usize) -> String {
+    if let Some(detail) = geo
+        .edge_details
+        .get(i)
+        .filter(|detail| detail.start_edge != "none")
+    {
+        normalize_edge_side(&detail.start_edge)
+    } else {
+        geo.edge_endpoints
+            .get(i)
+            .map(|&(sx, sy, ex, ey)| {
+                let second_point = geo.edge_initial_directions.get(i).copied().flatten();
+                infer_start_attachment_with_direction((sx, sy), second_point, (ex, ey))
+            })
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+}
+
+fn selkie_end_attachment_side(geo: &EdgeGeometry, i: usize) -> String {
+    if let Some(detail) = geo.edge_details.get(i) {
+        normalize_edge_side(&detail.end_edge)
+    } else {
+        geo.edge_endpoints
+            .get(i)
+            .map(|&(sx, sy, ex, ey)| infer_end_attachment_side((sx, sy), (ex, ey)))
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+}
+
+fn reference_end_attachment_side(geo: &EdgeGeometry, i: usize) -> String {
+    if let Some(detail) = geo
+        .edge_details
+        .get(i)
+        .filter(|detail| detail.end_edge != "none")
+    {
+        normalize_edge_side(&detail.end_edge)
+    } else {
+        geo.edge_endpoints
+            .get(i)
+            .map(|&(sx, sy, ex, ey)| infer_end_attachment_side((sx, sy), (ex, ey)))
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+}
+
+fn is_attachment_orientation_mismatch(selkie_side: &str, ref_side: &str) -> bool {
+    selkie_side != "unknown"
+        && ref_side != "unknown"
+        && is_vertical_attachment_side(selkie_side) != is_vertical_attachment_side(ref_side)
+}
+
+fn is_vertical_attachment_side(side: &str) -> bool {
+    matches!(side, "top" | "bottom")
+}
+
+fn report_edge_details_summary(
+    selkie_geo: &EdgeGeometry,
+    ref_geo: &EdgeGeometry,
+    issues: &mut Vec<Issue>,
+) {
+    let selkie_summary = edge_attachment_summary(&selkie_geo.edge_details);
+    let ref_summary = edge_attachment_summary(&ref_geo.edge_details);
+
+    if selkie_summary.is_empty() && ref_summary.is_empty() {
+        return;
+    }
+
+    let message = format!(
+        "EDGE ATTACHMENTS:\n  Reference:\n    {}\n  Selkie:\n    {}",
+        formatted_edge_summary(&ref_summary),
+        formatted_edge_summary(&selkie_summary)
+    );
+    issues.push(Issue::info("edge_details", message));
+}
+
+fn formatted_edge_summary(summary: &[String]) -> String {
+    if summary.is_empty() {
+        "(none)".to_string()
+    } else {
+        summary.join("\n    ")
+    }
+}
+
+fn report_edge_attachment_pattern(
+    selkie_geo: &EdgeGeometry,
+    ref_geo: &EdgeGeometry,
+    issues: &mut Vec<Issue>,
+) {
+    let Some((selkie_pattern, ref_pattern)) =
+        edge_attachment_pattern_difference(selkie_geo, ref_geo)
+    else {
+        return;
+    };
+
+    issues.push(
+        Issue::warning(
+            "edge_attachment_pattern",
+            format!(
+                "Edge attachment pattern differs: reference is {}, selkie is {}",
+                ref_pattern, selkie_pattern
+            ),
+        )
+        .with_values(
+            format!(
+                "vertical: {}, horizontal: {}",
+                ref_geo.vertical_attachments, ref_geo.horizontal_attachments
+            ),
+            format!(
+                "vertical: {}, horizontal: {}",
+                selkie_geo.vertical_attachments, selkie_geo.horizontal_attachments
+            ),
+        ),
+    );
+}
+
+fn edge_attachment_pattern_difference(
+    selkie_geo: &EdgeGeometry,
+    ref_geo: &EdgeGeometry,
+) -> Option<(&'static str, &'static str)> {
     let selkie_total = selkie_geo.vertical_attachments + selkie_geo.horizontal_attachments;
     let ref_total = ref_geo.vertical_attachments + ref_geo.horizontal_attachments;
 
-    if selkie_total > 0 && ref_total > 0 {
-        let selkie_vert_ratio = selkie_geo.vertical_attachments as f64 / selkie_total as f64;
-        let ref_vert_ratio = ref_geo.vertical_attachments as f64 / ref_total as f64;
-        let ratio_diff = (selkie_vert_ratio - ref_vert_ratio).abs();
+    if selkie_total == 0 || ref_total == 0 {
+        return None;
+    }
 
-        if ratio_diff > 0.3 {
-            let selkie_pattern = if selkie_vert_ratio > 0.6 {
-                "mostly top/bottom"
-            } else if selkie_vert_ratio < 0.4 {
-                "mostly sides"
-            } else {
-                "mixed"
-            };
-            let ref_pattern = if ref_vert_ratio > 0.6 {
-                "mostly top/bottom"
-            } else if ref_vert_ratio < 0.4 {
-                "mostly sides"
-            } else {
-                "mixed"
-            };
+    let selkie_vert_ratio = selkie_geo.vertical_attachments as f64 / selkie_total as f64;
+    let ref_vert_ratio = ref_geo.vertical_attachments as f64 / ref_total as f64;
+    let ratio_diff = (selkie_vert_ratio - ref_vert_ratio).abs();
 
-            if selkie_pattern != ref_pattern {
-                issues.push(
-                    Issue::warning(
-                        "edge_attachment_pattern",
-                        format!(
-                            "Edge attachment pattern differs: reference is {}, selkie is {}",
-                            ref_pattern, selkie_pattern
-                        ),
-                    )
-                    .with_values(
-                        format!(
-                            "vertical: {}, horizontal: {}",
-                            ref_geo.vertical_attachments, ref_geo.horizontal_attachments
-                        ),
-                        format!(
-                            "vertical: {}, horizontal: {}",
-                            selkie_geo.vertical_attachments, selkie_geo.horizontal_attachments
-                        ),
-                    ),
-                );
-            }
-        }
+    if ratio_diff <= 0.3 {
+        return None;
+    }
+
+    let selkie_pattern = edge_attachment_pattern(selkie_vert_ratio);
+    let ref_pattern = edge_attachment_pattern(ref_vert_ratio);
+    (selkie_pattern != ref_pattern).then_some((selkie_pattern, ref_pattern))
+}
+
+fn edge_attachment_pattern(vertical_ratio: f64) -> &'static str {
+    if vertical_ratio > 0.6 {
+        "mostly top/bottom"
+    } else if vertical_ratio < 0.4 {
+        "mostly sides"
+    } else {
+        "mixed"
     }
 }
 
@@ -1720,113 +1803,8 @@ fn check_text_overflow(selkie: &SvgStructure, issues: &mut Vec<Issue>) {
         return;
     }
 
-    let mut overflow_issues = Vec::new();
     let tolerance = 5.0; // Allow small tolerance
-
-    // Parse SVG directly to check text bounds accurately
-    if let Ok(doc) = roxmltree::Document::parse(&selkie.raw_svg) {
-        for text_node in doc.descendants().filter(|n| n.tag_name().name() == "text") {
-            // Get text y coordinate
-            let text_y = text_node
-                .attribute("y")
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0);
-
-            // Count tspans and check for dy attributes
-            let tspans: Vec<_> = text_node
-                .descendants()
-                .filter(|n| n.tag_name().name() == "tspan")
-                .collect();
-
-            if tspans.is_empty() {
-                continue; // Skip single-line text without tspans
-            }
-
-            // Calculate total dy offset for multi-line text
-            let font_size = 16.0; // Default font size
-            let mut total_dy = 0.0;
-            for tspan in &tspans {
-                if let Some(dy) = tspan.attribute("dy") {
-                    // Parse dy value (e.g., "1em", "1.1em")
-                    let dy_value = if dy.ends_with("em") {
-                        dy.trim_end_matches("em").parse::<f64>().unwrap_or(0.0) * font_size
-                    } else {
-                        dy.parse::<f64>().unwrap_or(0.0)
-                    };
-                    total_dy += dy_value;
-                }
-            }
-
-            // Calculate actual text bottom (y + all dy offsets + descender space)
-            let text_bottom = text_y + total_dy + font_size * 0.2;
-
-            // Get parent group transform to find absolute position
-            let mut group_y = 0.0;
-            let mut current = text_node.parent();
-            while let Some(parent) = current {
-                if let Some(transform) = parent.attribute("transform") {
-                    if let Some(ty) = parse_translate_y(transform) {
-                        group_y += ty;
-                    }
-                }
-                current = parent.parent();
-            }
-
-            let absolute_text_bottom = group_y + text_bottom;
-
-            // Find containing node by checking if it contains the text's position
-            let text_x = text_node
-                .attribute("x")
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0);
-            let mut group_x = 0.0;
-            let mut current2 = text_node.parent();
-            while let Some(parent) = current2 {
-                if let Some(transform) = parent.attribute("transform") {
-                    if let Some(tx) = parse_translate_x(transform) {
-                        group_x += tx;
-                    }
-                }
-                current2 = parent.parent();
-            }
-            let absolute_text_x = group_x + text_x;
-
-            // Find the containing node
-            let containing_node = node_bounds.iter().find(|n| {
-                absolute_text_x >= n.x - tolerance
-                    && absolute_text_x <= n.x + n.width + tolerance
-                    && group_y + text_y >= n.y - tolerance
-                    && group_y + text_y <= n.y + n.height + tolerance
-            });
-
-            if let Some(node) = containing_node {
-                let node_bottom = node.y + node.height;
-                let overflow_bottom = absolute_text_bottom - node_bottom;
-
-                if overflow_bottom > tolerance {
-                    // Get text content for preview
-                    let text_content: String = text_node
-                        .descendants()
-                        .filter_map(|n| n.text())
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    let text_preview = if text_content.len() > 30 {
-                        format!("{}...", &text_content[..30])
-                    } else {
-                        text_content
-                    };
-
-                    overflow_issues.push(format!(
-                        "Text \"{}\" overflows bottom by {:.0}px (node height: {:.0}, text needs: {:.0})",
-                        text_preview,
-                        overflow_bottom,
-                        node.height,
-                        absolute_text_bottom - node.y
-                    ));
-                }
-            }
-        }
-    }
+    let overflow_issues = collect_text_overflow_issues(&selkie.raw_svg, node_bounds, tolerance);
 
     if !overflow_issues.is_empty() {
         issues.push(Issue::warning(
@@ -1838,6 +1816,125 @@ fn check_text_overflow(selkie: &SvgStructure, issues: &mut Vec<Issue>) {
             ),
         ));
     }
+}
+
+fn collect_text_overflow_issues(
+    raw_svg: &str,
+    node_bounds: &[NodeBounds],
+    tolerance: f64,
+) -> Vec<String> {
+    let Ok(doc) = roxmltree::Document::parse(raw_svg) else {
+        return Vec::new();
+    };
+
+    doc.descendants()
+        .filter(|node| node.tag_name().name() == "text")
+        .filter_map(|text_node| text_node_overflow_issue(text_node, node_bounds, tolerance))
+        .collect()
+}
+
+fn text_node_overflow_issue(
+    text_node: roxmltree::Node<'_, '_>,
+    node_bounds: &[NodeBounds],
+    tolerance: f64,
+) -> Option<String> {
+    let tspans: Vec<_> = text_node
+        .descendants()
+        .filter(|node| node.tag_name().name() == "tspan")
+        .collect();
+
+    if tspans.is_empty() {
+        return None;
+    }
+
+    let font_size = 16.0; // Default font size
+    let text_y = parse_attr_f64(text_node, "y").unwrap_or(0.0);
+    let group_y = parent_translate_sum(text_node, parse_translate_y);
+    let text_bottom = text_y + total_tspan_dy(&tspans, font_size) + font_size * 0.2;
+    let absolute_text_bottom = group_y + text_bottom;
+    let absolute_text_x = parent_translate_sum(text_node, parse_translate_x)
+        + parse_attr_f64(text_node, "x").unwrap_or(0.0);
+    let node = containing_text_node(node_bounds, absolute_text_x, group_y + text_y, tolerance)?;
+    let overflow_bottom = absolute_text_bottom - (node.y + node.height);
+
+    (overflow_bottom > tolerance)
+        .then(|| format_text_overflow_issue(text_node, node, overflow_bottom, absolute_text_bottom))
+}
+
+fn parse_attr_f64(node: roxmltree::Node<'_, '_>, attr: &str) -> Option<f64> {
+    node.attribute(attr).and_then(|value| value.parse().ok())
+}
+
+fn total_tspan_dy(tspans: &[roxmltree::Node<'_, '_>], font_size: f64) -> f64 {
+    tspans
+        .iter()
+        .filter_map(|tspan| tspan.attribute("dy"))
+        .map(|dy| parse_tspan_dy(dy, font_size))
+        .sum()
+}
+
+fn parse_tspan_dy(dy: &str, font_size: f64) -> f64 {
+    if dy.ends_with("em") {
+        dy.trim_end_matches("em").parse::<f64>().unwrap_or(0.0) * font_size
+    } else {
+        dy.parse::<f64>().unwrap_or(0.0)
+    }
+}
+
+fn parent_translate_sum(node: roxmltree::Node<'_, '_>, parse_axis: fn(&str) -> Option<f64>) -> f64 {
+    let mut offset = 0.0;
+    let mut current = node.parent();
+
+    while let Some(parent) = current {
+        if let Some(transform) = parent.attribute("transform") {
+            if let Some(value) = parse_axis(transform) {
+                offset += value;
+            }
+        }
+        current = parent.parent();
+    }
+
+    offset
+}
+
+fn containing_text_node(
+    node_bounds: &[NodeBounds],
+    text_x: f64,
+    text_y: f64,
+    tolerance: f64,
+) -> Option<&NodeBounds> {
+    node_bounds.iter().find(|node| {
+        text_x >= node.x - tolerance
+            && text_x <= node.x + node.width + tolerance
+            && text_y >= node.y - tolerance
+            && text_y <= node.y + node.height + tolerance
+    })
+}
+
+fn format_text_overflow_issue(
+    text_node: roxmltree::Node<'_, '_>,
+    node: &NodeBounds,
+    overflow_bottom: f64,
+    absolute_text_bottom: f64,
+) -> String {
+    let text_content: String = text_node
+        .descendants()
+        .filter_map(|node| node.text())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let text_preview = if text_content.len() > 30 {
+        format!("{}...", &text_content[..30])
+    } else {
+        text_content
+    };
+
+    format!(
+        "Text \"{}\" overflows bottom by {:.0}px (node height: {:.0}, text needs: {:.0})",
+        text_preview,
+        overflow_bottom,
+        node.height,
+        absolute_text_bottom - node.y
+    )
 }
 
 /// Parse x-coordinate from translate transform
@@ -2421,130 +2518,128 @@ struct CompositeState {
     height: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CompositeNodeKind {
+    Mermaid,
+    Selkie,
+}
+
 /// Extract composite state information from raw SVG
 fn extract_composite_states(svg: &str) -> Vec<CompositeState> {
-    let mut composites = Vec::new();
+    let Ok(doc) = roxmltree::Document::parse(svg) else {
+        return Vec::new();
+    };
 
-    // Look for composite state patterns in both mermaid and selkie SVGs
-    // Mermaid pattern: <g class="... statediagram-cluster ..." id="StateName">
-    // Selkie pattern: <g id="state-CompositeName" class="...">
+    doc.descendants()
+        .filter_map(extract_composite_state_node)
+        .collect()
+}
 
-    if let Ok(doc) = roxmltree::Document::parse(svg) {
-        for node in doc.descendants() {
-            if node.tag_name().name() != "g" {
-                continue;
-            }
+fn extract_composite_state_node(node: roxmltree::Node<'_, '_>) -> Option<CompositeState> {
+    let kind = composite_node_kind(node)?;
+    let composite_id = composite_node_id(node, kind);
+    if !is_valid_composite_id(&composite_id) {
+        return None;
+    }
 
-            // Check for mermaid composite (statediagram-cluster class)
-            let class = node.attribute("class").unwrap_or("");
-            let is_mermaid_composite = class.contains("statediagram-cluster");
+    let (x, y, width, height) = composite_outer_bounds(node)?;
+    Some(CompositeState {
+        id: composite_id,
+        x,
+        y,
+        width,
+        height,
+    })
+}
 
-            // Check for selkie composite (id contains "Composite" or has composite children)
-            let id = node.attribute("id").unwrap_or("");
-            let is_selkie_composite = !id.is_empty()
-                && node.descendants().any(|n| {
-                    n.attribute("class")
-                        .map(|c| c.contains("composite"))
-                        .unwrap_or(false)
-                });
+fn composite_node_kind(node: roxmltree::Node<'_, '_>) -> Option<CompositeNodeKind> {
+    if node.tag_name().name() != "g" {
+        return None;
+    }
 
-            if is_mermaid_composite || is_selkie_composite {
-                // Extract composite ID (normalize by removing prefixes)
-                let composite_id = if is_mermaid_composite {
-                    node.attribute("id")
-                        .or_else(|| node.attribute("data-id"))
-                        .unwrap_or("")
-                        .to_string()
-                } else {
-                    // Selkie uses "composite-StateName" format
-                    id.trim_start_matches("composite-")
-                        .trim_start_matches("state-")
-                        .to_string()
-                };
+    let class = node.attribute("class").unwrap_or("");
+    if class.contains("statediagram-cluster") {
+        return Some(CompositeNodeKind::Mermaid);
+    }
+    if class.contains("composite") {
+        return Some(CompositeNodeKind::Selkie);
+    }
 
-                if composite_id.is_empty()
-                    || composite_id.contains("start")
-                    || composite_id.contains("end")
-                {
-                    continue;
-                }
+    let id = node.attribute("id").unwrap_or("");
+    let has_composite_child = !id.is_empty()
+        && node.descendants().any(|child| {
+            child
+                .attribute("class")
+                .map(|class| class.contains("composite"))
+                .unwrap_or(false)
+        });
+    has_composite_child.then_some(CompositeNodeKind::Selkie)
+}
 
-                // Find the outer rect for dimensions and position
-                let mut x = 0.0;
-                let mut y = 0.0;
-                let mut width = 0.0;
-                let mut height = 0.0;
+fn composite_node_id(node: roxmltree::Node<'_, '_>, kind: CompositeNodeKind) -> String {
+    match kind {
+        CompositeNodeKind::Mermaid => node
+            .attribute("id")
+            .or_else(|| node.attribute("data-id"))
+            .unwrap_or("")
+            .to_string(),
+        CompositeNodeKind::Selkie => node
+            .attribute("id")
+            .unwrap_or("")
+            .trim_start_matches("composite-")
+            .trim_start_matches("state-")
+            .to_string(),
+    }
+}
 
-                for child in node.descendants() {
-                    if child.tag_name().name() == "rect" {
-                        let child_class = child.attribute("class").unwrap_or("");
-                        if child_class.contains("outer") || child_class.contains("composite-outer")
-                        {
-                            x = child
-                                .attribute("x")
-                                .and_then(|v| v.parse().ok())
-                                .unwrap_or(0.0);
-                            y = child
-                                .attribute("y")
-                                .and_then(|v| v.parse().ok())
-                                .unwrap_or(0.0);
-                            width = child
-                                .attribute("width")
-                                .and_then(|w| w.parse().ok())
-                                .unwrap_or(0.0);
-                            height = child
-                                .attribute("height")
-                                .and_then(|h| h.parse().ok())
-                                .unwrap_or(0.0);
-                            break;
-                        }
-                    }
-                }
+fn is_valid_composite_id(id: &str) -> bool {
+    !id.is_empty() && !id.contains("start") && !id.contains("end")
+}
 
-                // If no outer rect found, try to get dimensions from largest rect
-                if width == 0.0 || height == 0.0 {
-                    for child in node.descendants() {
-                        if child.tag_name().name() == "rect" {
-                            let w: f64 = child
-                                .attribute("width")
-                                .and_then(|w| w.parse().ok())
-                                .unwrap_or(0.0);
-                            let h: f64 = child
-                                .attribute("height")
-                                .and_then(|h| h.parse().ok())
-                                .unwrap_or(0.0);
-                            if w > width {
-                                x = child
-                                    .attribute("x")
-                                    .and_then(|v| v.parse().ok())
-                                    .unwrap_or(0.0);
-                                y = child
-                                    .attribute("y")
-                                    .and_then(|v| v.parse().ok())
-                                    .unwrap_or(0.0);
-                                width = w;
-                            }
-                            if h > height {
-                                height = h;
-                            }
-                        }
-                    }
-                }
+fn composite_outer_bounds(node: roxmltree::Node<'_, '_>) -> Option<(f64, f64, f64, f64)> {
+    find_outer_composite_rect(node)
+        .or_else(|| find_largest_composite_rect(node))
+        .filter(|(_, _, width, height)| *width > 0.0 && *height > 0.0)
+}
 
-                if width > 0.0 && height > 0.0 {
-                    composites.push(CompositeState {
-                        id: composite_id,
-                        x,
-                        y,
-                        width,
-                        height,
-                    });
-                }
-            }
+fn find_outer_composite_rect(node: roxmltree::Node<'_, '_>) -> Option<(f64, f64, f64, f64)> {
+    node.descendants()
+        .filter(|child| child.tag_name().name() == "rect")
+        .find(|child| {
+            let class = child.attribute("class").unwrap_or("");
+            class.contains("outer") || class.contains("composite-outer")
+        })
+        .map(rect_bounds)
+}
+
+fn find_largest_composite_rect(node: roxmltree::Node<'_, '_>) -> Option<(f64, f64, f64, f64)> {
+    let mut bounds = (0.0, 0.0, 0.0, 0.0);
+
+    for child in node
+        .descendants()
+        .filter(|child| child.tag_name().name() == "rect")
+    {
+        let (x, y, width, height) = rect_bounds(child);
+        if width > bounds.2 {
+            bounds.0 = x;
+            bounds.1 = y;
+            bounds.2 = width;
+        }
+        if height > bounds.3 {
+            bounds.3 = height;
         }
     }
 
-    composites
+    Some(bounds)
+}
+
+fn rect_bounds(node: roxmltree::Node<'_, '_>) -> (f64, f64, f64, f64) {
+    (
+        parse_attr_f64(node, "x").unwrap_or(0.0),
+        parse_attr_f64(node, "y").unwrap_or(0.0),
+        parse_attr_f64(node, "width").unwrap_or(0.0),
+        parse_attr_f64(node, "height").unwrap_or(0.0),
+    )
 }
 
 /// Check if composite states have their children properly centered
@@ -2603,142 +2698,72 @@ fn check_composite_centering(
 fn analyze_composite_centering(svg: &str) -> std::collections::HashMap<String, f64> {
     let mut centering = std::collections::HashMap::new();
 
-    if let Ok(doc) = roxmltree::Document::parse(svg) {
-        for node in doc.descendants() {
-            if node.tag_name().name() != "g" {
-                continue;
-            }
+    let Ok(doc) = roxmltree::Document::parse(svg) else {
+        return centering;
+    };
 
-            let class = node.attribute("class").unwrap_or("");
-            let id = node.attribute("id").unwrap_or("");
-
-            // Check for composite state (mermaid or selkie)
-            let is_composite = class.contains("statediagram-cluster")
-                || class.contains("composite")
-                || (!id.is_empty()
-                    && node.descendants().any(|n| {
-                        n.attribute("class")
-                            .map(|c| c.contains("composite"))
-                            .unwrap_or(false)
-                    }));
-
-            if !is_composite {
-                continue;
-            }
-
-            let composite_id = if class.contains("statediagram-cluster") {
-                node.attribute("id")
-                    .or_else(|| node.attribute("data-id"))
-                    .unwrap_or("")
-                    .to_string()
-            } else {
-                id.trim_start_matches("state-").to_string()
-            };
-
-            if composite_id.is_empty()
-                || composite_id.contains("start")
-                || composite_id.contains("end")
-            {
-                continue;
-            }
-
-            // Find the outer rect bounds
-            let mut parent_x = 0.0;
-            let mut parent_width = 0.0;
-
-            for child in node.descendants() {
-                if child.tag_name().name() == "rect" {
-                    let child_class = child.attribute("class").unwrap_or("");
-                    if child_class.contains("outer") || child_class.contains("composite-outer") {
-                        parent_x = child
-                            .attribute("x")
-                            .and_then(|x| x.parse().ok())
-                            .unwrap_or(0.0);
-                        parent_width = child
-                            .attribute("width")
-                            .and_then(|w| w.parse().ok())
-                            .unwrap_or(0.0);
-                        break;
-                    }
-                }
-            }
-
-            // If no outer rect found, try first rect
-            if parent_width == 0.0 {
-                for child in node.descendants() {
-                    if child.tag_name().name() == "rect" {
-                        let w: f64 = child
-                            .attribute("width")
-                            .and_then(|w| w.parse().ok())
-                            .unwrap_or(0.0);
-                        if w > parent_width {
-                            parent_x = child
-                                .attribute("x")
-                                .and_then(|x| x.parse().ok())
-                                .unwrap_or(0.0);
-                            parent_width = w;
-                        }
-                    }
-                }
-            }
-
-            if parent_width == 0.0 {
-                continue;
-            }
-
-            let parent_center_x = parent_x + parent_width / 2.0;
-
-            // Find all child nodes (state nodes) within this composite
-            let mut child_min_x = f64::MAX;
-            let mut child_max_x = f64::MIN;
-            let mut found_children = false;
-
-            for child in node.descendants() {
-                let child_class = child.attribute("class").unwrap_or("");
-
-                // Skip the outer/inner rects of the composite itself
-                if child_class.contains("composite") || child_class.contains("cluster") {
-                    continue;
-                }
-
-                // Look for state nodes (rect or path elements that are state boxes)
-                if (child.tag_name().name() == "rect" || child.tag_name().name() == "path")
-                    && (child_class.contains("state-box") || child_class.contains("node"))
-                {
-                    if let Some(x) = child.attribute("x").and_then(|x| x.parse::<f64>().ok()) {
-                        let width: f64 = child
-                            .attribute("width")
-                            .and_then(|w| w.parse().ok())
-                            .unwrap_or(0.0);
-                        child_min_x = child_min_x.min(x);
-                        child_max_x = child_max_x.max(x + width);
-                        found_children = true;
-                    }
-                }
-
-                // Also check circles (start/end states)
-                if child.tag_name().name() == "circle" {
-                    if let Some(cx) = child.attribute("cx").and_then(|cx| cx.parse::<f64>().ok()) {
-                        let r: f64 = child
-                            .attribute("r")
-                            .and_then(|r| r.parse().ok())
-                            .unwrap_or(7.0);
-                        child_min_x = child_min_x.min(cx - r);
-                        child_max_x = child_max_x.max(cx + r);
-                        found_children = true;
-                    }
-                }
-            }
-
-            if found_children && child_min_x < f64::MAX {
-                let children_center_x = (child_min_x + child_max_x) / 2.0;
-                let offset = children_center_x - parent_center_x;
-                centering.insert(composite_id, offset);
-            }
+    for node in doc.descendants() {
+        if let Some((composite_id, offset)) = composite_centering_offset(node) {
+            centering.insert(composite_id, offset);
         }
     }
 
     centering
+}
+
+fn composite_centering_offset(node: roxmltree::Node<'_, '_>) -> Option<(String, f64)> {
+    let kind = composite_node_kind(node)?;
+    let composite_id = composite_node_id(node, kind);
+    if !is_valid_composite_id(&composite_id) {
+        return None;
+    }
+
+    let (parent_x, parent_width) = composite_parent_x_width(node)?;
+    let (child_min_x, child_max_x) = composite_child_x_bounds(node)?;
+    let parent_center_x = parent_x + parent_width / 2.0;
+    let children_center_x = (child_min_x + child_max_x) / 2.0;
+
+    Some((composite_id, children_center_x - parent_center_x))
+}
+
+fn composite_parent_x_width(node: roxmltree::Node<'_, '_>) -> Option<(f64, f64)> {
+    let (x, _, width, _) = composite_outer_bounds(node)?;
+    (width > 0.0).then_some((x, width))
+}
+
+fn composite_child_x_bounds(node: roxmltree::Node<'_, '_>) -> Option<(f64, f64)> {
+    let mut child_min_x = f64::MAX;
+    let mut child_max_x = f64::MIN;
+
+    for child in node.descendants() {
+        if let Some((min_x, max_x)) = child_state_x_bounds(child) {
+            child_min_x = child_min_x.min(min_x);
+            child_max_x = child_max_x.max(max_x);
+        }
+    }
+
+    (child_min_x < f64::MAX).then_some((child_min_x, child_max_x))
+}
+
+fn child_state_x_bounds(child: roxmltree::Node<'_, '_>) -> Option<(f64, f64)> {
+    let class = child.attribute("class").unwrap_or("");
+    if class.contains("composite") || class.contains("cluster") {
+        return None;
+    }
+
+    match child.tag_name().name() {
+        "rect" | "path" if class.contains("state-box") || class.contains("node") => {
+            let x = parse_attr_f64(child, "x")?;
+            let width = parse_attr_f64(child, "width").unwrap_or(0.0);
+            Some((x, x + width))
+        }
+        "circle" => {
+            let cx = parse_attr_f64(child, "cx")?;
+            let radius = parse_attr_f64(child, "r").unwrap_or(7.0);
+            Some((cx - radius, cx + radius))
+        }
+        _ => None,
+    }
 }
 
 /// Check if nested composite states are centered within their parent composites

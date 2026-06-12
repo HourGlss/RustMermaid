@@ -513,94 +513,178 @@ fn render_relation_separated(
     bend_points: Option<&Vec<Point>>,
     _size_estimator: &dyn SizeEstimator,
 ) -> (SvgElement, Vec<SvgElement>) {
-    let mut label_elements = Vec::new();
-
     // No marker offset needed - refX is now at the arrow tip, so path endpoints
     // should be exactly at node boundaries
     let marker_offset = 0.0;
+    let path_d = relation_path(
+        x1,
+        y1,
+        h1,
+        w1,
+        x2,
+        y2,
+        h2,
+        w2,
+        type1,
+        type2,
+        marker_offset,
+        bend_points,
+    );
+    let path_attrs = relation_path_attrs(type1, type2, line_type);
 
-    // Calculate path from bend points or fallback to direct line
-    // When using bend points, we need to adjust the first and last points
-    // to properly intersect with the node boundaries, offset by marker length
-    let path_d = if let Some(points) = bend_points {
-        if !points.is_empty() {
-            // Create adjusted points with proper node boundary intersections
-            let mut adjusted_points = points.clone();
+    let path_element = SvgElement::Path {
+        d: path_d.clone(),
+        attrs: path_attrs,
+    };
 
-            // Adjust first point: exit from source node toward next bend point
-            // Use the second bend point (if available) to determine exit direction
-            // This respects the actual path curvature
-            let (depart_x, depart_y) = if points.len() > 1 {
-                // Use second bend point for direction
-                (points[1].x, points[1].y)
-            } else {
-                // Fallback to target center if only one point
-                (x2 + w2 / 2.0, y2 + h2 / 2.0)
-            };
-            let (exit_x, exit_y) = calculate_exit_point(x1, y1, w1, h1, depart_x, depart_y);
+    let label_points = relation_label_points(x1, y1, h1, w1, x2, y2, h2, w2, bend_points);
+    let label_elements = relation_label_elements(label, cardinality1, cardinality2, label_points);
 
-            // Offset exit point inward by marker length if there's a start marker
-            let (adj_exit_x, adj_exit_y) = if type1 != -1 {
-                offset_point_toward(exit_x, exit_y, depart_x, depart_y, marker_offset)
-            } else {
-                (exit_x, exit_y)
-            };
-            adjusted_points[0] = Point {
-                x: adj_exit_x,
-                y: adj_exit_y,
-            };
+    (path_element, label_elements)
+}
 
-            // Adjust last point: entry into target node
-            // Use the second-to-last bend point to determine entry direction
-            // This respects the actual path curvature rather than the straight line to source
-            let last_idx = adjusted_points.len() - 1;
-            let (approach_x, approach_y) = if last_idx > 0 {
-                // Use previous bend point for direction
-                (points[last_idx - 1].x, points[last_idx - 1].y)
-            } else {
-                // Fallback to source center if only one point
-                (x1 + w1 / 2.0, y1 + h1 / 2.0)
-            };
-            let (entry_x, entry_y) = calculate_entry_point(x2, y2, w2, h2, approach_x, approach_y);
-
-            // Offset entry point inward by marker length if there's an end marker
-            let (adj_entry_x, adj_entry_y) = if type2 != -1 {
-                offset_point_toward(entry_x, entry_y, approach_x, approach_y, marker_offset)
-            } else {
-                (entry_x, entry_y)
-            };
-            adjusted_points[last_idx] = Point {
-                x: adj_entry_x,
-                y: adj_entry_y,
-            };
-
-            edges::build_curved_path(&adjusted_points)
-        } else {
-            build_direct_path(x1, y1, h1, w1, x2, y2, h2, w2, type1, type2, marker_offset)
-        }
+#[allow(clippy::too_many_arguments)]
+fn relation_path(
+    x1: f64,
+    y1: f64,
+    h1: f64,
+    w1: f64,
+    x2: f64,
+    y2: f64,
+    h2: f64,
+    w2: f64,
+    type1: i32,
+    type2: i32,
+    marker_offset: f64,
+    bend_points: Option<&Vec<Point>>,
+) -> String {
+    if let Some(points) = bend_points.filter(|points| !points.is_empty()) {
+        let adjusted_points = adjusted_relation_bend_points(
+            points,
+            x1,
+            y1,
+            h1,
+            w1,
+            x2,
+            y2,
+            h2,
+            w2,
+            type1,
+            type2,
+            marker_offset,
+        );
+        edges::build_curved_path(&adjusted_points)
     } else {
         build_direct_path(x1, y1, h1, w1, x2, y2, h2, w2, type1, type2, marker_offset)
-    };
+    }
+}
 
-    // Determine marker based on relation type
-    let marker_start = match type1 {
-        0 => Some("url(#aggregation-start)"),
-        1 => Some("url(#inheritance-start)"),
-        2 => Some("url(#composition-start)"),
-        3 => Some("url(#dependency-start)"),
-        4 => Some("url(#lollipop-start)"),
-        _ => None,
-    };
+#[allow(clippy::too_many_arguments)]
+fn adjusted_relation_bend_points(
+    points: &[Point],
+    x1: f64,
+    y1: f64,
+    h1: f64,
+    w1: f64,
+    x2: f64,
+    y2: f64,
+    h2: f64,
+    w2: f64,
+    type1: i32,
+    type2: i32,
+    marker_offset: f64,
+) -> Vec<Point> {
+    let mut adjusted_points = points.to_vec();
+    adjust_relation_exit_point(
+        &mut adjusted_points,
+        points,
+        x1,
+        y1,
+        h1,
+        w1,
+        x2,
+        y2,
+        h2,
+        w2,
+        type1,
+        marker_offset,
+    );
+    adjust_relation_entry_point(
+        &mut adjusted_points,
+        points,
+        x1,
+        y1,
+        h1,
+        w1,
+        x2,
+        y2,
+        h2,
+        w2,
+        type2,
+        marker_offset,
+    );
+    adjusted_points
+}
 
-    let marker_end = match type2 {
-        0 => Some("url(#aggregation-end)"),
-        1 => Some("url(#inheritance-end)"),
-        2 => Some("url(#composition-end)"),
-        3 => Some("url(#dependency-end)"),
-        4 => Some("url(#lollipop-end)"),
-        _ => None,
+#[allow(clippy::too_many_arguments)]
+fn adjust_relation_exit_point(
+    adjusted_points: &mut [Point],
+    points: &[Point],
+    x1: f64,
+    y1: f64,
+    h1: f64,
+    w1: f64,
+    x2: f64,
+    y2: f64,
+    h2: f64,
+    w2: f64,
+    type1: i32,
+    marker_offset: f64,
+) {
+    let (depart_x, depart_y) = points
+        .get(1)
+        .map(|point| (point.x, point.y))
+        .unwrap_or((x2 + w2 / 2.0, y2 + h2 / 2.0));
+    let (exit_x, exit_y) = calculate_exit_point(x1, y1, w1, h1, depart_x, depart_y);
+    let (x, y) = if type1 != -1 {
+        offset_point_toward(exit_x, exit_y, depart_x, depart_y, marker_offset)
+    } else {
+        (exit_x, exit_y)
     };
+    adjusted_points[0] = Point { x, y };
+}
 
+#[allow(clippy::too_many_arguments)]
+fn adjust_relation_entry_point(
+    adjusted_points: &mut [Point],
+    points: &[Point],
+    x1: f64,
+    y1: f64,
+    h1: f64,
+    w1: f64,
+    x2: f64,
+    y2: f64,
+    h2: f64,
+    w2: f64,
+    type2: i32,
+    marker_offset: f64,
+) {
+    let last_idx = adjusted_points.len() - 1;
+    let (approach_x, approach_y) = last_idx
+        .checked_sub(1)
+        .and_then(|idx| points.get(idx))
+        .map(|point| (point.x, point.y))
+        .unwrap_or((x1 + w1 / 2.0, y1 + h1 / 2.0));
+    let (entry_x, entry_y) = calculate_entry_point(x2, y2, w2, h2, approach_x, approach_y);
+    let (x, y) = if type2 != -1 {
+        offset_point_toward(entry_x, entry_y, approach_x, approach_y, marker_offset)
+    } else {
+        (entry_x, entry_y)
+    };
+    adjusted_points[last_idx] = Point { x, y };
+}
+
+fn relation_path_attrs(type1: i32, type2: i32, line_type: LineType) -> Attrs {
     let mut path_attrs = Attrs::new()
         .with_stroke("#333333")
         .with_stroke_width(1.0)
@@ -610,116 +694,137 @@ fn render_relation_separated(
     if line_type == LineType::Dotted {
         path_attrs = path_attrs.with_stroke_dasharray("5,5");
     }
-
-    if let Some(marker) = marker_start {
-        path_attrs = path_attrs.with_attr("marker-start", marker);
+    if let Some(marker) = relation_marker(type1, "start") {
+        path_attrs = path_attrs.with_attr("marker-start", &marker);
     }
-    if let Some(marker) = marker_end {
-        path_attrs = path_attrs.with_attr("marker-end", marker);
+    if let Some(marker) = relation_marker(type2, "end") {
+        path_attrs = path_attrs.with_attr("marker-end", &marker);
     }
 
-    let path_element = SvgElement::Path {
-        d: path_d.clone(),
-        attrs: path_attrs,
+    path_attrs
+}
+
+fn relation_marker(relation_type: i32, side: &str) -> Option<String> {
+    let marker = match relation_type {
+        0 => "aggregation",
+        1 => "inheritance",
+        2 => "composition",
+        3 => "dependency",
+        4 => "lollipop",
+        _ => return None,
     };
+    Some(format!("url(#{marker}-{side})"))
+}
 
-    // Calculate label positions based on bend points or direct line
-    let (start_x, start_y, end_x, end_y) = if let Some(points) = bend_points {
-        if points.len() >= 2 {
-            (
-                points[0].x,
-                points[0].y,
-                points[points.len() - 1].x,
-                points[points.len() - 1].y,
-            )
-        } else {
-            calculate_connection_points(x1, y1, h1, w1, x2, y2, h2, w2)
-        }
+#[allow(clippy::too_many_arguments)]
+fn relation_label_points(
+    x1: f64,
+    y1: f64,
+    h1: f64,
+    w1: f64,
+    x2: f64,
+    y2: f64,
+    h2: f64,
+    w2: f64,
+    bend_points: Option<&Vec<Point>>,
+) -> (f64, f64, f64, f64) {
+    if let Some(points) = bend_points.filter(|points| points.len() >= 2) {
+        (
+            points[0].x,
+            points[0].y,
+            points[points.len() - 1].x,
+            points[points.len() - 1].y,
+        )
     } else {
         calculate_connection_points(x1, y1, h1, w1, x2, y2, h2, w2)
+    }
+}
+
+fn relation_label_elements(
+    label: &str,
+    cardinality1: &str,
+    cardinality2: &str,
+    points: (f64, f64, f64, f64),
+) -> Vec<SvgElement> {
+    let mut labels = Vec::new();
+    if let Some(label) = cardinality_label(cardinality1, points, true) {
+        labels.push(label);
+    }
+    if let Some(label) = cardinality_label(cardinality2, points, false) {
+        labels.push(label);
+    }
+    if let Some(label) = relation_mid_label(label, points) {
+        labels.push(label);
+    }
+    labels
+}
+
+fn cardinality_label(
+    cardinality: &str,
+    (start_x, start_y, end_x, end_y): (f64, f64, f64, f64),
+    near_start: bool,
+) -> Option<SvgElement> {
+    if cardinality.is_empty() {
+        return None;
+    }
+
+    let (offset_x, offset_y, perp_x, perp_y) =
+        relation_label_offsets(start_x, start_y, end_x, end_y);
+    let (x, y) = if near_start {
+        (start_x + offset_x + perp_x, start_y + offset_y + perp_y)
+    } else {
+        (end_x - offset_x + perp_x, end_y - offset_y + perp_y)
     };
 
-    // Cardinality label at start (near class 1)
-    if !cardinality1.is_empty() {
-        let dx = end_x - start_x;
-        let dy = end_y - start_y;
-        let offset = 20.0;
-        let len = (dx * dx + dy * dy).sqrt();
-        let offset_x = if len > 0.0 { offset * dx / len } else { 0.0 };
-        let offset_y = if len > 0.0 { offset * dy / len } else { offset };
+    Some(SvgElement::Text {
+        x,
+        y,
+        content: cardinality.to_string(),
+        attrs: Attrs::new()
+            .with_attr("text-anchor", "middle")
+            .with_class("cardinality-label")
+            .with_attr("font-size", "11"),
+    })
+}
 
-        let perp_offset = 12.0;
-        let perp_x = if len > 0.0 {
-            -perp_offset * dy / len
-        } else {
-            perp_offset
-        };
-        let perp_y = if len > 0.0 {
-            perp_offset * dx / len
-        } else {
-            0.0
-        };
+fn relation_label_offsets(
+    start_x: f64,
+    start_y: f64,
+    end_x: f64,
+    end_y: f64,
+) -> (f64, f64, f64, f64) {
+    let dx = end_x - start_x;
+    let dy = end_y - start_y;
+    let len = (dx * dx + dy * dy).sqrt();
+    let offset = 20.0;
+    let perp_offset = 12.0;
 
-        label_elements.push(SvgElement::Text {
-            x: start_x + offset_x + perp_x,
-            y: start_y + offset_y + perp_y,
-            content: cardinality1.to_string(),
-            attrs: Attrs::new()
-                .with_attr("text-anchor", "middle")
-                .with_class("cardinality-label")
-                .with_attr("font-size", "11"),
-        });
+    if len > 0.0 {
+        (
+            offset * dx / len,
+            offset * dy / len,
+            -perp_offset * dy / len,
+            perp_offset * dx / len,
+        )
+    } else {
+        (0.0, offset, perp_offset, 0.0)
     }
+}
 
-    // Cardinality label at end (near class 2)
-    if !cardinality2.is_empty() {
-        let dx = end_x - start_x;
-        let dy = end_y - start_y;
-        let offset = 20.0;
-        let len = (dx * dx + dy * dy).sqrt();
-        let offset_x = if len > 0.0 { offset * dx / len } else { 0.0 };
-        let offset_y = if len > 0.0 { offset * dy / len } else { offset };
-
-        let perp_offset = 12.0;
-        let perp_x = if len > 0.0 {
-            -perp_offset * dy / len
-        } else {
-            perp_offset
-        };
-        let perp_y = if len > 0.0 {
-            perp_offset * dx / len
-        } else {
-            0.0
-        };
-
-        label_elements.push(SvgElement::Text {
-            x: end_x - offset_x + perp_x,
-            y: end_y - offset_y + perp_y,
-            content: cardinality2.to_string(),
-            attrs: Attrs::new()
-                .with_attr("text-anchor", "middle")
-                .with_class("cardinality-label")
-                .with_attr("font-size", "11"),
-        });
-    }
-
-    // Relation label (in the middle)
-    if !label.is_empty() {
-        let mid_x = (start_x + end_x) / 2.0;
-        let mid_y = (start_y + end_y) / 2.0;
-        label_elements.push(SvgElement::Text {
-            x: mid_x,
-            y: mid_y,
-            content: label.to_string(),
-            attrs: Attrs::new()
-                .with_attr("text-anchor", "middle")
-                .with_class("relation-label")
-                .with_attr("dominant-baseline", "central")
-                .with_attr("font-size", "11"),
-        });
-    }
-
-    (path_element, label_elements)
+fn relation_mid_label(
+    label: &str,
+    (start_x, start_y, end_x, end_y): (f64, f64, f64, f64),
+) -> Option<SvgElement> {
+    (!label.is_empty()).then(|| SvgElement::Text {
+        x: (start_x + end_x) / 2.0,
+        y: (start_y + end_y) / 2.0,
+        content: label.to_string(),
+        attrs: Attrs::new()
+            .with_attr("text-anchor", "middle")
+            .with_class("relation-label")
+            .with_attr("dominant-baseline", "central")
+            .with_attr("font-size", "11"),
+    })
 }
 
 /// Offset a point toward a target by a given distance

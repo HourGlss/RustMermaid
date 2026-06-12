@@ -46,57 +46,64 @@ fn process_statement(
     parent_id: Option<&str>,
 ) -> Result<(), String> {
     match pair.as_rule() {
-        Rule::statement => {
-            for inner in pair.into_inner() {
-                process_statement(db, inner, parent_id)?;
-            }
-        }
-        Rule::comment_stmt => {
-            // Ignore comments
-        }
-        Rule::columns_stmt => {
-            let mut columns: i32 = -1;
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::column_count {
-                    columns = inner.as_str().parse().unwrap_or(-1);
-                }
-            }
-            // Set columns on parent or root
-            let target = parent_id.unwrap_or("root");
-            if columns > 0 {
-                db.set_columns(target, columns as usize);
-            }
-        }
-        Rule::block_stmt => {
-            let (id, label, block_type, width) = extract_block_info(pair)?;
-            db.add_block_with_parent(&id, label.as_deref(), block_type, parent_id);
-            if let Some(w) = width {
-                db.set_width(&id, w);
-            }
-        }
-        Rule::space_stmt => {
-            // Generate unique ID for space
-            let id = db.generate_space_id();
-            db.add_block_with_parent(&id, None, BlockType::Space, parent_id);
-        }
-        Rule::composite_block => {
-            process_composite(db, pair, parent_id)?;
-        }
-        Rule::edge_stmt => {
-            process_edge(db, pair, parent_id)?;
-        }
-        Rule::class_def_stmt => {
-            process_class_def(db, pair)?;
-        }
-        Rule::class_stmt => {
-            process_class_assignment(db, pair)?;
-        }
-        Rule::style_stmt => {
-            process_style(db, pair)?;
-        }
+        Rule::statement => process_nested_statement(db, pair, parent_id)?,
+        Rule::comment_stmt => {}
+        Rule::columns_stmt => process_columns_stmt(db, pair, parent_id),
+        Rule::block_stmt => process_block_stmt(db, pair, parent_id)?,
+        Rule::space_stmt => process_space_stmt(db, parent_id),
+        Rule::composite_block => process_composite(db, pair, parent_id)?,
+        Rule::edge_stmt => process_edge(db, pair, parent_id)?,
+        Rule::class_def_stmt => process_class_def(db, pair)?,
+        Rule::class_stmt => process_class_assignment(db, pair)?,
+        Rule::style_stmt => process_style(db, pair)?,
         _ => {}
     }
     Ok(())
+}
+
+fn process_nested_statement(
+    db: &mut BlockDb,
+    pair: pest::iterators::Pair<Rule>,
+    parent_id: Option<&str>,
+) -> Result<(), String> {
+    for inner in pair.into_inner() {
+        process_statement(db, inner, parent_id)?;
+    }
+    Ok(())
+}
+
+fn process_columns_stmt(
+    db: &mut BlockDb,
+    pair: pest::iterators::Pair<Rule>,
+    parent_id: Option<&str>,
+) {
+    let mut columns: i32 = -1;
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::column_count {
+            columns = inner.as_str().parse().unwrap_or(-1);
+        }
+    }
+    if columns > 0 {
+        db.set_columns(parent_id.unwrap_or("root"), columns as usize);
+    }
+}
+
+fn process_block_stmt(
+    db: &mut BlockDb,
+    pair: pest::iterators::Pair<Rule>,
+    parent_id: Option<&str>,
+) -> Result<(), String> {
+    let (id, label, block_type, width) = extract_block_info(pair)?;
+    db.add_block_with_parent(&id, label.as_deref(), block_type, parent_id);
+    if let Some(w) = width {
+        db.set_width(&id, w);
+    }
+    Ok(())
+}
+
+fn process_space_stmt(db: &mut BlockDb, parent_id: Option<&str>) {
+    let id = db.generate_space_id();
+    db.add_block_with_parent(&id, None, BlockType::Space, parent_id);
 }
 
 fn extract_block_info(

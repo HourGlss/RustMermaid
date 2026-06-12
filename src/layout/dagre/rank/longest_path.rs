@@ -20,14 +20,20 @@ enum DfsState {
 pub fn run(g: &mut DagreGraph) {
     let mut visited = HashSet::new();
     let mut in_progress = HashSet::new(); // Track nodes currently on the stack
-    let mut stack: Vec<DfsState> = Vec::new();
-
-    // Get all node keys first
     let nodes: Vec<String> = g.nodes().into_iter().cloned().collect();
+    let sources = initialize_sources(g, &nodes, &mut visited);
 
-    // Collect source nodes (no predecessors)
+    process_longest_paths(g, &nodes, &mut visited, &mut in_progress);
+    tighten_sources(g, &sources);
+}
+
+fn initialize_sources(
+    g: &mut DagreGraph,
+    nodes: &[String],
+    visited: &mut HashSet<String>,
+) -> Vec<String> {
     let mut sources = Vec::new();
-    for v in &nodes {
+    for v in nodes {
         if g.in_edges(v).is_empty() {
             if let Some(label) = g.node_mut(v) {
                 label.rank = Some(0);
@@ -36,9 +42,17 @@ pub fn run(g: &mut DagreGraph) {
             sources.push(v.clone());
         }
     }
+    sources
+}
 
-    // Process remaining nodes using iterative DFS
-    for start in &nodes {
+fn process_longest_paths(
+    g: &mut DagreGraph,
+    nodes: &[String],
+    visited: &mut HashSet<String>,
+    in_progress: &mut HashSet<String>,
+) {
+    let mut stack: Vec<DfsState> = Vec::new();
+    for start in nodes {
         if visited.contains(start) {
             continue;
         }
@@ -93,13 +107,10 @@ pub fn run(g: &mut DagreGraph) {
             }
         }
     }
+}
 
-    // Tighten sources: push source nodes with out-edges closer to their
-    // successors. Without this, disconnected sources (e.g., test_entity3 ->
-    // test_req5) sit at rank 0, adding width to that rank. By moving them
-    // to min(successor_rank) - minlen, we reduce the number of nodes at
-    // rank 0 and produce narrower layouts.
-    for v in &sources {
+fn tighten_sources(g: &mut DagreGraph, sources: &[String]) {
+    for v in sources {
         let out_edges = g.out_edges(v);
         if out_edges.is_empty() {
             continue; // Isolated nodes stay at rank 0

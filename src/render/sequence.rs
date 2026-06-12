@@ -1,6 +1,6 @@
 //! Sequence diagram renderer
 
-use crate::diagrams::sequence::{LineType, ParticipantType, Placement, SequenceDb};
+use crate::diagrams::sequence::{LineType, Message, Note, ParticipantType, Placement, SequenceDb};
 use crate::error::Result;
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
 use std::collections::HashMap;
@@ -517,242 +517,387 @@ fn layout_basic_events(
     cfg: &SequenceLayoutConfig,
 ) {
     let autonumber_config = db.get_autonumber();
-    let mut sequence_index: i32 = autonumber_config.map_or(1, |c| c.start);
-    let sequence_step: i32 = autonumber_config.map_or(1, |c| c.step);
-    let autonumber_enabled = autonumber_config.is_some();
-    let mut current_y = lifeline_start_y + cfg.message_spacing;
-    let mut last_content_bottom: Option<f64> = None;
-    let mut open_fragments: Vec<OpenFragmentLayout> = Vec::new();
-    let mut activation_stacks: HashMap<String, Vec<OpenActivationLayout>> = HashMap::new();
+    let mut state = BasicEventLayoutState::new(
+        lifeline_start_y,
+        cfg,
+        autonumber_config.map_or(1, |c| c.start),
+        autonumber_config.map_or(1, |c| c.step),
+        autonumber_config.is_some(),
+    );
 
     for (_, event) in collect_timeline_events(db) {
-        match event {
-            TimelineEvent::Message(message) => match message.message_type {
-                LineType::LoopStart
-                | LineType::AltStart
-                | LineType::OptStart
-                | LineType::ParStart
-                | LineType::CriticalStart
-                | LineType::BreakStart
-                | LineType::RectStart => {
-                    let kind = FragmentKind::from_message_type(message.message_type);
-                    open_fragments.push(OpenFragmentLayout {
-                        kind,
-                        label: message.message.trim().to_string(),
-                        start_y: current_y,
-                        content_bounds: None,
-                        min_actor_idx: None,
-                        max_actor_idx: None,
-                        color: if matches!(kind, FragmentKind::Rect) {
-                            if message.message.is_empty() {
-                                None
-                            } else {
-                                Some(message.message.clone())
-                            }
-                        } else {
-                            None
-                        },
-                        sections: Vec::new(),
-                    });
-                    current_y += fragment_header_reserve(cfg);
-                }
-                LineType::AltElse | LineType::ParAnd | LineType::CriticalOption => {
-                    if let Some(fragment) = open_fragments.last_mut() {
-                        fragment.sections.push(FragmentSectionLayout {
-                            kind: FragmentKind::from_message_type(message.message_type),
-                            label: message.message.trim().to_string(),
-                            y: current_y,
-                        });
-                        fragment.include_bounds(Bounds {
-                            x: 0.0,
-                            y: current_y,
-                            width: layout.content_width,
-                            height: fragment_header_reserve(cfg),
-                        });
-                    }
-                    current_y += fragment_header_reserve(cfg);
-                }
-                LineType::LoopEnd
-                | LineType::AltEnd
-                | LineType::OptEnd
-                | LineType::ParEnd
-                | LineType::CriticalEnd
-                | LineType::BreakEnd
-                | LineType::RectEnd => {
-                    if let Some(open) = open_fragments.pop() {
-                        let depth = open_fragments.len();
-                        let frame = fragment_frame_bounds(&open, depth, layout, cfg);
-                        let min_actor_idx = open.min_actor_idx;
-                        let max_actor_idx = open.max_actor_idx;
-                        let fragment = FragmentLayout {
-                            kind: open.kind,
-                            label: open.label,
-                            frame,
-                            color: open.color,
-                            sections: open.sections,
-                        };
-                        layout.bounds.push(fragment.frame);
-                        if let Some(parent) = open_fragments.last_mut() {
-                            let min_idx = min_actor_idx.unwrap_or(0);
-                            let max_idx = max_actor_idx
-                                .unwrap_or_else(|| layout.actors.len().saturating_sub(1));
-                            parent.include_event(min_idx, max_idx, fragment.frame);
-                        }
-                        current_y = current_y.max(fragment.frame.bottom() + cfg.box_margin);
-                        last_content_bottom = Some(
-                            last_content_bottom.map_or(fragment.frame.bottom(), |bottom| {
-                                bottom.max(fragment.frame.bottom())
-                            }),
-                        );
-                        layout.fragments.push(fragment);
-                    }
-                }
-                LineType::ActiveStart => {
-                    if let Some(actor) = message.message.split_whitespace().next() {
-                        let depth = activation_stacks.get(actor).map_or(0, Vec::len);
-                        let start_y = last_content_bottom.unwrap_or(current_y);
-                        activation_stacks
-                            .entry(actor.to_string())
-                            .or_default()
-                            .push(OpenActivationLayout {
-                                start_y,
-                                stack_offset: depth as f64 * ACTIVATION_WIDTH,
-                            });
-                    }
-                }
-                LineType::ActiveEnd => {
-                    if let Some(actor) = message.message.split_whitespace().next() {
-                        if let Some(stack) = activation_stacks.get_mut(actor) {
-                            if let Some(open) = stack.pop() {
-                                if let Some(&actor_x) = layout.actor_positions.get(actor) {
-                                    let end_y = last_content_bottom
-                                        .unwrap_or(current_y)
-                                        .max(open.start_y + cfg.line_height);
-                                    let activation = ActivationLayout {
-                                        actor_x,
-                                        start_y: open.start_y,
-                                        end_y,
-                                        stack_offset: open.stack_offset,
-                                    };
-                                    layout.bounds.push(Bounds {
-                                        x: actor_x + open.stack_offset - ACTIVATION_WIDTH / 2.0,
-                                        y: open.start_y,
-                                        width: ACTIVATION_WIDTH,
-                                        height: end_y - open.start_y,
-                                    });
-                                    layout.activations.push(activation);
-                                }
-                            }
-                        }
-                    }
-                }
-                LineType::Autonumber => {}
-                _ => {
-                    let (Some(from), Some(to)) = (&message.from, &message.to) else {
-                        continue;
-                    };
-                    let (Some(&from_x), Some(&to_x)) = (
-                        layout.actor_positions.get(from),
-                        layout.actor_positions.get(to),
-                    ) else {
-                        continue;
-                    };
-                    let sequence_num = if autonumber_enabled {
-                        Some(sequence_index)
-                    } else {
-                        None
-                    };
-                    let bounds = message_bounds(from_x, to_x, current_y, &message.message, cfg);
-                    layout.bounds.push(bounds);
-                    if let (Some(&from_idx), Some(&to_idx)) =
-                        (layout.actor_index.get(from), layout.actor_index.get(to))
-                    {
-                        let min_idx = from_idx.min(to_idx);
-                        let max_idx = from_idx.max(to_idx);
-                        for fragment in &mut open_fragments {
-                            fragment.include_event(min_idx, max_idx, bounds);
-                        }
-                    }
-                    layout.events.push(LaidOutEvent::Message(MessageLayout {
-                        from_x,
-                        to_x,
-                        y: current_y,
-                        message: message.message.clone(),
-                        message_type: message.message_type,
-                        sequence_num,
-                    }));
-                    if autonumber_enabled {
-                        sequence_index += sequence_step;
-                    }
+        state.layout_event(event, layout, cfg);
+    }
 
-                    let message_bottom = if is_self_message(message) {
-                        bounds.bottom()
-                    } else {
-                        current_y
-                    };
-                    last_content_bottom = Some(message_bottom);
-                    current_y = message_bottom + cfg.message_spacing;
-                }
-            },
-            TimelineEvent::Note(note) => {
-                let previous_bottom =
-                    last_content_bottom.unwrap_or(current_y - cfg.message_spacing);
-                let note_y = previous_bottom + cfg.note_margin;
-                let mut note_bottom = note_y + note_height(&note.message, cfg);
-                if let Some(&actor_x) = layout.actor_positions.get(&note.actor) {
-                    let span_x = note
-                        .actor_to
-                        .as_ref()
-                        .and_then(|actor| layout.actor_positions.get(actor))
-                        .copied();
-                    let bounds =
-                        note_bounds(actor_x, span_x, note_y, &note.message, note.placement, cfg);
-                    note_bottom = bounds.bottom();
-                    layout.bounds.push(bounds);
-                    if let Some(&actor_idx) = layout.actor_index.get(&note.actor) {
-                        let mut min_idx = actor_idx;
-                        let mut max_idx = actor_idx;
-                        if let Some(other) = note
-                            .actor_to
-                            .as_ref()
-                            .and_then(|name| layout.actor_index.get(name).copied())
-                        {
-                            min_idx = min_idx.min(other);
-                            max_idx = max_idx.max(other);
-                        }
-                        for fragment in &mut open_fragments {
-                            fragment.include_event(min_idx, max_idx, bounds);
-                        }
-                    }
-                    layout.events.push(LaidOutEvent::Note(NoteLayout {
-                        actor_x,
-                        span_x,
-                        y: note_y,
-                        message: note.message.clone(),
-                        placement: note.placement,
-                    }));
-                }
-                last_content_bottom = Some(note_bottom);
-                current_y = note_bottom + cfg.message_spacing;
-            }
+    state.finish(layout);
+}
+
+struct BasicEventLayoutState {
+    sequence_index: i32,
+    sequence_step: i32,
+    autonumber_enabled: bool,
+    current_y: f64,
+    last_content_bottom: Option<f64>,
+    open_fragments: Vec<OpenFragmentLayout>,
+    activation_stacks: HashMap<String, Vec<OpenActivationLayout>>,
+}
+
+impl BasicEventLayoutState {
+    fn new(
+        lifeline_start_y: f64,
+        cfg: &SequenceLayoutConfig,
+        sequence_index: i32,
+        sequence_step: i32,
+        autonumber_enabled: bool,
+    ) -> Self {
+        Self {
+            sequence_index,
+            sequence_step,
+            autonumber_enabled,
+            current_y: lifeline_start_y + cfg.message_spacing,
+            last_content_bottom: None,
+            open_fragments: Vec::new(),
+            activation_stacks: HashMap::new(),
         }
     }
 
-    if let Some(bottom) = last_content_bottom {
-        layout.bounds.push(Bounds {
-            x: 0.0,
-            y: bottom,
-            width: 0.0,
-            height: 0.0,
-        });
-    } else {
-        layout.bounds.push(Bounds {
-            x: 0.0,
-            y: current_y,
-            width: 0.0,
-            height: 0.0,
-        });
+    fn layout_event(
+        &mut self,
+        event: TimelineEvent<'_>,
+        layout: &mut SequenceLayout,
+        cfg: &SequenceLayoutConfig,
+    ) {
+        match event {
+            TimelineEvent::Message(message) => self.layout_message(message, layout, cfg),
+            TimelineEvent::Note(note) => self.layout_note(note, layout, cfg),
+        }
     }
+
+    fn layout_message(
+        &mut self,
+        message: &Message,
+        layout: &mut SequenceLayout,
+        cfg: &SequenceLayoutConfig,
+    ) {
+        match message.message_type {
+            LineType::LoopStart
+            | LineType::AltStart
+            | LineType::OptStart
+            | LineType::ParStart
+            | LineType::CriticalStart
+            | LineType::BreakStart
+            | LineType::RectStart => self.start_fragment(message, cfg),
+            LineType::AltElse | LineType::ParAnd | LineType::CriticalOption => {
+                self.add_fragment_section(message, layout, cfg);
+            }
+            LineType::LoopEnd
+            | LineType::AltEnd
+            | LineType::OptEnd
+            | LineType::ParEnd
+            | LineType::CriticalEnd
+            | LineType::BreakEnd
+            | LineType::RectEnd => self.end_fragment(layout, cfg),
+            LineType::ActiveStart => self.start_activation(message),
+            LineType::ActiveEnd => self.end_activation(message, layout, cfg),
+            LineType::Autonumber => {}
+            _ => self.layout_regular_message(message, layout, cfg),
+        }
+    }
+
+    fn start_fragment(&mut self, message: &Message, cfg: &SequenceLayoutConfig) {
+        let kind = FragmentKind::from_message_type(message.message_type);
+        self.open_fragments.push(OpenFragmentLayout {
+            kind,
+            label: message.message.trim().to_string(),
+            start_y: self.current_y,
+            content_bounds: None,
+            min_actor_idx: None,
+            max_actor_idx: None,
+            color: rect_fragment_color(kind, message),
+            sections: Vec::new(),
+        });
+        self.current_y += fragment_header_reserve(cfg);
+    }
+
+    fn add_fragment_section(
+        &mut self,
+        message: &Message,
+        layout: &SequenceLayout,
+        cfg: &SequenceLayoutConfig,
+    ) {
+        if let Some(fragment) = self.open_fragments.last_mut() {
+            fragment.sections.push(FragmentSectionLayout {
+                kind: FragmentKind::from_message_type(message.message_type),
+                label: message.message.trim().to_string(),
+                y: self.current_y,
+            });
+            fragment.include_bounds(Bounds {
+                x: 0.0,
+                y: self.current_y,
+                width: layout.content_width,
+                height: fragment_header_reserve(cfg),
+            });
+        }
+        self.current_y += fragment_header_reserve(cfg);
+    }
+
+    fn end_fragment(&mut self, layout: &mut SequenceLayout, cfg: &SequenceLayoutConfig) {
+        let Some(open) = self.open_fragments.pop() else {
+            return;
+        };
+
+        let depth = self.open_fragments.len();
+        let frame = fragment_frame_bounds(&open, depth, layout, cfg);
+        let min_actor_idx = open.min_actor_idx;
+        let max_actor_idx = open.max_actor_idx;
+        let fragment = FragmentLayout {
+            kind: open.kind,
+            label: open.label,
+            frame,
+            color: open.color,
+            sections: open.sections,
+        };
+
+        layout.bounds.push(fragment.frame);
+        self.include_fragment_in_parent(min_actor_idx, max_actor_idx, fragment.frame, layout);
+        self.current_y = self.current_y.max(fragment.frame.bottom() + cfg.box_margin);
+        self.include_content_bottom(fragment.frame.bottom());
+        layout.fragments.push(fragment);
+    }
+
+    fn include_fragment_in_parent(
+        &mut self,
+        min_actor_idx: Option<usize>,
+        max_actor_idx: Option<usize>,
+        frame: Bounds,
+        layout: &SequenceLayout,
+    ) {
+        if let Some(parent) = self.open_fragments.last_mut() {
+            let min_idx = min_actor_idx.unwrap_or(0);
+            let max_idx = max_actor_idx.unwrap_or_else(|| layout.actors.len().saturating_sub(1));
+            parent.include_event(min_idx, max_idx, frame);
+        }
+    }
+
+    fn start_activation(&mut self, message: &Message) {
+        if let Some(actor) = message.message.split_whitespace().next() {
+            let depth = self.activation_stacks.get(actor).map_or(0, Vec::len);
+            let start_y = self.last_content_bottom.unwrap_or(self.current_y);
+            self.activation_stacks
+                .entry(actor.to_string())
+                .or_default()
+                .push(OpenActivationLayout {
+                    start_y,
+                    stack_offset: depth as f64 * ACTIVATION_WIDTH,
+                });
+        }
+    }
+
+    fn end_activation(
+        &mut self,
+        message: &Message,
+        layout: &mut SequenceLayout,
+        cfg: &SequenceLayoutConfig,
+    ) {
+        let Some(actor) = message.message.split_whitespace().next() else {
+            return;
+        };
+        let Some(stack) = self.activation_stacks.get_mut(actor) else {
+            return;
+        };
+        let Some(open) = stack.pop() else {
+            return;
+        };
+        let Some(&actor_x) = layout.actor_positions.get(actor) else {
+            return;
+        };
+
+        let end_y = self
+            .last_content_bottom
+            .unwrap_or(self.current_y)
+            .max(open.start_y + cfg.line_height);
+        let activation = ActivationLayout {
+            actor_x,
+            start_y: open.start_y,
+            end_y,
+            stack_offset: open.stack_offset,
+        };
+        layout.bounds.push(Bounds {
+            x: actor_x + open.stack_offset - ACTIVATION_WIDTH / 2.0,
+            y: open.start_y,
+            width: ACTIVATION_WIDTH,
+            height: end_y - open.start_y,
+        });
+        layout.activations.push(activation);
+    }
+
+    fn layout_regular_message(
+        &mut self,
+        message: &Message,
+        layout: &mut SequenceLayout,
+        cfg: &SequenceLayoutConfig,
+    ) {
+        let Some((from, to, from_x, to_x)) = message_positions(message, layout) else {
+            return;
+        };
+        let sequence_num = self.autonumber_enabled.then_some(self.sequence_index);
+        let bounds = message_bounds(from_x, to_x, self.current_y, &message.message, cfg);
+
+        layout.bounds.push(bounds);
+        self.include_message_in_fragments(from, to, bounds, layout);
+        layout.events.push(LaidOutEvent::Message(MessageLayout {
+            from_x,
+            to_x,
+            y: self.current_y,
+            message: message.message.clone(),
+            message_type: message.message_type,
+            sequence_num,
+        }));
+        if self.autonumber_enabled {
+            self.sequence_index += self.sequence_step;
+        }
+
+        let message_bottom = if is_self_message(message) {
+            bounds.bottom()
+        } else {
+            self.current_y
+        };
+        self.last_content_bottom = Some(message_bottom);
+        self.current_y = message_bottom + cfg.message_spacing;
+    }
+
+    fn include_message_in_fragments(
+        &mut self,
+        from: &str,
+        to: &str,
+        bounds: Bounds,
+        layout: &SequenceLayout,
+    ) {
+        if let (Some(&from_idx), Some(&to_idx)) =
+            (layout.actor_index.get(from), layout.actor_index.get(to))
+        {
+            let min_idx = from_idx.min(to_idx);
+            let max_idx = from_idx.max(to_idx);
+            self.include_open_fragment_event(min_idx, max_idx, bounds);
+        }
+    }
+
+    fn layout_note(
+        &mut self,
+        note: &Note,
+        layout: &mut SequenceLayout,
+        cfg: &SequenceLayoutConfig,
+    ) {
+        let previous_bottom = self
+            .last_content_bottom
+            .unwrap_or(self.current_y - cfg.message_spacing);
+        let note_y = previous_bottom + cfg.note_margin;
+        let mut note_bottom = note_y + note_height(&note.message, cfg);
+
+        if let Some(event_bottom) = self.add_note_event(note, note_y, layout, cfg) {
+            note_bottom = event_bottom;
+        }
+
+        self.last_content_bottom = Some(note_bottom);
+        self.current_y = note_bottom + cfg.message_spacing;
+    }
+
+    fn add_note_event(
+        &mut self,
+        note: &Note,
+        note_y: f64,
+        layout: &mut SequenceLayout,
+        cfg: &SequenceLayoutConfig,
+    ) -> Option<f64> {
+        let actor_x = *layout.actor_positions.get(&note.actor)?;
+        let span_x = note
+            .actor_to
+            .as_ref()
+            .and_then(|actor| layout.actor_positions.get(actor))
+            .copied();
+        let bounds = note_bounds(actor_x, span_x, note_y, &note.message, note.placement, cfg);
+
+        layout.bounds.push(bounds);
+        self.include_note_in_fragments(note, bounds, layout);
+        layout.events.push(LaidOutEvent::Note(NoteLayout {
+            actor_x,
+            span_x,
+            y: note_y,
+            message: note.message.clone(),
+            placement: note.placement,
+        }));
+
+        Some(bounds.bottom())
+    }
+
+    fn include_note_in_fragments(&mut self, note: &Note, bounds: Bounds, layout: &SequenceLayout) {
+        if let Some((min_idx, max_idx)) = note_actor_range(note, layout) {
+            self.include_open_fragment_event(min_idx, max_idx, bounds);
+        }
+    }
+
+    fn include_open_fragment_event(&mut self, min_idx: usize, max_idx: usize, bounds: Bounds) {
+        for fragment in &mut self.open_fragments {
+            fragment.include_event(min_idx, max_idx, bounds);
+        }
+    }
+
+    fn include_content_bottom(&mut self, bottom: f64) {
+        self.last_content_bottom = Some(
+            self.last_content_bottom
+                .map_or(bottom, |existing| existing.max(bottom)),
+        );
+    }
+
+    fn finish(self, layout: &mut SequenceLayout) {
+        if let Some(bottom) = self.last_content_bottom {
+            layout.bounds.push(Bounds {
+                x: 0.0,
+                y: bottom,
+                width: 0.0,
+                height: 0.0,
+            });
+        } else {
+            layout.bounds.push(Bounds {
+                x: 0.0,
+                y: self.current_y,
+                width: 0.0,
+                height: 0.0,
+            });
+        }
+    }
+}
+
+fn rect_fragment_color(kind: FragmentKind, message: &Message) -> Option<String> {
+    if matches!(kind, FragmentKind::Rect) && !message.message.is_empty() {
+        Some(message.message.clone())
+    } else {
+        None
+    }
+}
+
+fn message_positions<'a>(
+    message: &'a Message,
+    layout: &SequenceLayout,
+) -> Option<(&'a str, &'a str, f64, f64)> {
+    let from = message.from.as_deref()?;
+    let to = message.to.as_deref()?;
+    let from_x = *layout.actor_positions.get(from)?;
+    let to_x = *layout.actor_positions.get(to)?;
+    Some((from, to, from_x, to_x))
+}
+
+fn note_actor_range(note: &Note, layout: &SequenceLayout) -> Option<(usize, usize)> {
+    let actor_idx = *layout.actor_index.get(&note.actor)?;
+    let other = note
+        .actor_to
+        .as_ref()
+        .and_then(|name| layout.actor_index.get(name).copied());
+
+    Some(match other {
+        Some(other_idx) => (actor_idx.min(other_idx), actor_idx.max(other_idx)),
+        None => (actor_idx, actor_idx),
+    })
 }
 
 fn fragment_frame_bounds(

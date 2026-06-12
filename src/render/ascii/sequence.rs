@@ -7,8 +7,9 @@
 //! - Message labels centered above arrows
 //! - Fragment boxes (loop/alt/opt/par) using box-drawing characters
 
-use crate::diagrams::sequence::{LineType, SequenceDb};
+use crate::diagrams::sequence::{Actor, LineType, Message, SequenceDb};
 use crate::error::Result;
+use std::collections::HashMap;
 
 /// Layout constants for ASCII sequence diagrams.
 const ACTOR_COL_WIDTH: usize = 20;
@@ -23,118 +24,12 @@ pub fn render_sequence_ascii(db: &SequenceDb) -> Result<String> {
     }
 
     let messages = db.get_messages();
-
-    // Calculate column widths: each actor gets a column wide enough for its label
-    let actor_widths: Vec<usize> = actors
-        .iter()
-        .map(|a| {
-            let label_len = a.description.chars().count();
-            // Minimum width = label + padding on each side + border chars
-            (label_len + ACTOR_BOX_PADDING * 2 + 2).max(ACTOR_COL_WIDTH)
-        })
-        .collect();
-
-    // Calculate per-gap spacing based on message text widths
-    let mut gap_widths: Vec<usize> = vec![4; actors.len().saturating_sub(1)];
-    let actor_name_to_idx: std::collections::HashMap<&str, usize> = actors
-        .iter()
-        .enumerate()
-        .map(|(i, a)| (a.name.as_str(), i))
-        .collect();
-    for msg in messages {
-        if let (Some(from), Some(to)) = (&msg.from, &msg.to) {
-            if let (Some(&fi), Some(&ti)) = (
-                actor_name_to_idx.get(from.as_str()),
-                actor_name_to_idx.get(to.as_str()),
-            ) {
-                if fi != ti {
-                    let min_idx = fi.min(ti);
-                    let max_idx = fi.max(ti);
-                    let needed = msg.message.chars().count() + 4; // label + padding
-                    let actor_half = actor_widths[fi] / 2 + actor_widths[ti] / 2;
-                    let total_gap_needed = needed.saturating_sub(actor_half).max(4);
-                    let num_gaps = max_idx - min_idx;
-                    let per_gap = total_gap_needed.div_ceil(num_gaps);
-                    for g in min_idx..max_idx {
-                        if g < gap_widths.len() {
-                            gap_widths[g] = gap_widths[g].max(per_gap);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Calculate center column for each actor
-    let mut actor_centers: Vec<usize> = Vec::with_capacity(actors.len());
-    let mut x = 1; // left margin
-    for (i, width) in actor_widths.iter().enumerate() {
-        actor_centers.push(x + width / 2);
-        let gap = if i < gap_widths.len() {
-            gap_widths[i]
-        } else {
-            4
-        };
-        x += width + gap;
-    }
-
-    let total_width = if let Some(last_center) = actor_centers.last() {
-        last_center + actor_widths.last().unwrap_or(&ACTOR_COL_WIDTH) / 2 + 2
-    } else {
-        80
-    };
-
-    // Build actor name → index map
-    let actor_index: std::collections::HashMap<&str, usize> = actors
-        .iter()
-        .enumerate()
-        .map(|(i, a)| (a.name.as_str(), i))
-        .collect();
-
-    // Count message rows needed (skip control structures for row counting)
-    let mut row_events: Vec<RowEvent> = Vec::new();
-    for msg in messages {
-        match msg.message_type {
-            LineType::ActiveStart | LineType::ActiveEnd | LineType::Autonumber => continue,
-            LineType::LoopStart
-            | LineType::AltStart
-            | LineType::OptStart
-            | LineType::ParStart
-            | LineType::CriticalStart
-            | LineType::BreakStart
-            | LineType::RectStart => {
-                row_events.push(RowEvent::FragmentStart(
-                    msg.message.clone(),
-                    msg.message_type,
-                ));
-            }
-            LineType::AltElse | LineType::ParAnd | LineType::CriticalOption => {
-                row_events.push(RowEvent::FragmentDivider(
-                    msg.message.clone(),
-                    msg.message_type,
-                ));
-            }
-            LineType::LoopEnd
-            | LineType::AltEnd
-            | LineType::OptEnd
-            | LineType::ParEnd
-            | LineType::CriticalEnd
-            | LineType::BreakEnd
-            | LineType::RectEnd => {
-                row_events.push(RowEvent::FragmentEnd);
-            }
-            _ => {
-                if msg.from.is_some() && msg.to.is_some() {
-                    row_events.push(RowEvent::Message {
-                        from: msg.from.as_deref().unwrap_or(""),
-                        to: msg.to.as_deref().unwrap_or(""),
-                        label: &msg.message,
-                        msg_type: msg.message_type,
-                    });
-                }
-            }
-        }
-    }
+    let actor_widths = actor_widths(&actors);
+    let actor_index = actor_index(&actors);
+    let gap_widths = gap_widths(&actors, messages, &actor_widths, &actor_index);
+    let actor_centers = actor_centers(&actor_widths, &gap_widths);
+    let total_width = total_sequence_width(&actor_centers, &actor_widths);
+    let row_events = sequence_row_events(messages);
 
     // Canvas: allocate rows
     // Top actor box: 3 rows, then each event gets MESSAGE_ROW_SPACING rows,
@@ -146,157 +41,31 @@ pub fn render_sequence_ascii(db: &SequenceDb) -> Result<String> {
 
     let mut canvas: Vec<Vec<char>> = vec![vec![' '; total_width]; total_rows];
 
-    // Draw top actor boxes
-    for (i, actor) in actors.iter().enumerate() {
-        draw_actor_box(
-            &mut canvas,
-            0,
-            actor_centers[i],
-            actor_widths[i],
-            &actor.description,
-        );
-    }
-
-    // Draw lifelines (from below top box to above bottom box)
-    let lifeline_start = top_box_rows;
-    let lifeline_end = total_rows - bottom_box_rows - 1;
-    for &center in &actor_centers {
-        if center < total_width {
-            for canvas_row in canvas
-                .iter_mut()
-                .take(lifeline_end + 1)
-                .skip(lifeline_start)
-            {
-                if canvas_row[center] == ' ' {
-                    canvas_row[center] = '│';
-                }
-            }
-        }
-    }
-
-    // Draw messages and fragments
-    let mut current_row = top_box_rows + 1;
-    let mut fragment_stack: Vec<(usize, String)> = Vec::new(); // (start_row, label)
-
-    for event in &row_events {
-        match event {
-            RowEvent::Message {
-                from,
-                to,
-                label,
-                msg_type,
-            } => {
-                let from_idx = actor_index.get(from).copied();
-                let to_idx = actor_index.get(to).copied();
-
-                if let (Some(fi), Some(ti)) = (from_idx, to_idx) {
-                    let from_col = actor_centers[fi];
-                    let to_col = actor_centers[ti];
-                    let is_dotted = matches!(
-                        msg_type,
-                        LineType::Dotted
-                            | LineType::DottedOpen
-                            | LineType::DottedCross
-                            | LineType::DottedPoint
-                    );
-                    let is_self = fi == ti;
-
-                    if is_self {
-                        draw_self_message(&mut canvas, current_row, from_col, label, total_width);
-                    } else {
-                        draw_message(
-                            &mut canvas,
-                            current_row,
-                            from_col,
-                            to_col,
-                            label,
-                            is_dotted,
-                            total_width,
-                        );
-                    }
-                }
-                current_row += MESSAGE_ROW_SPACING;
-            }
-            RowEvent::FragmentStart(label, msg_type) => {
-                fragment_stack.push((current_row, fragment_prefix(*msg_type).to_string()));
-                // Draw fragment header
-                let prefix = fragment_prefix(*msg_type);
-                let header = if label.is_empty() {
-                    format!("[{}]", prefix)
-                } else {
-                    format!("[{} {}]", prefix, label)
-                };
-                // Place header at left side
-                let col = 0;
-                for (j, ch) in header.chars().enumerate() {
-                    if col + j < total_width && current_row < canvas.len() {
-                        canvas[current_row][col + j] = ch;
-                    }
-                }
-                current_row += MESSAGE_ROW_SPACING;
-            }
-            RowEvent::FragmentDivider(label, msg_type) => {
-                // Draw dashed divider line
-                if current_row < canvas.len() {
-                    let prefix = fragment_prefix(*msg_type);
-                    let divider_label = if label.is_empty() {
-                        format!("- - [{}] - -", prefix)
-                    } else {
-                        format!("- - [{}] - -", label)
-                    };
-                    for (j, ch) in divider_label.chars().enumerate() {
-                        if j < total_width {
-                            canvas[current_row][j] = ch;
-                        }
-                    }
-                }
-                current_row += MESSAGE_ROW_SPACING;
-            }
-            RowEvent::FragmentEnd => {
-                if let Some((_start_row, _label)) = fragment_stack.pop() {
-                    // Draw fragment end marker
-                    if current_row < canvas.len() {
-                        let end_marker = "[end]";
-                        for (j, ch) in end_marker.chars().enumerate() {
-                            if j < total_width {
-                                canvas[current_row][j] = ch;
-                            }
-                        }
-                    }
-                }
-                current_row += MESSAGE_ROW_SPACING;
-            }
-        }
-    }
-
-    // Draw bottom actor boxes
+    draw_actor_boxes(&mut canvas, 0, &actors, &actor_centers, &actor_widths);
+    draw_lifelines(
+        &mut canvas,
+        &actor_centers,
+        top_box_rows,
+        total_rows - bottom_box_rows - 1,
+    );
+    draw_sequence_events(
+        &mut canvas,
+        &row_events,
+        &actor_index,
+        &actor_centers,
+        total_width,
+        top_box_rows + 1,
+    );
     let bottom_row = total_rows - bottom_box_rows;
-    for (i, actor) in actors.iter().enumerate() {
-        draw_actor_box(
-            &mut canvas,
-            bottom_row,
-            actor_centers[i],
-            actor_widths[i],
-            &actor.description,
-        );
-    }
+    draw_actor_boxes(
+        &mut canvas,
+        bottom_row,
+        &actors,
+        &actor_centers,
+        &actor_widths,
+    );
 
-    // Convert canvas to string, trimming trailing empty lines
-    let mut result = String::new();
-    let mut last_non_empty = 0;
-    for (i, row) in canvas.iter().enumerate() {
-        if row.iter().any(|&c| c != ' ') {
-            last_non_empty = i;
-        }
-    }
-
-    for row in &canvas[..=last_non_empty] {
-        let line: String = row.iter().collect();
-        result.push_str(line.trim_end());
-        result.push('\n');
-    }
-
-    Ok(result)
+    Ok(canvas_to_string(&canvas))
 }
 
 /// Row event types for sequence diagram layout
@@ -310,6 +79,357 @@ enum RowEvent<'a> {
     FragmentStart(String, LineType),
     FragmentDivider(String, LineType),
     FragmentEnd,
+}
+
+fn actor_widths(actors: &[&Actor]) -> Vec<usize> {
+    actors
+        .iter()
+        .map(|actor| {
+            let label_len = actor.description.chars().count();
+            (label_len + ACTOR_BOX_PADDING * 2 + 2).max(ACTOR_COL_WIDTH)
+        })
+        .collect()
+}
+
+fn actor_index<'a>(actors: &'a [&Actor]) -> HashMap<&'a str, usize> {
+    actors
+        .iter()
+        .enumerate()
+        .map(|(i, actor)| (actor.name.as_str(), i))
+        .collect()
+}
+
+fn gap_widths(
+    actors: &[&Actor],
+    messages: &[Message],
+    actor_widths: &[usize],
+    actor_index: &HashMap<&str, usize>,
+) -> Vec<usize> {
+    let mut gap_widths = vec![4; actors.len().saturating_sub(1)];
+
+    for msg in messages {
+        widen_gaps_for_message(msg, actor_widths, actor_index, &mut gap_widths);
+    }
+
+    gap_widths
+}
+
+fn widen_gaps_for_message(
+    msg: &Message,
+    actor_widths: &[usize],
+    actor_index: &HashMap<&str, usize>,
+    gap_widths: &mut [usize],
+) {
+    let Some((fi, ti)) = message_actor_indexes(msg, actor_index) else {
+        return;
+    };
+    if fi == ti {
+        return;
+    }
+
+    let min_idx = fi.min(ti);
+    let max_idx = fi.max(ti);
+    let needed = msg.message.chars().count() + 4; // label + padding
+    let actor_half = actor_widths[fi] / 2 + actor_widths[ti] / 2;
+    let total_gap_needed = needed.saturating_sub(actor_half).max(4);
+    let per_gap = total_gap_needed.div_ceil(max_idx - min_idx);
+
+    for gap in gap_widths.iter_mut().take(max_idx).skip(min_idx) {
+        *gap = (*gap).max(per_gap);
+    }
+}
+
+fn message_actor_indexes(
+    msg: &Message,
+    actor_index: &HashMap<&str, usize>,
+) -> Option<(usize, usize)> {
+    let from = msg.from.as_deref()?;
+    let to = msg.to.as_deref()?;
+    Some((*actor_index.get(from)?, *actor_index.get(to)?))
+}
+
+fn actor_centers(actor_widths: &[usize], gap_widths: &[usize]) -> Vec<usize> {
+    let mut centers = Vec::with_capacity(actor_widths.len());
+    let mut x = 1; // left margin
+
+    for (i, width) in actor_widths.iter().enumerate() {
+        centers.push(x + width / 2);
+        x += width + gap_widths.get(i).copied().unwrap_or(4);
+    }
+
+    centers
+}
+
+fn total_sequence_width(actor_centers: &[usize], actor_widths: &[usize]) -> usize {
+    actor_centers
+        .last()
+        .map(|last_center| last_center + actor_widths.last().unwrap_or(&ACTOR_COL_WIDTH) / 2 + 2)
+        .unwrap_or(80)
+}
+
+fn sequence_row_events(messages: &[Message]) -> Vec<RowEvent<'_>> {
+    let mut row_events = Vec::new();
+
+    for msg in messages {
+        if let Some(event) = sequence_row_event(msg) {
+            row_events.push(event);
+        }
+    }
+
+    row_events
+}
+
+fn sequence_row_event(msg: &Message) -> Option<RowEvent<'_>> {
+    match msg.message_type {
+        LineType::ActiveStart | LineType::ActiveEnd | LineType::Autonumber => None,
+        LineType::LoopStart
+        | LineType::AltStart
+        | LineType::OptStart
+        | LineType::ParStart
+        | LineType::CriticalStart
+        | LineType::BreakStart
+        | LineType::RectStart => Some(RowEvent::FragmentStart(
+            msg.message.clone(),
+            msg.message_type,
+        )),
+        LineType::AltElse | LineType::ParAnd | LineType::CriticalOption => Some(
+            RowEvent::FragmentDivider(msg.message.clone(), msg.message_type),
+        ),
+        LineType::LoopEnd
+        | LineType::AltEnd
+        | LineType::OptEnd
+        | LineType::ParEnd
+        | LineType::CriticalEnd
+        | LineType::BreakEnd
+        | LineType::RectEnd => Some(RowEvent::FragmentEnd),
+        _ if msg.from.is_some() && msg.to.is_some() => Some(RowEvent::Message {
+            from: msg.from.as_deref().unwrap_or(""),
+            to: msg.to.as_deref().unwrap_or(""),
+            label: &msg.message,
+            msg_type: msg.message_type,
+        }),
+        _ => None,
+    }
+}
+
+fn draw_actor_boxes(
+    canvas: &mut [Vec<char>],
+    row: usize,
+    actors: &[&Actor],
+    actor_centers: &[usize],
+    actor_widths: &[usize],
+) {
+    for (i, actor) in actors.iter().enumerate() {
+        draw_actor_box(
+            canvas,
+            row,
+            actor_centers[i],
+            actor_widths[i],
+            &actor.description,
+        );
+    }
+}
+
+fn draw_lifelines(
+    canvas: &mut [Vec<char>],
+    actor_centers: &[usize],
+    lifeline_start: usize,
+    lifeline_end: usize,
+) {
+    let total_width = canvas.first().map(Vec::len).unwrap_or(0);
+
+    for &center in actor_centers {
+        if center < total_width {
+            draw_lifeline(canvas, center, lifeline_start, lifeline_end);
+        }
+    }
+}
+
+fn draw_lifeline(
+    canvas: &mut [Vec<char>],
+    center: usize,
+    lifeline_start: usize,
+    lifeline_end: usize,
+) {
+    for canvas_row in canvas
+        .iter_mut()
+        .take(lifeline_end + 1)
+        .skip(lifeline_start)
+    {
+        if canvas_row[center] == ' ' {
+            canvas_row[center] = '│';
+        }
+    }
+}
+
+fn draw_sequence_events(
+    canvas: &mut [Vec<char>],
+    row_events: &[RowEvent<'_>],
+    actor_index: &HashMap<&str, usize>,
+    actor_centers: &[usize],
+    total_width: usize,
+    start_row: usize,
+) {
+    let mut current_row = start_row;
+    let mut fragment_stack: Vec<(usize, String)> = Vec::new(); // (start_row, label)
+
+    for event in row_events {
+        draw_sequence_event(
+            canvas,
+            event,
+            actor_index,
+            actor_centers,
+            total_width,
+            current_row,
+            &mut fragment_stack,
+        );
+        current_row += MESSAGE_ROW_SPACING;
+    }
+}
+
+fn draw_sequence_event(
+    canvas: &mut [Vec<char>],
+    event: &RowEvent<'_>,
+    actor_index: &HashMap<&str, usize>,
+    actor_centers: &[usize],
+    total_width: usize,
+    current_row: usize,
+    fragment_stack: &mut Vec<(usize, String)>,
+) {
+    match event {
+        RowEvent::Message {
+            from,
+            to,
+            label,
+            msg_type,
+        } => draw_sequence_message_event(
+            canvas,
+            from,
+            to,
+            label,
+            *msg_type,
+            actor_index,
+            actor_centers,
+            total_width,
+            current_row,
+        ),
+        RowEvent::FragmentStart(label, msg_type) => {
+            fragment_stack.push((current_row, fragment_prefix(*msg_type).to_string()));
+            draw_fragment_header(canvas, current_row, total_width, label, *msg_type);
+        }
+        RowEvent::FragmentDivider(label, msg_type) => {
+            draw_fragment_divider(canvas, current_row, total_width, label, *msg_type);
+        }
+        RowEvent::FragmentEnd => {
+            if fragment_stack.pop().is_some() {
+                draw_text_at_row(canvas, current_row, total_width, "[end]");
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_sequence_message_event(
+    canvas: &mut [Vec<char>],
+    from: &str,
+    to: &str,
+    label: &str,
+    msg_type: LineType,
+    actor_index: &HashMap<&str, usize>,
+    actor_centers: &[usize],
+    total_width: usize,
+    current_row: usize,
+) {
+    let Some((fi, ti)) = actor_index
+        .get(from)
+        .copied()
+        .zip(actor_index.get(to).copied())
+    else {
+        return;
+    };
+
+    let from_col = actor_centers[fi];
+    let to_col = actor_centers[ti];
+    if fi == ti {
+        draw_self_message(canvas, current_row, from_col, label, total_width);
+    } else {
+        draw_message(
+            canvas,
+            current_row,
+            from_col,
+            to_col,
+            label,
+            is_dotted_message(msg_type),
+            total_width,
+        );
+    }
+}
+
+fn is_dotted_message(msg_type: LineType) -> bool {
+    matches!(
+        msg_type,
+        LineType::Dotted | LineType::DottedOpen | LineType::DottedCross | LineType::DottedPoint
+    )
+}
+
+fn draw_fragment_header(
+    canvas: &mut [Vec<char>],
+    row: usize,
+    total_width: usize,
+    label: &str,
+    msg_type: LineType,
+) {
+    let prefix = fragment_prefix(msg_type);
+    let header = if label.is_empty() {
+        format!("[{}]", prefix)
+    } else {
+        format!("[{} {}]", prefix, label)
+    };
+    draw_text_at_row(canvas, row, total_width, &header);
+}
+
+fn draw_fragment_divider(
+    canvas: &mut [Vec<char>],
+    row: usize,
+    total_width: usize,
+    label: &str,
+    msg_type: LineType,
+) {
+    let prefix = fragment_prefix(msg_type);
+    let divider_label = if label.is_empty() {
+        format!("- - [{}] - -", prefix)
+    } else {
+        format!("- - [{}] - -", label)
+    };
+    draw_text_at_row(canvas, row, total_width, &divider_label);
+}
+
+fn draw_text_at_row(canvas: &mut [Vec<char>], row: usize, total_width: usize, text: &str) {
+    if row >= canvas.len() {
+        return;
+    }
+
+    for (j, ch) in text.chars().enumerate() {
+        if j < total_width {
+            canvas[row][j] = ch;
+        }
+    }
+}
+
+fn canvas_to_string(canvas: &[Vec<char>]) -> String {
+    let last_non_empty = canvas
+        .iter()
+        .rposition(|row| row.iter().any(|&c| c != ' '))
+        .unwrap_or(0);
+    let mut result = String::new();
+
+    for row in &canvas[..=last_non_empty] {
+        let line: String = row.iter().collect();
+        result.push_str(line.trim_end());
+        result.push('\n');
+    }
+
+    result
 }
 
 /// Draw an actor box at the given position

@@ -671,58 +671,63 @@ fn detect_diagram_type(source: &str) -> String {
     let source_lower = source.to_lowercase();
     let first_line = source_lower.lines().next().unwrap_or("");
 
+    detect_core_sample_type(first_line)
+        .or_else(|| detect_additional_sample_type(first_line))
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+fn detect_core_sample_type(first_line: &str) -> Option<&'static str> {
     if first_line.starts_with("flowchart") || first_line.starts_with("graph ") {
-        "flowchart".to_string()
-    } else if first_line.starts_with("sequencediagram") {
-        "sequence".to_string()
-    } else if first_line.starts_with("classdiagram") {
-        "class".to_string()
-    } else if first_line.starts_with("statediagram") {
-        "state".to_string()
-    } else if first_line.starts_with("erdiagram") {
-        "er".to_string()
-    } else if first_line.starts_with("gantt") {
-        "gantt".to_string()
-    } else if first_line.starts_with("pie") {
-        "pie".to_string()
-    } else if first_line.starts_with("gitgraph") {
-        "git".to_string()
-    } else if first_line.starts_with("mindmap") {
-        "mindmap".to_string()
-    } else if first_line.starts_with("requirementdiagram") {
-        "requirement".to_string()
-    } else if first_line.starts_with("timeline") {
-        "timeline".to_string()
-    } else if first_line.starts_with("journey") {
-        "journey".to_string()
-    } else if first_line.starts_with("architecture") {
-        "architecture".to_string()
-    } else if first_line.starts_with("c4context")
-        || first_line.starts_with("c4container")
-        || first_line.starts_with("c4component")
-        || first_line.starts_with("c4dynamic")
-        || first_line.starts_with("c4deployment")
-    {
-        "c4".to_string()
-    } else if first_line.starts_with("sankey") {
-        "sankey".to_string()
-    } else if first_line.starts_with("quadrantchart") {
-        "quadrant".to_string()
-    } else if first_line.starts_with("treemap") {
-        "treemap".to_string()
-    } else if first_line.starts_with("xychart") {
-        "xychart".to_string()
-    } else if first_line.starts_with("radar") {
-        "radar".to_string()
-    } else if first_line.starts_with("packet") {
-        "packet".to_string()
-    } else if first_line.starts_with("block-beta") || first_line.starts_with("block") {
-        "block".to_string()
-    } else if first_line.starts_with("kanban") {
-        "kanban".to_string()
-    } else {
-        "unknown".to_string()
+        return Some("flowchart");
     }
+    [
+        ("sequencediagram", "sequence"),
+        ("classdiagram", "class"),
+        ("statediagram", "state"),
+        ("erdiagram", "er"),
+        ("gantt", "gantt"),
+        ("pie", "pie"),
+        ("gitgraph", "git"),
+        ("mindmap", "mindmap"),
+        ("requirementdiagram", "requirement"),
+        ("timeline", "timeline"),
+        ("journey", "journey"),
+        ("architecture", "architecture"),
+    ]
+    .iter()
+    .find_map(|(prefix, diagram_type)| first_line.starts_with(prefix).then_some(*diagram_type))
+}
+
+fn detect_additional_sample_type(first_line: &str) -> Option<&'static str> {
+    if is_c4_sample(first_line) {
+        return Some("c4");
+    }
+    [
+        ("sankey", "sankey"),
+        ("quadrantchart", "quadrant"),
+        ("treemap", "treemap"),
+        ("xychart", "xychart"),
+        ("radar", "radar"),
+        ("packet", "packet"),
+        ("block-beta", "block"),
+        ("block", "block"),
+        ("kanban", "kanban"),
+    ]
+    .iter()
+    .find_map(|(prefix, diagram_type)| first_line.starts_with(prefix).then_some(*diagram_type))
+}
+
+fn is_c4_sample(first_line: &str) -> bool {
+    [
+        "c4context",
+        "c4container",
+        "c4component",
+        "c4dynamic",
+        "c4deployment",
+    ]
+    .iter()
+    .any(|prefix| first_line.starts_with(prefix))
 }
 
 /// Get samples filtered by diagram type

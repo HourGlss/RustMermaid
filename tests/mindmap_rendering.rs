@@ -500,75 +500,7 @@ root((mindmap))
         Mermaid"#;
     let svg = render_mindmap_svg(input);
     let doc = parse_svg(&svg);
-
-    // Extract bounding boxes from mindmap-node groups
-    // Each has transform="translate(x, y)" and contains shape elements with width/height
-    let mut bboxes: Vec<(String, f64, f64, f64, f64)> = Vec::new(); // (id, x, y, w, h)
-
-    for node in doc.descendants() {
-        let class = node.attribute("class").unwrap_or("");
-        if !class.contains("mindmap-node") || class.contains("mindmap-nodes") {
-            continue;
-        }
-
-        // Parse transform="translate(x, y)"
-        let transform = node.attribute("transform").unwrap_or("");
-        if !transform.starts_with("translate(") {
-            continue;
-        }
-        let coords: &str = &transform["translate(".len()..transform.len() - 1];
-        let parts: Vec<f64> = coords
-            .split(',')
-            .filter_map(|s| s.trim().parse().ok())
-            .collect();
-        if parts.len() != 2 {
-            continue;
-        }
-        let (tx, ty) = (parts[0], parts[1]);
-
-        // Find the shape element to get width/height
-        let mut w = 0.0_f64;
-        let mut h = 0.0_f64;
-        let id = node.attribute("id").unwrap_or("unknown").to_string();
-
-        for child in node.descendants() {
-            let tag = child.tag_name().name();
-            if tag == "circle" {
-                if let Some(r) = child.attribute("r").and_then(|v| v.parse::<f64>().ok()) {
-                    w = r * 2.0;
-                    h = r * 2.0;
-                }
-            } else if tag == "path" {
-                // Parse path d attribute - default nodes use paths like "M0 45 v-40 q0,-5 5,-5 h83 q5,0 5,5 v45 H0 Z"
-                // Width comes from the 'h' command value + 10 (for the q curves), height from the 'v' values
-                if let Some(d) = child.attribute("d") {
-                    // Extract width from H command (e.g., "h83" means ~93px wide with padding)
-                    // and height from initial "M0 45" (height = 45 + 5 = 50)
-                    // Simpler: parse the bounding width from the path
-                    for segment in d.split_whitespace() {
-                        if segment.starts_with('h') || segment.starts_with('H') {
-                            if let Ok(val) = segment[1..].parse::<f64>() {
-                                // h command: width = the value + some padding for q curves
-                                w = w.max(val.abs() + 10.0);
-                            }
-                        }
-                    }
-                    // Height from initial M0 value
-                    if d.starts_with("M0 ") {
-                        if let Some(hval) = d.split_whitespace().nth(1) {
-                            if let Ok(val) = hval.parse::<f64>() {
-                                h = h.max(val + 5.0); // path height
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if w > 0.0 && h > 0.0 {
-            bboxes.push((id, tx, ty, w, h));
-        }
-    }
+    let bboxes = extract_mindmap_node_bboxes(&doc);
 
     // Check no pair of nodes overlaps
     assert!(
@@ -577,34 +509,7 @@ root((mindmap))
         bboxes.len()
     );
 
-    let mut overlaps = Vec::new();
-    for i in 0..bboxes.len() {
-        for j in (i + 1)..bboxes.len() {
-            let (ref id_a, ax, ay, aw, ah) = bboxes[i];
-            let (ref id_b, bx, by, bw, bh) = bboxes[j];
-
-            // Skip root-node overlaps: the mermaid reference (cose-bilkent)
-            // places first-level children close to the root edge, and our
-            // radial layout matches this tight proximity.
-            let is_root_a = id_a.contains("root");
-            let is_root_b = id_b.contains("root");
-            if is_root_a || is_root_b {
-                continue;
-            }
-
-            // Check AABB overlap (with small tolerance for touching edges)
-            let tolerance = 2.0;
-            let overlaps_x = ax + aw - tolerance > bx && bx + bw - tolerance > ax;
-            let overlaps_y = ay + ah - tolerance > by && by + bh - tolerance > ay;
-
-            if overlaps_x && overlaps_y {
-                overlaps.push(format!(
-                    "  {} ({:.0},{:.0} {:.0}x{:.0}) overlaps {} ({:.0},{:.0} {:.0}x{:.0})",
-                    id_a, ax, ay, aw, ah, id_b, bx, by, bw, bh
-                ));
-            }
-        }
-    }
+    let overlaps = mindmap_node_overlaps(&bboxes);
 
     assert!(
         overlaps.is_empty(),
@@ -612,6 +517,136 @@ root((mindmap))
         overlaps.len(),
         overlaps.join("\n")
     );
+}
+
+type MindmapBBox = (String, f64, f64, f64, f64);
+
+fn extract_mindmap_node_bboxes(doc: &Document<'_>) -> Vec<MindmapBBox> {
+    doc.descendants()
+        .filter_map(extract_mindmap_node_bbox)
+        .collect()
+}
+
+fn extract_mindmap_node_bbox(node: roxmltree::Node<'_, '_>) -> Option<MindmapBBox> {
+    let class = node.attribute("class").unwrap_or("");
+    if !class.contains("mindmap-node") || class.contains("mindmap-nodes") {
+        return None;
+    }
+
+    let (tx, ty) = parse_translate_pair(node.attribute("transform")?)?;
+    let (width, height) = mindmap_shape_size(node)?;
+    Some((
+        node.attribute("id").unwrap_or("unknown").to_string(),
+        tx,
+        ty,
+        width,
+        height,
+    ))
+}
+
+fn parse_translate_pair(transform: &str) -> Option<(f64, f64)> {
+    let coords = transform.strip_prefix("translate(")?.strip_suffix(')')?;
+    let parts: Vec<f64> = coords
+        .split(',')
+        .filter_map(|part| part.trim().parse().ok())
+        .collect();
+    (parts.len() == 2).then_some((parts[0], parts[1]))
+}
+
+fn mindmap_shape_size(node: roxmltree::Node<'_, '_>) -> Option<(f64, f64)> {
+    let mut width = 0.0_f64;
+    let mut height = 0.0_f64;
+
+    for child in node.descendants() {
+        match child.tag_name().name() {
+            "circle" => {
+                if let Some(radius) = child
+                    .attribute("r")
+                    .and_then(|value| value.parse::<f64>().ok())
+                {
+                    width = radius * 2.0;
+                    height = radius * 2.0;
+                }
+            }
+            "path" => {
+                if let Some((path_width, path_height)) = mindmap_path_size(child.attribute("d")?) {
+                    width = width.max(path_width);
+                    height = height.max(path_height);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    (width > 0.0 && height > 0.0).then_some((width, height))
+}
+
+fn mindmap_path_size(d: &str) -> Option<(f64, f64)> {
+    let width = d
+        .split_whitespace()
+        .filter_map(|segment| mindmap_path_width_segment(segment))
+        .fold(0.0_f64, f64::max);
+    let height = d
+        .starts_with("M0 ")
+        .then(|| {
+            d.split_whitespace()
+                .nth(1)?
+                .parse::<f64>()
+                .ok()
+                .map(|value| value + 5.0)
+        })
+        .flatten()
+        .unwrap_or(0.0);
+
+    (width > 0.0 && height > 0.0).then_some((width, height))
+}
+
+fn mindmap_path_width_segment(segment: &str) -> Option<f64> {
+    (segment.starts_with('h') || segment.starts_with('H'))
+        .then(|| {
+            segment[1..]
+                .parse::<f64>()
+                .ok()
+                .map(|value| value.abs() + 10.0)
+        })
+        .flatten()
+}
+
+fn mindmap_node_overlaps(bboxes: &[MindmapBBox]) -> Vec<String> {
+    let mut overlaps = Vec::new();
+    for i in 0..bboxes.len() {
+        for j in (i + 1)..bboxes.len() {
+            if let Some(overlap) = mindmap_node_overlap(&bboxes[i], &bboxes[j]) {
+                overlaps.push(overlap);
+            }
+        }
+    }
+    overlaps
+}
+
+fn mindmap_node_overlap(a: &MindmapBBox, b: &MindmapBBox) -> Option<String> {
+    let (id_a, ax, ay, aw, ah) = a;
+    let (id_b, bx, by, bw, bh) = b;
+    if id_a.contains("root")
+        || id_b.contains("root")
+        || !bboxes_overlap(*ax, *ay, *aw, *ah, *bx, *by, *bw, *bh)
+    {
+        return None;
+    }
+
+    Some(format!(
+        "  {} ({:.0},{:.0} {:.0}x{:.0}) overlaps {} ({:.0},{:.0} {:.0}x{:.0})",
+        id_a, ax, ay, aw, ah, id_b, bx, by, bw, bh
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn bboxes_overlap(ax: f64, ay: f64, aw: f64, ah: f64, bx: f64, by: f64, bw: f64, bh: f64) -> bool {
+    let tolerance = 2.0;
+    ax + aw - tolerance > bx
+        && bx + bw - tolerance > ax
+        && ay + ah - tolerance > by
+        && by + bh - tolerance > ay
 }
 
 #[test]

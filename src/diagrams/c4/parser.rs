@@ -43,15 +43,61 @@ fn process_document(db: &mut C4Db, pair: pest::iterators::Pair<Rule>) -> Result<
 }
 
 fn process_statement(db: &mut C4Db, pair: pest::iterators::Pair<Rule>) -> Result<(), String> {
+    let rule = pair.as_rule();
+    if rule == Rule::statement {
+        for inner in pair.into_inner() {
+            process_statement(db, inner)?;
+        }
+        return Ok(());
+    }
+    if matches!(rule, Rule::comment_stmt | Rule::direction_stmt) {
+        return Ok(());
+    }
+    if is_c4_metadata_rule(rule) {
+        return process_metadata_statement(db, pair);
+    }
+    if let Some(shape_type) = person_shape_type(rule) {
+        add_c4_person(db, pair, shape_type);
+        return Ok(());
+    }
+    if let Some(shape_type) = system_shape_type(rule) {
+        add_c4_system(db, pair, shape_type);
+        return Ok(());
+    }
+    if let Some(shape_type) = container_shape_type(rule) {
+        add_c4_container(db, pair, shape_type);
+        return Ok(());
+    }
+    if let Some(shape_type) = component_shape_type(rule) {
+        add_c4_component(db, pair, shape_type);
+        return Ok(());
+    }
+    if let Some(boundary_type) = boundary_type(rule) {
+        process_boundary(db, pair, boundary_type)?;
+        return Ok(());
+    }
+    if let Some(rel_type) = relationship_type(rule) {
+        add_c4_relationship(db, pair, rel_type);
+    }
+    Ok(())
+}
+
+fn is_c4_metadata_rule(rule: Rule) -> bool {
+    matches!(
+        rule,
+        Rule::acc_title_stmt
+            | Rule::acc_descr_stmt
+            | Rule::acc_descr_single
+            | Rule::acc_descr_multi
+            | Rule::title_stmt
+    )
+}
+
+fn process_metadata_statement(
+    db: &mut C4Db,
+    pair: pest::iterators::Pair<Rule>,
+) -> Result<(), String> {
     match pair.as_rule() {
-        Rule::statement => {
-            for inner in pair.into_inner() {
-                process_statement(db, inner)?;
-            }
-        }
-        Rule::comment_stmt => {
-            // Ignore comments
-        }
         Rule::acc_title_stmt => {
             for inner in pair.into_inner() {
                 if inner.as_rule() == Rule::line_content {
@@ -63,12 +109,9 @@ fn process_statement(db: &mut C4Db, pair: pest::iterators::Pair<Rule>) -> Result
             for inner in pair.into_inner() {
                 match inner.as_rule() {
                     Rule::line_content | Rule::multiline_content => {
-                        db.set_acc_description(inner.as_str());
+                        db.set_acc_description(inner.as_str())
                     }
-                    Rule::acc_descr_single | Rule::acc_descr_multi => {
-                        // Recurse into nested statement
-                        process_statement(db, inner)?;
-                    }
+                    Rule::acc_descr_single | Rule::acc_descr_multi => process_statement(db, inner)?,
                     _ => {}
                 }
             }
@@ -80,308 +123,137 @@ fn process_statement(db: &mut C4Db, pair: pest::iterators::Pair<Rule>) -> Result
                 }
             }
         }
-        Rule::direction_stmt => {
-            // Direction could be stored in db if needed
-        }
-        // Person
-        Rule::person_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_person_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    C4ShapeType::Person,
-                );
-            }
-        }
-        Rule::person_ext_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_person_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    C4ShapeType::PersonExt,
-                );
-            }
-        }
-        // System
-        Rule::system_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_system_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    C4ShapeType::System,
-                );
-            }
-        }
-        Rule::system_db_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_system_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    C4ShapeType::SystemDb,
-                );
-            }
-        }
-        Rule::system_queue_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_system_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    C4ShapeType::SystemQueue,
-                );
-            }
-        }
-        Rule::system_ext_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_system_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    C4ShapeType::SystemExt,
-                );
-            }
-        }
-        Rule::system_ext_db_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_system_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    C4ShapeType::SystemDbExt,
-                );
-            }
-        }
-        Rule::system_ext_queue_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_system_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    C4ShapeType::SystemQueueExt,
-                );
-            }
-        }
-        // Container
-        Rule::container_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_container_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                    C4ShapeType::Container,
-                );
-            }
-        }
-        Rule::container_db_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_container_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                    C4ShapeType::ContainerDb,
-                );
-            }
-        }
-        Rule::container_queue_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_container_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                    C4ShapeType::ContainerQueue,
-                );
-            }
-        }
-        Rule::container_ext_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_container_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                    C4ShapeType::ContainerExt,
-                );
-            }
-        }
-        Rule::container_ext_db_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_container_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                    C4ShapeType::ContainerDbExt,
-                );
-            }
-        }
-        Rule::container_ext_queue_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_container_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                    C4ShapeType::ContainerQueueExt,
-                );
-            }
-        }
-        // Component
-        Rule::component_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_component_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                    C4ShapeType::Component,
-                );
-            }
-        }
-        Rule::component_db_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_component_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                    C4ShapeType::ComponentDb,
-                );
-            }
-        }
-        Rule::component_queue_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_component_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                    C4ShapeType::ComponentQueue,
-                );
-            }
-        }
-        Rule::component_ext_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_component_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                    C4ShapeType::ComponentExt,
-                );
-            }
-        }
-        Rule::component_ext_db_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_component_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                    C4ShapeType::ComponentDbExt,
-                );
-            }
-        }
-        Rule::component_ext_queue_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if !attrs.is_empty() {
-                db.add_component_with_type(
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                    C4ShapeType::ComponentQueueExt,
-                );
-            }
-        }
-        // Boundaries
-        Rule::boundary_block => {
-            process_boundary(db, pair, "boundary")?;
-        }
-        Rule::enterprise_boundary_block => {
-            process_boundary(db, pair, "enterprise")?;
-        }
-        Rule::system_boundary_block => {
-            process_boundary(db, pair, "system")?;
-        }
-        Rule::container_boundary_block => {
-            process_boundary(db, pair, "container")?;
-        }
-        Rule::deployment_node_block => {
-            process_boundary(db, pair, "deployment")?;
-        }
-        Rule::deployment_node_l_block => {
-            process_boundary(db, pair, "deployment_l")?;
-        }
-        Rule::deployment_node_r_block => {
-            process_boundary(db, pair, "deployment_r")?;
-        }
-        // Relationships
-        Rule::rel_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if attrs.len() >= 2 {
-                db.add_relationship_with_type(
-                    "Rel",
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                );
-            }
-        }
-        Rule::birel_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if attrs.len() >= 2 {
-                db.add_relationship_with_type(
-                    "BiRel",
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                );
-            }
-        }
-        Rule::rel_direction_stmt => {
-            let attrs = extract_all_attributes(pair);
-            if attrs.len() >= 2 {
-                // For directional rels, just use "Rel" type for now
-                db.add_relationship_with_type(
-                    "Rel",
-                    &attrs.first().cloned().unwrap_or_default(),
-                    &attrs.get(1).cloned().unwrap_or_default(),
-                    &attrs.get(2).cloned().unwrap_or_default(),
-                    &attrs.get(3).cloned().unwrap_or_default(),
-                );
-            }
-        }
         _ => {}
     }
     Ok(())
+}
+
+fn person_shape_type(rule: Rule) -> Option<C4ShapeType> {
+    match rule {
+        Rule::person_stmt => Some(C4ShapeType::Person),
+        Rule::person_ext_stmt => Some(C4ShapeType::PersonExt),
+        _ => None,
+    }
+}
+
+fn system_shape_type(rule: Rule) -> Option<C4ShapeType> {
+    match rule {
+        Rule::system_stmt => Some(C4ShapeType::System),
+        Rule::system_db_stmt => Some(C4ShapeType::SystemDb),
+        Rule::system_queue_stmt => Some(C4ShapeType::SystemQueue),
+        Rule::system_ext_stmt => Some(C4ShapeType::SystemExt),
+        Rule::system_ext_db_stmt => Some(C4ShapeType::SystemDbExt),
+        Rule::system_ext_queue_stmt => Some(C4ShapeType::SystemQueueExt),
+        _ => None,
+    }
+}
+
+fn container_shape_type(rule: Rule) -> Option<C4ShapeType> {
+    match rule {
+        Rule::container_stmt => Some(C4ShapeType::Container),
+        Rule::container_db_stmt => Some(C4ShapeType::ContainerDb),
+        Rule::container_queue_stmt => Some(C4ShapeType::ContainerQueue),
+        Rule::container_ext_stmt => Some(C4ShapeType::ContainerExt),
+        Rule::container_ext_db_stmt => Some(C4ShapeType::ContainerDbExt),
+        Rule::container_ext_queue_stmt => Some(C4ShapeType::ContainerQueueExt),
+        _ => None,
+    }
+}
+
+fn component_shape_type(rule: Rule) -> Option<C4ShapeType> {
+    match rule {
+        Rule::component_stmt => Some(C4ShapeType::Component),
+        Rule::component_db_stmt => Some(C4ShapeType::ComponentDb),
+        Rule::component_queue_stmt => Some(C4ShapeType::ComponentQueue),
+        Rule::component_ext_stmt => Some(C4ShapeType::ComponentExt),
+        Rule::component_ext_db_stmt => Some(C4ShapeType::ComponentDbExt),
+        Rule::component_ext_queue_stmt => Some(C4ShapeType::ComponentQueueExt),
+        _ => None,
+    }
+}
+
+fn boundary_type(rule: Rule) -> Option<&'static str> {
+    match rule {
+        Rule::boundary_block => Some("boundary"),
+        Rule::enterprise_boundary_block => Some("enterprise"),
+        Rule::system_boundary_block => Some("system"),
+        Rule::container_boundary_block => Some("container"),
+        Rule::deployment_node_block => Some("deployment"),
+        Rule::deployment_node_l_block => Some("deployment_l"),
+        Rule::deployment_node_r_block => Some("deployment_r"),
+        _ => None,
+    }
+}
+
+fn relationship_type(rule: Rule) -> Option<&'static str> {
+    match rule {
+        Rule::rel_stmt | Rule::rel_direction_stmt => Some("Rel"),
+        Rule::birel_stmt => Some("BiRel"),
+        _ => None,
+    }
+}
+
+fn add_c4_person(db: &mut C4Db, pair: pest::iterators::Pair<Rule>, shape_type: C4ShapeType) {
+    let attrs = extract_all_attributes(pair);
+    if !attrs.is_empty() {
+        db.add_person_with_type(
+            &attrs.first().cloned().unwrap_or_default(),
+            &attrs.get(1).cloned().unwrap_or_default(),
+            &attrs.get(2).cloned().unwrap_or_default(),
+            shape_type,
+        );
+    }
+}
+
+fn add_c4_system(db: &mut C4Db, pair: pest::iterators::Pair<Rule>, shape_type: C4ShapeType) {
+    let attrs = extract_all_attributes(pair);
+    if !attrs.is_empty() {
+        db.add_system_with_type(
+            &attrs.first().cloned().unwrap_or_default(),
+            &attrs.get(1).cloned().unwrap_or_default(),
+            &attrs.get(2).cloned().unwrap_or_default(),
+            shape_type,
+        );
+    }
+}
+
+fn add_c4_container(db: &mut C4Db, pair: pest::iterators::Pair<Rule>, shape_type: C4ShapeType) {
+    let attrs = extract_all_attributes(pair);
+    if !attrs.is_empty() {
+        db.add_container_with_type(
+            &attrs.first().cloned().unwrap_or_default(),
+            &attrs.get(1).cloned().unwrap_or_default(),
+            &attrs.get(2).cloned().unwrap_or_default(),
+            &attrs.get(3).cloned().unwrap_or_default(),
+            shape_type,
+        );
+    }
+}
+
+fn add_c4_component(db: &mut C4Db, pair: pest::iterators::Pair<Rule>, shape_type: C4ShapeType) {
+    let attrs = extract_all_attributes(pair);
+    if !attrs.is_empty() {
+        db.add_component_with_type(
+            &attrs.first().cloned().unwrap_or_default(),
+            &attrs.get(1).cloned().unwrap_or_default(),
+            &attrs.get(2).cloned().unwrap_or_default(),
+            &attrs.get(3).cloned().unwrap_or_default(),
+            shape_type,
+        );
+    }
+}
+
+fn add_c4_relationship(db: &mut C4Db, pair: pest::iterators::Pair<Rule>, rel_type: &str) {
+    let attrs = extract_all_attributes(pair);
+    if attrs.len() >= 2 {
+        db.add_relationship_with_type(
+            rel_type,
+            &attrs.first().cloned().unwrap_or_default(),
+            &attrs.get(1).cloned().unwrap_or_default(),
+            &attrs.get(2).cloned().unwrap_or_default(),
+            &attrs.get(3).cloned().unwrap_or_default(),
+        );
+    }
 }
 
 fn process_boundary(

@@ -37,110 +37,85 @@ fn process_document(db: &mut GanttDb, pair: pest::iterators::Pair<Rule>) -> Resu
 }
 
 fn process_statement(db: &mut GanttDb, pair: pest::iterators::Pair<Rule>) -> Result<(), String> {
-    match pair.as_rule() {
+    let rule = pair.as_rule();
+    if is_gantt_config_rule(rule) {
+        return process_config_statement(db, pair);
+    }
+
+    match rule {
         Rule::statement => {
             for inner in pair.into_inner() {
                 process_statement(db, inner)?;
             }
+            Ok(())
         }
-        Rule::comment_stmt => {
-            // Ignore comments
+        Rule::comment_stmt => Ok(()),
+        Rule::acc_descr_stmt => process_acc_descr(db, pair),
+        Rule::section_stmt => {
+            db.add_section(&extract_child_text(pair, Rule::section_text));
+            Ok(())
         }
-        Rule::date_format_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::format_text {
-                    db.set_date_format(inner.as_str().trim());
-                }
-            }
-        }
-        Rule::axis_format_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::format_text {
-                    db.set_axis_format(inner.as_str().trim());
-                }
-            }
-        }
+        Rule::click_stmt => process_click_stmt(db, pair),
+        Rule::task_stmt => process_task_stmt(db, pair),
+        _ => Ok(()),
+    }
+}
+
+fn is_gantt_config_rule(rule: Rule) -> bool {
+    matches!(
+        rule,
+        Rule::date_format_stmt
+            | Rule::axis_format_stmt
+            | Rule::tick_interval_stmt
+            | Rule::inclusive_end_dates_stmt
+            | Rule::top_axis_stmt
+            | Rule::excludes_stmt
+            | Rule::includes_stmt
+            | Rule::today_marker_stmt
+            | Rule::weekday_stmt
+            | Rule::weekend_stmt
+            | Rule::title_stmt
+            | Rule::acc_title_stmt
+    )
+}
+
+fn process_config_statement(
+    db: &mut GanttDb,
+    pair: pest::iterators::Pair<Rule>,
+) -> Result<(), String> {
+    match pair.as_rule() {
+        Rule::date_format_stmt => db.set_date_format(&extract_child_text(pair, Rule::format_text)),
+        Rule::axis_format_stmt => db.set_axis_format(&extract_child_text(pair, Rule::format_text)),
         Rule::tick_interval_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::format_text {
-                    db.set_tick_interval(inner.as_str().trim());
-                }
-            }
+            db.set_tick_interval(&extract_child_text(pair, Rule::format_text))
         }
-        Rule::inclusive_end_dates_stmt => {
-            db.enable_inclusive_end_dates();
-        }
-        Rule::top_axis_stmt => {
-            db.set_top_axis(true);
-        }
-        Rule::excludes_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::format_text {
-                    db.set_excludes(inner.as_str().trim());
-                }
-            }
-        }
-        Rule::includes_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::format_text {
-                    db.set_includes(inner.as_str().trim());
-                }
-            }
-        }
+        Rule::inclusive_end_dates_stmt => db.enable_inclusive_end_dates(),
+        Rule::top_axis_stmt => db.set_top_axis(true),
+        Rule::excludes_stmt => db.set_excludes(&extract_child_text(pair, Rule::format_text)),
+        Rule::includes_stmt => db.set_includes(&extract_child_text(pair, Rule::format_text)),
         Rule::today_marker_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::format_text {
-                    db.set_today_marker(inner.as_str().trim());
-                }
-            }
+            db.set_today_marker(&extract_child_text(pair, Rule::format_text))
         }
         Rule::weekday_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::weekday_value {
-                    db.set_weekday(inner.as_str().to_lowercase().as_str());
-                }
-            }
+            db.set_weekday(&extract_child_text(pair, Rule::weekday_value).to_lowercase())
         }
         Rule::weekend_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::weekend_value {
-                    db.set_weekend(inner.as_str().to_lowercase().as_str());
-                }
-            }
+            db.set_weekend(&extract_child_text(pair, Rule::weekend_value).to_lowercase())
         }
-        Rule::title_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::title_text {
-                    db.set_diagram_title(inner.as_str().trim());
-                }
-            }
-        }
-        Rule::acc_title_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::line_content {
-                    db.set_acc_title(inner.as_str().trim());
-                }
-            }
-        }
-        Rule::acc_descr_stmt => {
-            process_acc_descr(db, pair)?;
-        }
-        Rule::section_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::section_text {
-                    db.add_section(inner.as_str().trim());
-                }
-            }
-        }
-        Rule::click_stmt => {
-            process_click_stmt(db, pair)?;
-        }
-        Rule::task_stmt => {
-            process_task_stmt(db, pair)?;
-        }
+        Rule::title_stmt => db.set_diagram_title(&extract_child_text(pair, Rule::title_text)),
+        Rule::acc_title_stmt => db.set_acc_title(&extract_child_text(pair, Rule::line_content)),
         _ => {}
     }
     Ok(())
+}
+
+fn extract_child_text(pair: pest::iterators::Pair<Rule>, target_rule: Rule) -> String {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == target_rule {
+            return inner.as_str().trim().to_string();
+        }
+    }
+    String::new()
 }
 
 fn process_acc_descr(db: &mut GanttDb, pair: pest::iterators::Pair<Rule>) -> Result<(), String> {

@@ -470,119 +470,19 @@ impl GanttDb {
 
     /// Resolve task dependencies and compute dates
     fn resolve_dependencies(&mut self) {
-        // Build a map of task id -> index
         let id_to_idx: std::collections::HashMap<String, usize> = self
             .tasks
             .iter()
             .enumerate()
             .map(|(i, t)| (t.id.clone(), i))
             .collect();
-
-        // We need to iterate multiple times to resolve dependencies
-        // since tasks can depend on tasks that come later in the list
         let max_iterations = self.tasks.len() + 1;
 
         for _ in 0..max_iterations {
             let mut changed = false;
 
             for i in 0..self.tasks.len() {
-                // Get the task's after dependencies
-                let after_ids = self.tasks[i].after.clone();
-                let until_ids = self.tasks[i].until.clone();
-
-                // Resolve "after" dependencies - start after the latest end time
-                if !after_ids.is_empty() && self.tasks[i].start_time.is_none() {
-                    let mut latest_end: Option<NaiveDateTime> = None;
-                    let mut all_resolved = true;
-
-                    for dep_id in &after_ids {
-                        if let Some(&dep_idx) = id_to_idx.get(dep_id) {
-                            if let Some(end) = self.tasks[dep_idx].end_time {
-                                latest_end = Some(match latest_end {
-                                    Some(current) => current.max(end),
-                                    None => end,
-                                });
-                            } else {
-                                all_resolved = false;
-                            }
-                        } else {
-                            // Unknown dependency - use today
-                            let today = chrono::Local::now()
-                                .naive_local()
-                                .date()
-                                .and_hms_opt(0, 0, 0);
-                            latest_end = Some(match latest_end {
-                                Some(current) => today.map(|t| current.max(t)).unwrap_or(current),
-                                None => today.unwrap_or_default(),
-                            });
-                        }
-                    }
-
-                    if all_resolved {
-                        if let Some(start) = latest_end {
-                            self.tasks[i].start_time = Some(start);
-                            changed = true;
-                        }
-                    }
-                }
-
-                // If no start time yet and no after deps, use previous task's end
-                if self.tasks[i].start_time.is_none() && after_ids.is_empty() && i > 0 {
-                    // Find the previous task in the same section or overall
-                    if let Some(prev_end) = self.tasks[i - 1].end_time {
-                        self.tasks[i].start_time = Some(prev_end);
-                        changed = true;
-                    }
-                }
-
-                // Calculate end time based on duration
-                if self.tasks[i].end_time.is_none() {
-                    if let Some(start) = self.tasks[i].start_time {
-                        if let Some(ref dur_str) = self.tasks[i].raw_duration.clone() {
-                            let (value, unit) = self.parse_duration(dur_str);
-                            if !value.is_nan() {
-                                let end = self.add_duration(start, value, unit);
-                                self.tasks[i].end_time = Some(end);
-                                // Set render_end_time for excludes handling
-                                self.tasks[i].render_end_time = Some(end);
-                                changed = true;
-                            }
-                        } else if let Some(ref end_str) = self.tasks[i].raw_end.clone() {
-                            // Try to parse as date
-                            if let Some(end) = self.parse_date(end_str) {
-                                let mut final_end = end;
-                                if self.inclusive_end_dates {
-                                    final_end = self.add_duration(end, 1.0, "d");
-                                }
-                                self.tasks[i].end_time = Some(final_end);
-                                self.tasks[i].manual_end_time = true;
-                                // render_end_time is None for fixed ends
-                                changed = true;
-                            }
-                        }
-                    }
-                }
-
-                // Resolve "until" dependencies - end before the earliest start time
-                if !until_ids.is_empty() && self.tasks[i].end_time.is_none() {
-                    let mut earliest_start: Option<NaiveDateTime> = None;
-
-                    for dep_id in &until_ids {
-                        if let Some(&dep_idx) = id_to_idx.get(dep_id) {
-                            if let Some(start) = self.tasks[dep_idx].start_time {
-                                earliest_start = Some(match earliest_start {
-                                    Some(current) => current.min(start),
-                                    None => start,
-                                });
-                            }
-                        }
-                    }
-
-                    if let Some(end) = earliest_start {
-                        self.tasks[i].end_time = Some(end);
-                        changed = true;
-                    }
-                }
+                changed |= self.resolve_task_dates(i, &id_to_idx);
             }
 
             if !changed {
@@ -594,6 +494,158 @@ impl GanttDb {
         if self.exclude_weekends || !self.excludes.is_empty() {
             self.apply_excludes();
         }
+    }
+
+    fn resolve_task_dates(
+        &mut self,
+        index: usize,
+        id_to_idx: &std::collections::HashMap<String, usize>,
+    ) -> bool {
+        let after_ids = self.tasks[index].after.clone();
+        let until_ids = self.tasks[index].until.clone();
+        let mut changed = false;
+
+        changed |= self.resolve_after_dependencies(index, &after_ids, id_to_idx);
+        changed |= self.resolve_previous_task_start(index, &after_ids);
+        changed |= self.resolve_task_end(index);
+        changed |= self.resolve_until_dependencies(index, &until_ids, id_to_idx);
+        changed
+    }
+
+    fn resolve_after_dependencies(
+        &mut self,
+        index: usize,
+        after_ids: &[String],
+        id_to_idx: &std::collections::HashMap<String, usize>,
+    ) -> bool {
+        if after_ids.is_empty() || self.tasks[index].start_time.is_some() {
+            return false;
+        }
+
+        let (latest_end, all_resolved) = self.latest_dependency_end(after_ids, id_to_idx);
+        if all_resolved {
+            if let Some(start) = latest_end {
+                self.tasks[index].start_time = Some(start);
+                return true;
+            }
+        }
+        false
+    }
+
+    fn latest_dependency_end(
+        &self,
+        after_ids: &[String],
+        id_to_idx: &std::collections::HashMap<String, usize>,
+    ) -> (Option<NaiveDateTime>, bool) {
+        let mut latest_end: Option<NaiveDateTime> = None;
+        let mut all_resolved = true;
+
+        for dep_id in after_ids {
+            if let Some(&dep_idx) = id_to_idx.get(dep_id) {
+                if let Some(end) = self.tasks[dep_idx].end_time {
+                    latest_end = Some(latest_end.map_or(end, |current| current.max(end)));
+                } else {
+                    all_resolved = false;
+                }
+            } else {
+                let today = chrono::Local::now()
+                    .naive_local()
+                    .date()
+                    .and_hms_opt(0, 0, 0);
+                latest_end = Some(match latest_end {
+                    Some(current) => today.map(|t| current.max(t)).unwrap_or(current),
+                    None => today.unwrap_or_default(),
+                });
+            }
+        }
+
+        (latest_end, all_resolved)
+    }
+
+    fn resolve_previous_task_start(&mut self, index: usize, after_ids: &[String]) -> bool {
+        if self.tasks[index].start_time.is_some() || !after_ids.is_empty() || index == 0 {
+            return false;
+        }
+        if let Some(prev_end) = self.tasks[index - 1].end_time {
+            self.tasks[index].start_time = Some(prev_end);
+            return true;
+        }
+        false
+    }
+
+    fn resolve_task_end(&mut self, index: usize) -> bool {
+        if self.tasks[index].end_time.is_some() {
+            return false;
+        }
+        let Some(start) = self.tasks[index].start_time else {
+            return false;
+        };
+
+        if let Some(ref dur_str) = self.tasks[index].raw_duration.clone() {
+            return self.resolve_duration_end(index, start, dur_str);
+        }
+        if let Some(ref end_str) = self.tasks[index].raw_end.clone() {
+            return self.resolve_manual_end(index, end_str);
+        }
+        false
+    }
+
+    fn resolve_duration_end(&mut self, index: usize, start: NaiveDateTime, dur_str: &str) -> bool {
+        let (value, unit) = self.parse_duration(dur_str);
+        if value.is_nan() {
+            return false;
+        }
+        let end = self.add_duration(start, value, unit);
+        self.tasks[index].end_time = Some(end);
+        self.tasks[index].render_end_time = Some(end);
+        true
+    }
+
+    fn resolve_manual_end(&mut self, index: usize, end_str: &str) -> bool {
+        let Some(end) = self.parse_date(end_str) else {
+            return false;
+        };
+        let final_end = if self.inclusive_end_dates {
+            self.add_duration(end, 1.0, "d")
+        } else {
+            end
+        };
+        self.tasks[index].end_time = Some(final_end);
+        self.tasks[index].manual_end_time = true;
+        true
+    }
+
+    fn resolve_until_dependencies(
+        &mut self,
+        index: usize,
+        until_ids: &[String],
+        id_to_idx: &std::collections::HashMap<String, usize>,
+    ) -> bool {
+        if until_ids.is_empty() || self.tasks[index].end_time.is_some() {
+            return false;
+        }
+        if let Some(end) = self.earliest_dependency_start(until_ids, id_to_idx) {
+            self.tasks[index].end_time = Some(end);
+            return true;
+        }
+        false
+    }
+
+    fn earliest_dependency_start(
+        &self,
+        until_ids: &[String],
+        id_to_idx: &std::collections::HashMap<String, usize>,
+    ) -> Option<NaiveDateTime> {
+        let mut earliest_start: Option<NaiveDateTime> = None;
+        for dep_id in until_ids {
+            if let Some(&dep_idx) = id_to_idx.get(dep_id) {
+                if let Some(start) = self.tasks[dep_idx].start_time {
+                    earliest_start =
+                        Some(earliest_start.map_or(start, |current| current.min(start)));
+                }
+            }
+        }
+        earliest_start
     }
 
     /// Add a duration to a datetime

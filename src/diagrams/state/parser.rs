@@ -45,63 +45,74 @@ fn process_statement(
     pair: pest::iterators::Pair<Rule>,
     parent: Option<&str>,
 ) -> Result<(), String> {
-    match pair.as_rule() {
-        Rule::statement => {
-            for inner in pair.into_inner() {
-                process_statement(db, inner, parent)?;
-            }
-        }
-        Rule::comment_stmt => {
-            // Ignore comments
-        }
-        Rule::direction_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::direction {
-                    let dir = Direction::from_str(inner.as_str());
-                    db.set_direction(dir);
-                }
-            }
-        }
-        Rule::hide_empty_stmt => {
-            db.set_hide_empty_descriptions(true);
-        }
-        Rule::scale_stmt => {
-            // Scale is mostly for rendering
-        }
-        Rule::acc_title_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::line_content {
-                    db.set_acc_title(inner.as_str().trim());
-                }
-            }
-        }
-        Rule::acc_descr_stmt => {
-            process_acc_descr(db, pair)?;
-        }
-        Rule::class_def_stmt => {
-            process_class_def(db, pair)?;
-        }
-        Rule::class_stmt => {
-            process_class_assignment(db, pair)?;
-        }
-        Rule::style_stmt => {
-            // Style statements - for future use
-        }
-        Rule::state_declaration => {
-            process_state_declaration(db, pair, parent)?;
-        }
-        Rule::note_stmt => {
-            process_note(db, pair)?;
-        }
-        Rule::transition_stmt => {
-            process_transition(db, pair, parent)?;
-        }
-        Rule::state_with_description => {
-            process_state_with_description(db, pair)?;
-        }
+    let rule = pair.as_rule();
+    if process_metadata_statement(db, rule, pair.clone(), parent)? {
+        return Ok(());
+    }
+    process_diagram_statement(db, rule, pair, parent)
+}
+
+fn process_metadata_statement(
+    db: &mut StateDb,
+    rule: Rule,
+    pair: pest::iterators::Pair<Rule>,
+    parent: Option<&str>,
+) -> Result<bool, String> {
+    match rule {
+        Rule::statement => process_nested_statement(db, pair, parent)?,
+        Rule::comment_stmt | Rule::scale_stmt | Rule::style_stmt => {}
+        Rule::direction_stmt => process_direction_stmt(db, pair),
+        Rule::hide_empty_stmt => db.set_hide_empty_descriptions(true),
+        Rule::acc_title_stmt => process_acc_title_stmt(db, pair),
+        Rule::acc_descr_stmt => process_acc_descr(db, pair)?,
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
+fn process_diagram_statement(
+    db: &mut StateDb,
+    rule: Rule,
+    pair: pest::iterators::Pair<Rule>,
+    parent: Option<&str>,
+) -> Result<(), String> {
+    match rule {
+        Rule::class_def_stmt => process_class_def(db, pair)?,
+        Rule::class_stmt => process_class_assignment(db, pair)?,
+        Rule::state_declaration => process_state_declaration(db, pair, parent)?,
+        Rule::note_stmt => process_note(db, pair)?,
+        Rule::transition_stmt => process_transition(db, pair, parent)?,
+        Rule::state_with_description => process_state_with_description(db, pair)?,
         _ => {}
     }
     Ok(())
+}
+
+fn process_nested_statement(
+    db: &mut StateDb,
+    pair: pest::iterators::Pair<Rule>,
+    parent: Option<&str>,
+) -> Result<(), String> {
+    for inner in pair.into_inner() {
+        process_statement(db, inner, parent)?;
+    }
+    Ok(())
+}
+
+fn process_direction_stmt(db: &mut StateDb, pair: pest::iterators::Pair<Rule>) {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::direction {
+            db.set_direction(Direction::from_str(inner.as_str()));
+        }
+    }
+}
+
+fn process_acc_title_stmt(db: &mut StateDb, pair: pest::iterators::Pair<Rule>) {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::line_content {
+            db.set_acc_title(inner.as_str().trim());
+        }
+    }
 }
 
 fn process_acc_descr(db: &mut StateDb, pair: pest::iterators::Pair<Rule>) -> Result<(), String> {
@@ -203,117 +214,126 @@ fn process_state_def(
 ) -> Result<(), String> {
     for inner in pair.into_inner() {
         match inner.as_rule() {
-            Rule::state_with_body => {
-                let mut state_id = String::new();
-
-                for body_inner in inner.into_inner() {
-                    match body_inner.as_rule() {
-                        Rule::state_id => {
-                            state_id = body_inner.as_str().to_string();
-                            db.add_state(&state_id);
-                            // ALWAYS set parent for explicit state blocks (even if None)
-                            // This ensures explicit `state X { }` declarations take precedence
-                            // over implicit state creation from transitions
-                            db.set_or_clear_parent(&state_id, parent);
-                        }
-                        Rule::quoted_string => {
-                            let s = body_inner.as_str();
-                            state_id = s[1..s.len() - 1].to_string(); // Remove quotes
-                            db.add_state(&state_id);
-                            // ALWAYS set parent for explicit state blocks (even if None)
-                            db.set_or_clear_parent(&state_id, parent);
-                        }
-                        Rule::document => {
-                            // Process nested document with this state as parent
-                            process_document(db, body_inner, Some(&state_id))?;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            Rule::state_special => {
-                let mut state_id = String::new();
-                let mut special_type = StateType::Default;
-
-                for spec_inner in inner.into_inner() {
-                    match spec_inner.as_rule() {
-                        Rule::state_id => {
-                            state_id = spec_inner.as_str().to_string();
-                        }
-                        Rule::special_type => {
-                            special_type = match spec_inner.as_str().to_lowercase().as_str() {
-                                "fork" => StateType::Fork,
-                                "join" => StateType::Join,
-                                "choice" => StateType::Choice,
-                                _ => StateType::Default,
-                            };
-                        }
-                        _ => {}
-                    }
-                }
-
-                db.add_state_with_type(&state_id, special_type);
-                if let Some(p) = parent {
-                    db.set_parent(&state_id, p);
-                }
-            }
-            Rule::state_alias => {
-                let mut state_id = String::new();
-                let mut alias = String::new();
-
-                for alias_inner in inner.into_inner() {
-                    match alias_inner.as_rule() {
-                        Rule::state_id => {
-                            state_id = alias_inner.as_str().to_string();
-                        }
-                        Rule::quoted_string => {
-                            let s = alias_inner.as_str();
-                            alias = s[1..s.len() - 1].to_string();
-                        }
-                        _ => {}
-                    }
-                }
-
-                db.add_state(&state_id);
-                if let Some(state) = db.get_state_mut(&state_id) {
-                    state.alias = Some(alias);
-                }
-                if let Some(p) = parent {
-                    db.set_parent(&state_id, p);
-                }
-            }
-            Rule::state_simple => {
-                let mut state_id = String::new();
-                let mut description: Option<String> = None;
-
-                for simple_inner in inner.into_inner() {
-                    match simple_inner.as_rule() {
-                        Rule::state_id => {
-                            state_id = simple_inner.as_str().to_string();
-                        }
-                        Rule::state_description => {
-                            for desc in simple_inner.into_inner() {
-                                if desc.as_rule() == Rule::description_text {
-                                    description = Some(desc.as_str().trim().to_string());
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-
-                db.add_state(&state_id);
-                if let Some(desc) = description {
-                    db.add_description(&state_id, &desc);
-                }
-                if let Some(p) = parent {
-                    db.set_parent(&state_id, p);
-                }
-            }
+            Rule::state_with_body => process_state_with_body(db, inner, parent)?,
+            Rule::state_special => process_state_special(db, inner, parent),
+            Rule::state_alias => process_state_alias(db, inner, parent),
+            Rule::state_simple => process_state_simple(db, inner, parent),
             _ => {}
         }
     }
     Ok(())
+}
+
+fn process_state_with_body(
+    db: &mut StateDb,
+    pair: pest::iterators::Pair<Rule>,
+    parent: Option<&str>,
+) -> Result<(), String> {
+    let mut state_id = String::new();
+
+    for body_inner in pair.into_inner() {
+        match body_inner.as_rule() {
+            Rule::state_id => state_id = add_explicit_state(db, body_inner.as_str(), parent),
+            Rule::quoted_string => {
+                state_id = add_explicit_state(db, unquote(body_inner.as_str()), parent)
+            }
+            Rule::document => process_document(db, body_inner, Some(&state_id))?,
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn add_explicit_state(db: &mut StateDb, state_id: &str, parent: Option<&str>) -> String {
+    db.add_state(state_id);
+    db.set_or_clear_parent(state_id, parent);
+    state_id.to_string()
+}
+
+fn process_state_special(
+    db: &mut StateDb,
+    pair: pest::iterators::Pair<Rule>,
+    parent: Option<&str>,
+) {
+    let mut state_id = String::new();
+    let mut special_type = StateType::Default;
+
+    for spec_inner in pair.into_inner() {
+        match spec_inner.as_rule() {
+            Rule::state_id => state_id = spec_inner.as_str().to_string(),
+            Rule::special_type => special_type = parse_special_type(spec_inner.as_str()),
+            _ => {}
+        }
+    }
+
+    db.add_state_with_type(&state_id, special_type);
+    if let Some(p) = parent {
+        db.set_parent(&state_id, p);
+    }
+}
+
+fn parse_special_type(value: &str) -> StateType {
+    match value.to_lowercase().as_str() {
+        "fork" => StateType::Fork,
+        "join" => StateType::Join,
+        "choice" => StateType::Choice,
+        _ => StateType::Default,
+    }
+}
+
+fn process_state_alias(db: &mut StateDb, pair: pest::iterators::Pair<Rule>, parent: Option<&str>) {
+    let mut state_id = String::new();
+    let mut alias = String::new();
+
+    for alias_inner in pair.into_inner() {
+        match alias_inner.as_rule() {
+            Rule::state_id => state_id = alias_inner.as_str().to_string(),
+            Rule::quoted_string => alias = unquote(alias_inner.as_str()).to_string(),
+            _ => {}
+        }
+    }
+
+    db.add_state(&state_id);
+    if let Some(state) = db.get_state_mut(&state_id) {
+        state.alias = Some(alias);
+    }
+    if let Some(p) = parent {
+        db.set_parent(&state_id, p);
+    }
+}
+
+fn process_state_simple(db: &mut StateDb, pair: pest::iterators::Pair<Rule>, parent: Option<&str>) {
+    let mut state_id = String::new();
+    let mut description: Option<String> = None;
+
+    for simple_inner in pair.into_inner() {
+        match simple_inner.as_rule() {
+            Rule::state_id => state_id = simple_inner.as_str().to_string(),
+            Rule::state_description => description = extract_state_description(simple_inner),
+            _ => {}
+        }
+    }
+
+    db.add_state(&state_id);
+    if let Some(desc) = description {
+        db.add_description(&state_id, &desc);
+    }
+    if let Some(p) = parent {
+        db.set_parent(&state_id, p);
+    }
+}
+
+fn extract_state_description(pair: pest::iterators::Pair<Rule>) -> Option<String> {
+    for desc in pair.into_inner() {
+        if desc.as_rule() == Rule::description_text {
+            return Some(desc.as_str().trim().to_string());
+        }
+    }
+    None
+}
+
+fn unquote(value: &str) -> &str {
+    &value[1..value.len() - 1]
 }
 
 fn process_note(db: &mut StateDb, pair: pest::iterators::Pair<Rule>) -> Result<(), String> {

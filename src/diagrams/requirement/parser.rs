@@ -44,51 +44,38 @@ fn process_statement(
     pair: pest::iterators::Pair<Rule>,
 ) -> Result<(), String> {
     match pair.as_rule() {
-        Rule::statement => {
-            for inner in pair.into_inner() {
-                process_statement(db, inner)?;
-            }
-        }
-        Rule::comment_stmt => {
-            // Ignore comments
-        }
-        Rule::acc_title_stmt => {
-            // TODO: Set accessibility title
-        }
-        Rule::acc_descr_stmt | Rule::acc_descr_multiline_stmt => {
-            // TODO: Set accessibility description
-        }
-        Rule::direction_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::direction_value {
-                    db.set_direction(inner.as_str().to_uppercase().as_str());
-                }
-            }
-        }
-        Rule::requirement_def => {
-            process_requirement(db, pair)?;
-        }
-        Rule::element_def => {
-            process_element(db, pair)?;
-        }
-        Rule::relationship_def => {
-            process_relationship(db, pair)?;
-        }
-        Rule::style_stmt => {
-            process_style(db, pair)?;
-        }
-        Rule::class_def_stmt => {
-            process_class_def(db, pair)?;
-        }
-        Rule::class_stmt => {
-            process_class_assignment(db, pair)?;
-        }
-        Rule::class_shorthand_stmt => {
-            process_class_shorthand(db, pair)?;
-        }
+        Rule::statement => process_nested_statement(db, pair)?,
+        Rule::comment_stmt | Rule::acc_title_stmt => {}
+        Rule::acc_descr_stmt | Rule::acc_descr_multiline_stmt => {}
+        Rule::direction_stmt => process_direction(db, pair),
+        Rule::requirement_def => process_requirement(db, pair)?,
+        Rule::element_def => process_element(db, pair)?,
+        Rule::relationship_def => process_relationship(db, pair)?,
+        Rule::style_stmt => process_style(db, pair)?,
+        Rule::class_def_stmt => process_class_def(db, pair)?,
+        Rule::class_stmt => process_class_assignment(db, pair)?,
+        Rule::class_shorthand_stmt => process_class_shorthand(db, pair)?,
         _ => {}
     }
     Ok(())
+}
+
+fn process_nested_statement(
+    db: &mut RequirementDb,
+    pair: pest::iterators::Pair<Rule>,
+) -> Result<(), String> {
+    for inner in pair.into_inner() {
+        process_statement(db, inner)?;
+    }
+    Ok(())
+}
+
+fn process_direction(db: &mut RequirementDb, pair: pest::iterators::Pair<Rule>) {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::direction_value {
+            db.set_direction(inner.as_str().to_uppercase().as_str());
+        }
+    }
 }
 
 fn process_requirement(

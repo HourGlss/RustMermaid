@@ -59,15 +59,76 @@ fn process_statement(
     pair: pest::iterators::Pair<Rule>,
     block_stack: &mut Vec<BlockType>,
 ) -> Result<(), String> {
+    let rule = pair.as_rule();
+    if matches!(rule, Rule::statement) {
+        for inner in pair.into_inner() {
+            process_statement(db, inner, block_stack)?;
+        }
+        return Ok(());
+    }
+    if matches!(rule, Rule::comment_stmt) {
+        return Ok(());
+    }
+
+    if is_sequence_metadata_rule(rule) {
+        return process_metadata_statement(db, pair);
+    }
+    if is_sequence_block_rule(rule) {
+        return process_block_statement(db, pair, block_stack);
+    }
+    if is_sequence_lifecycle_rule(rule) {
+        return process_lifecycle_statement(db, pair);
+    }
+
+    match rule {
+        Rule::note_stmt => process_note_stmt(db, pair)?,
+        Rule::message_stmt => process_message_stmt(db, pair)?,
+        _ => {}
+    }
+    Ok(())
+}
+
+fn is_sequence_metadata_rule(rule: Rule) -> bool {
+    matches!(
+        rule,
+        Rule::title_stmt
+            | Rule::acc_title_stmt
+            | Rule::acc_descr_stmt
+            | Rule::participant_stmt
+            | Rule::autonumber_stmt
+    )
+}
+
+fn is_sequence_block_rule(rule: Rule) -> bool {
+    matches!(
+        rule,
+        Rule::box_start
+            | Rule::loop_start
+            | Rule::alt_start
+            | Rule::alt_else
+            | Rule::opt_start
+            | Rule::par_start
+            | Rule::par_and
+            | Rule::critical_start
+            | Rule::critical_option
+            | Rule::break_start
+            | Rule::rect_start
+            | Rule::end_stmt
+    )
+}
+
+fn is_sequence_lifecycle_rule(rule: Rule) -> bool {
+    matches!(
+        rule,
+        Rule::activate_stmt | Rule::deactivate_stmt | Rule::create_stmt | Rule::destroy_stmt
+    )
+}
+
+fn process_metadata_statement(
+    db: &mut SequenceDb,
+    pair: pest::iterators::Pair<Rule>,
+) -> Result<(), String> {
     match pair.as_rule() {
-        Rule::statement => {
-            for inner in pair.into_inner() {
-                process_statement(db, inner, block_stack)?;
-            }
-        }
-        Rule::comment_stmt => {
-            // Ignore comments
-        }
         Rule::title_stmt => {
             for inner in pair.into_inner() {
                 if inner.as_rule() == Rule::line_content {
@@ -112,46 +173,168 @@ fn process_statement(
         Rule::participant_stmt => {
             process_participant_stmt(db, pair)?;
         }
-        Rule::box_start => {
-            let mut color = String::new();
-            let mut title = String::new();
-            for inner in pair.into_inner() {
-                match inner.as_rule() {
-                    Rule::box_color => {
-                        color = inner.as_str().to_string();
-                    }
-                    Rule::box_title => {
-                        title = inner.as_str().trim().to_string();
-                    }
-                    _ => {}
-                }
-            }
-            block_stack.push(BlockType::Box);
-            db.add_box(&title, &color);
-        }
         Rule::autonumber_stmt => {
-            let mut start: Option<i32> = None;
-            let mut step: Option<i32> = None;
-            let mut enabled = true;
-
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::autonumber_args {
-                    let args_str = inner.as_str().trim();
-                    if args_str == "off" {
-                        enabled = false;
-                    } else {
-                        let parts: Vec<&str> = args_str.split_whitespace().collect();
-                        if !parts.is_empty() {
-                            start = parts[0].parse().ok();
-                        }
-                        if parts.len() > 1 {
-                            step = parts[1].parse().ok();
-                        }
-                    }
-                }
-            }
-            db.set_autonumber(enabled, start, step);
+            process_autonumber_stmt(db, pair);
         }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn process_block_statement(
+    db: &mut SequenceDb,
+    pair: pest::iterators::Pair<Rule>,
+    block_stack: &mut Vec<BlockType>,
+) -> Result<(), String> {
+    match pair.as_rule() {
+        Rule::box_start => {
+            process_box_start(db, pair, block_stack);
+        }
+        Rule::loop_start => {
+            process_text_block_start(
+                db,
+                pair,
+                block_stack,
+                Rule::loop_text,
+                BlockType::Loop,
+                LineType::LoopStart,
+            );
+        }
+        Rule::alt_start => {
+            process_text_block_start(
+                db,
+                pair,
+                block_stack,
+                Rule::alt_text,
+                BlockType::Alt,
+                LineType::AltStart,
+            );
+        }
+        Rule::alt_else => {
+            let text = extract_sequence_text(pair, Rule::alt_text);
+            db.add_signal(LineType::AltElse, Some(&text));
+        }
+        Rule::opt_start => {
+            process_text_block_start(
+                db,
+                pair,
+                block_stack,
+                Rule::opt_text,
+                BlockType::Opt,
+                LineType::OptStart,
+            );
+        }
+        Rule::par_start => {
+            process_text_block_start(
+                db,
+                pair,
+                block_stack,
+                Rule::par_text,
+                BlockType::Par,
+                LineType::ParStart,
+            );
+        }
+        Rule::par_and => {
+            let text = extract_sequence_text(pair, Rule::par_text);
+            db.add_signal(LineType::ParAnd, Some(&text));
+        }
+        Rule::critical_start => {
+            process_text_block_start(
+                db,
+                pair,
+                block_stack,
+                Rule::critical_text,
+                BlockType::Critical,
+                LineType::CriticalStart,
+            );
+        }
+        Rule::critical_option => {
+            let text = extract_sequence_text(pair, Rule::critical_text);
+            db.add_signal(LineType::CriticalOption, Some(&text));
+        }
+        Rule::break_start => {
+            process_text_block_start(
+                db,
+                pair,
+                block_stack,
+                Rule::break_text,
+                BlockType::Break,
+                LineType::BreakStart,
+            );
+        }
+        Rule::rect_start => {
+            let color = extract_sequence_text(pair, Rule::rect_color);
+            block_stack.push(BlockType::Rect);
+            db.add_signal(LineType::RectStart, Some(&color));
+        }
+        Rule::end_stmt => {
+            process_block_end(db, block_stack);
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn process_box_start(
+    db: &mut SequenceDb,
+    pair: pest::iterators::Pair<Rule>,
+    block_stack: &mut Vec<BlockType>,
+) {
+    let mut color = String::new();
+    let mut title = String::new();
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::box_color => color = inner.as_str().to_string(),
+            Rule::box_title => title = inner.as_str().trim().to_string(),
+            _ => {}
+        }
+    }
+    block_stack.push(BlockType::Box);
+    db.add_box(&title, &color);
+}
+
+fn process_text_block_start(
+    db: &mut SequenceDb,
+    pair: pest::iterators::Pair<Rule>,
+    block_stack: &mut Vec<BlockType>,
+    text_rule: Rule,
+    block_type: BlockType,
+    line_type: LineType,
+) {
+    let text = extract_sequence_text(pair, text_rule);
+    block_stack.push(block_type);
+    db.add_signal(line_type, Some(&text));
+}
+
+fn extract_sequence_text(pair: pest::iterators::Pair<Rule>, text_rule: Rule) -> String {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == text_rule {
+            return inner.as_str().trim().to_string();
+        }
+    }
+    String::new()
+}
+
+fn process_block_end(db: &mut SequenceDb, block_stack: &mut Vec<BlockType>) {
+    if let Some(block_type) = block_stack.pop() {
+        match block_type {
+            BlockType::Box => db.end_box(),
+            BlockType::Loop => db.add_signal(LineType::LoopEnd, None),
+            BlockType::Alt => db.add_signal(LineType::AltEnd, None),
+            BlockType::Opt => db.add_signal(LineType::OptEnd, None),
+            BlockType::Par => db.add_signal(LineType::ParEnd, None),
+            BlockType::Critical => db.add_signal(LineType::CriticalEnd, None),
+            BlockType::Break => db.add_signal(LineType::BreakEnd, None),
+            BlockType::Rect => db.add_signal(LineType::RectEnd, None),
+        }
+    }
+}
+
+fn process_lifecycle_statement(
+    db: &mut SequenceDb,
+    pair: pest::iterators::Pair<Rule>,
+) -> Result<(), String> {
+    match pair.as_rule() {
         Rule::activate_stmt => {
             for inner in pair.into_inner() {
                 if inner.as_rule() == Rule::actor_name {
@@ -168,118 +351,6 @@ fn process_statement(
                 }
             }
         }
-        Rule::loop_start => {
-            let mut text = String::new();
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::loop_text {
-                    text = inner.as_str().trim().to_string();
-                }
-            }
-            block_stack.push(BlockType::Loop);
-            db.add_signal(LineType::LoopStart, Some(&text));
-        }
-        Rule::alt_start => {
-            let mut text = String::new();
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::alt_text {
-                    text = inner.as_str().trim().to_string();
-                }
-            }
-            block_stack.push(BlockType::Alt);
-            db.add_signal(LineType::AltStart, Some(&text));
-        }
-        Rule::alt_else => {
-            let mut text = String::new();
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::alt_text {
-                    text = inner.as_str().trim().to_string();
-                }
-            }
-            db.add_signal(LineType::AltElse, Some(&text));
-        }
-        Rule::opt_start => {
-            let mut text = String::new();
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::opt_text {
-                    text = inner.as_str().trim().to_string();
-                }
-            }
-            block_stack.push(BlockType::Opt);
-            db.add_signal(LineType::OptStart, Some(&text));
-        }
-        Rule::par_start => {
-            let mut text = String::new();
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::par_text {
-                    text = inner.as_str().trim().to_string();
-                }
-            }
-            block_stack.push(BlockType::Par);
-            db.add_signal(LineType::ParStart, Some(&text));
-        }
-        Rule::par_and => {
-            let mut text = String::new();
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::par_text {
-                    text = inner.as_str().trim().to_string();
-                }
-            }
-            db.add_signal(LineType::ParAnd, Some(&text));
-        }
-        Rule::critical_start => {
-            let mut text = String::new();
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::critical_text {
-                    text = inner.as_str().trim().to_string();
-                }
-            }
-            block_stack.push(BlockType::Critical);
-            db.add_signal(LineType::CriticalStart, Some(&text));
-        }
-        Rule::critical_option => {
-            let mut text = String::new();
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::critical_text {
-                    text = inner.as_str().trim().to_string();
-                }
-            }
-            db.add_signal(LineType::CriticalOption, Some(&text));
-        }
-        Rule::break_start => {
-            let mut text = String::new();
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::break_text {
-                    text = inner.as_str().trim().to_string();
-                }
-            }
-            block_stack.push(BlockType::Break);
-            db.add_signal(LineType::BreakStart, Some(&text));
-        }
-        Rule::rect_start => {
-            let mut color = String::new();
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::rect_color {
-                    color = inner.as_str().to_string();
-                }
-            }
-            block_stack.push(BlockType::Rect);
-            db.add_signal(LineType::RectStart, Some(&color));
-        }
-        Rule::end_stmt => {
-            // Pop the block stack and emit the appropriate end signal
-            if let Some(block_type) = block_stack.pop() {
-                match block_type {
-                    BlockType::Box => db.end_box(),
-                    BlockType::Loop => db.add_signal(LineType::LoopEnd, None),
-                    BlockType::Alt => db.add_signal(LineType::AltEnd, None),
-                    BlockType::Opt => db.add_signal(LineType::OptEnd, None),
-                    BlockType::Par => db.add_signal(LineType::ParEnd, None),
-                    BlockType::Critical => db.add_signal(LineType::CriticalEnd, None),
-                    BlockType::Break => db.add_signal(LineType::BreakEnd, None),
-                    BlockType::Rect => db.add_signal(LineType::RectEnd, None),
-                }
-            }
-        }
         Rule::create_stmt => {
             process_create_stmt(db, pair)?;
         }
@@ -290,15 +361,33 @@ fn process_statement(
                 }
             }
         }
-        Rule::note_stmt => {
-            process_note_stmt(db, pair)?;
-        }
-        Rule::message_stmt => {
-            process_message_stmt(db, pair)?;
-        }
         _ => {}
     }
     Ok(())
+}
+
+fn process_autonumber_stmt(db: &mut SequenceDb, pair: pest::iterators::Pair<Rule>) {
+    let mut start: Option<i32> = None;
+    let mut step: Option<i32> = None;
+    let mut enabled = true;
+
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::autonumber_args {
+            let args_str = inner.as_str().trim();
+            if args_str == "off" {
+                enabled = false;
+            } else {
+                let parts: Vec<&str> = args_str.split_whitespace().collect();
+                if !parts.is_empty() {
+                    start = parts[0].parse().ok();
+                }
+                if parts.len() > 1 {
+                    step = parts[1].parse().ok();
+                }
+            }
+        }
+    }
+    db.set_autonumber(enabled, start, step);
 }
 
 fn process_participant_stmt(

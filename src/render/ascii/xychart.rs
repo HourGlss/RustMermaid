@@ -4,7 +4,7 @@
 //! and line markers (●) are overlaid at their respective heights, all sharing
 //! a single Y-axis grid. Categories appear along the x-axis at the bottom.
 
-use crate::diagrams::xychart::{PlotType, XAxisData, XYChartDb, YAxisData};
+use crate::diagrams::xychart::{Plot, PlotType, XAxisData, XYChartDb, YAxisData};
 use crate::error::Result;
 
 /// Height of the chart area in character rows.
@@ -21,184 +21,243 @@ const LINE_MARKER: char = '●';
 pub fn render_xychart_ascii(db: &XYChartDb) -> Result<String> {
     let plots = db.get_plots();
     if plots.is_empty() {
-        let title = &db.title;
-        if !title.is_empty() {
-            return Ok(format!("{}\n\n(empty chart)\n", title));
-        }
-        return Ok("(empty chart)\n".to_string());
+        return Ok(empty_chart_output(&db.title));
     }
 
     let mut out: Vec<String> = Vec::new();
+    push_title(&mut out, &db.title);
 
-    // Title
-    if !db.title.is_empty() {
-        out.push(db.title.clone());
-        out.push("─".repeat(db.title.chars().count()));
+    let Some(data) = ChartData::from_db(db, plots) else {
+        out.push("(no data)".to_string());
+        out.push(String::new());
+        return Ok(out.join("\n"));
+    };
+
+    push_y_axis_title(&mut out, db, data.y_label_width);
+    push_chart_rows(&mut out, &data);
+    push_x_axis(&mut out, db, &data);
+    push_legend(&mut out, plots, data.y_label_width);
+    out.push(String::new());
+    Ok(out.join("\n"))
+}
+
+fn empty_chart_output(title: &str) -> String {
+    if title.is_empty() {
+        "(empty chart)\n".to_string()
+    } else {
+        format!("{}\n\n(empty chart)\n", title)
     }
+}
 
-    // Get categories from x-axis
-    let categories: Vec<String> = match &db.x_axis {
+fn push_title(out: &mut Vec<String>, title: &str) {
+    if !title.is_empty() {
+        out.push(title.to_string());
+        out.push("─".repeat(title.chars().count()));
+    }
+}
+
+struct ChartData {
+    categories: Vec<String>,
+    y_ticks: Vec<f64>,
+    y_max: f64,
+    y_label_width: usize,
+    bar_heights: Vec<Option<usize>>,
+    line_rows_per_cat: Vec<Vec<usize>>,
+    chart_width: usize,
+}
+
+impl ChartData {
+    fn from_db(db: &XYChartDb, plots: &[Plot]) -> Option<Self> {
+        let categories = chart_categories(db, plots);
+        let max_value = max_plot_value(plots);
+        if categories.is_empty() || max_value <= 0.0 {
+            return None;
+        }
+
+        let y_ticks = compute_y_ticks(max_value, 5);
+        let y_max = *y_ticks.last().unwrap_or(&max_value);
+        let y_label_width = y_label_width(&y_ticks);
+        let bar_heights = bar_heights(plots, categories.len(), y_max);
+        let line_rows_per_cat = line_rows_per_cat(plots, categories.len(), y_max);
+        let chart_width = categories.len() * COL_WIDTH;
+
+        Some(Self {
+            categories,
+            y_ticks,
+            y_max,
+            y_label_width,
+            bar_heights,
+            line_rows_per_cat,
+            chart_width,
+        })
+    }
+}
+
+fn chart_categories(db: &XYChartDb, plots: &[Plot]) -> Vec<String> {
+    match &db.x_axis {
         Some(XAxisData::Band(band)) => band.categories.clone(),
         _ => plots
             .first()
             .map(|p| p.data.iter().map(|d| d.label.clone()).collect())
             .unwrap_or_default(),
-    };
-
-    let num_cats = categories.len();
-    if num_cats == 0 {
-        out.push("(no data)".to_string());
-        out.push(String::new());
-        return Ok(out.join("\n"));
     }
+}
 
-    // Find global max value across all plots for scaling
-    let max_value = plots
+fn max_plot_value(plots: &[Plot]) -> f64 {
+    plots
         .iter()
         .flat_map(|p| p.data.iter().map(|d| d.value))
-        .fold(0.0f64, f64::max);
+        .fold(0.0f64, f64::max)
+}
 
-    if max_value <= 0.0 {
-        out.push("(no data)".to_string());
-        out.push(String::new());
-        return Ok(out.join("\n"));
-    }
-
-    // Compute nice Y-axis tick values
-    let y_ticks = compute_y_ticks(max_value, 5);
-    let y_max = *y_ticks.last().unwrap_or(&max_value);
-    let y_label_width = y_ticks
+fn y_label_width(y_ticks: &[f64]) -> usize {
+    y_ticks
         .iter()
         .map(|v| format_value(*v).len())
         .max()
-        .unwrap_or(3);
+        .unwrap_or(3)
+}
 
-    // Y-axis title
-    if let Some(ref y_axis) = db.y_axis {
-        let y_title = match y_axis {
-            YAxisData::Linear(data) => &data.title,
-        };
-        if !y_title.is_empty() {
-            out.push(format!(
-                "{:>width$}  {}",
-                "",
-                y_title,
-                width = y_label_width
-            ));
-        }
-    }
-
-    // Collect bar heights and line heights per category (in chart rows)
-    let bar_heights: Vec<Option<usize>> = {
-        let bar_plot = plots.iter().find(|p| p.plot_type == PlotType::Bar);
-        (0..num_cats)
-            .map(|i| {
-                bar_plot.and_then(|p| {
-                    p.data
-                        .get(i)
-                        .map(|d| ((d.value / y_max) * CHART_HEIGHT as f64).round() as usize)
-                })
+fn bar_heights(plots: &[Plot], num_cats: usize, y_max: f64) -> Vec<Option<usize>> {
+    let bar_plot = plots.iter().find(|p| p.plot_type == PlotType::Bar);
+    (0..num_cats)
+        .map(|i| {
+            bar_plot.and_then(|p| {
+                p.data
+                    .get(i)
+                    .map(|d| ((d.value / y_max) * CHART_HEIGHT as f64).round() as usize)
             })
-            .collect()
-    };
+        })
+        .collect()
+}
 
-    // Collect line marker rows for ALL line plots per category.
-    // Each category gets a vec of rows (one per line plot).
+fn line_rows_per_cat(plots: &[Plot], num_cats: usize, y_max: f64) -> Vec<Vec<usize>> {
     let line_plots: Vec<_> = plots
         .iter()
         .filter(|p| p.plot_type == PlotType::Line)
         .collect();
-    let line_rows_per_cat: Vec<Vec<usize>> = (0..num_cats)
+    (0..num_cats)
         .map(|i| {
             line_plots
                 .iter()
-                .filter_map(|p| {
-                    p.data.get(i).map(|d| {
-                        let row_from_bottom =
-                            ((d.value / y_max) * CHART_HEIGHT as f64).round() as usize;
-                        CHART_HEIGHT.saturating_sub(row_from_bottom)
-                    })
-                })
+                .filter_map(|p| p.data.get(i).map(|d| line_row(d.value, y_max)))
                 .collect()
         })
-        .collect();
+        .collect()
+}
 
-    let chart_width = num_cats * COL_WIDTH;
+fn line_row(value: f64, y_max: f64) -> usize {
+    let row_from_bottom = ((value / y_max) * CHART_HEIGHT as f64).round() as usize;
+    CHART_HEIGHT.saturating_sub(row_from_bottom)
+}
 
-    // Render chart rows from top (row 0) to bottom (row CHART_HEIGHT-1)
+fn push_y_axis_title(out: &mut Vec<String>, db: &XYChartDb, y_label_width: usize) {
+    if let Some(YAxisData::Linear(data)) = &db.y_axis {
+        if !data.title.is_empty() {
+            out.push(format!(
+                "{:>width$}  {}",
+                "",
+                data.title,
+                width = y_label_width
+            ));
+        }
+    }
+}
+
+fn push_chart_rows(out: &mut Vec<String>, data: &ChartData) {
     for row in 0..CHART_HEIGHT {
         let rows_from_bottom = CHART_HEIGHT - row;
-
-        // Y-axis tick label
-        let y_value = (rows_from_bottom as f64 / CHART_HEIGHT as f64) * y_max;
-        let y_label = if y_ticks.iter().any(|t| {
-            let tick_row = ((*t / y_max) * CHART_HEIGHT as f64).round() as usize;
-            tick_row == rows_from_bottom
-        }) {
-            format!("{:>width$}", format_value(y_value), width = y_label_width)
-        } else {
-            " ".repeat(y_label_width)
-        };
-
-        // Build the row content across all categories
-        let mut row_chars: Vec<char> = vec![' '; chart_width];
-        for cat_i in 0..num_cats {
-            let col_start = cat_i * COL_WIDTH;
-            let bar_center = col_start + COL_WIDTH / 2;
-
-            // Draw bar fill: if this row is within the bar height, fill center columns
-            if let Some(bh) = bar_heights[cat_i] {
-                if rows_from_bottom <= bh {
-                    // Fill the center portion of the column with block chars
-                    let fill_start = col_start + 1;
-                    let fill_end = (col_start + COL_WIDTH - 1).min(chart_width);
-                    for ch in row_chars.iter_mut().take(fill_end).skip(fill_start) {
-                        *ch = FULL_BLOCK;
-                    }
-                } else if rows_from_bottom == bh + 1 && bh > 0 {
-                    // Top cap of bar: use upper-half block for sub-row precision
-                    let fill_start = col_start + 1;
-                    let fill_end = (col_start + COL_WIDTH - 1).min(chart_width);
-                    for ch in row_chars.iter_mut().take(fill_end).skip(fill_start) {
-                        *ch = UPPER_HALF;
-                    }
-                }
-            }
-
-            // Overlay line markers for all line plots at this category
-            for &lr in &line_rows_per_cat[cat_i] {
-                if row == lr && bar_center < chart_width {
-                    row_chars[bar_center] = LINE_MARKER;
-                }
-            }
-        }
-
-        let row_str: String = row_chars.iter().collect();
+        let y_label = y_tick_label(rows_from_bottom, data);
+        let row_str: String = chart_row_chars(row, rows_from_bottom, data)
+            .iter()
+            .collect();
         out.push(format!("{} │{}", y_label, row_str));
     }
+}
 
-    // X-axis baseline
+fn y_tick_label(rows_from_bottom: usize, data: &ChartData) -> String {
+    let y_value = (rows_from_bottom as f64 / CHART_HEIGHT as f64) * data.y_max;
+    if data.y_ticks.iter().any(|t| {
+        let tick_row = ((*t / data.y_max) * CHART_HEIGHT as f64).round() as usize;
+        tick_row == rows_from_bottom
+    }) {
+        format!(
+            "{:>width$}",
+            format_value(y_value),
+            width = data.y_label_width
+        )
+    } else {
+        " ".repeat(data.y_label_width)
+    }
+}
+
+fn chart_row_chars(row: usize, rows_from_bottom: usize, data: &ChartData) -> Vec<char> {
+    let mut row_chars: Vec<char> = vec![' '; data.chart_width];
+    for cat_i in 0..data.categories.len() {
+        draw_bar_cell(&mut row_chars, cat_i, rows_from_bottom, data);
+        draw_line_markers(&mut row_chars, cat_i, row, data);
+    }
+    row_chars
+}
+
+fn draw_bar_cell(row_chars: &mut [char], cat_i: usize, rows_from_bottom: usize, data: &ChartData) {
+    if let Some(bh) = data.bar_heights[cat_i] {
+        let fill_char = if rows_from_bottom <= bh {
+            Some(FULL_BLOCK)
+        } else if rows_from_bottom == bh + 1 && bh > 0 {
+            Some(UPPER_HALF)
+        } else {
+            None
+        };
+        if let Some(fill_char) = fill_char {
+            fill_category_column(row_chars, cat_i, data.chart_width, fill_char);
+        }
+    }
+}
+
+fn fill_category_column(row_chars: &mut [char], cat_i: usize, chart_width: usize, fill_char: char) {
+    let col_start = cat_i * COL_WIDTH;
+    let fill_start = col_start + 1;
+    let fill_end = (col_start + COL_WIDTH - 1).min(chart_width);
+    for ch in row_chars.iter_mut().take(fill_end).skip(fill_start) {
+        *ch = fill_char;
+    }
+}
+
+fn draw_line_markers(row_chars: &mut [char], cat_i: usize, row: usize, data: &ChartData) {
+    let bar_center = cat_i * COL_WIDTH + COL_WIDTH / 2;
+    for &line_row in &data.line_rows_per_cat[cat_i] {
+        if row == line_row && bar_center < data.chart_width {
+            row_chars[bar_center] = LINE_MARKER;
+        }
+    }
+}
+
+fn push_x_axis(out: &mut Vec<String>, db: &XYChartDb, data: &ChartData) {
     out.push(format!(
         "{} └{}",
-        " ".repeat(y_label_width),
-        "─".repeat(chart_width)
+        " ".repeat(data.y_label_width),
+        "─".repeat(data.chart_width)
     ));
 
-    // Category labels
-    let mut label_line = format!("{}  ", " ".repeat(y_label_width));
-    for cat in &categories {
+    let mut label_line = format!("{}  ", " ".repeat(data.y_label_width));
+    for cat in &data.categories {
         label_line.push_str(&format!("{:^width$}", cat, width = COL_WIDTH));
     }
     out.push(label_line);
 
-    // X-axis title
     if let Some(XAxisData::Band(ref band)) = db.x_axis {
         if !band.title.is_empty() {
-            out.push(format!("{}  {}", " ".repeat(y_label_width), band.title));
+            out.push(format!(
+                "{}  {}",
+                " ".repeat(data.y_label_width),
+                band.title
+            ));
         }
     }
+}
 
-    // Legend (only if multiple plot types)
+fn push_legend(out: &mut Vec<String>, plots: &[Plot], y_label_width: usize) {
     let has_bars = plots.iter().any(|p| p.plot_type == PlotType::Bar);
     let has_lines = plots.iter().any(|p| p.plot_type == PlotType::Line);
     if has_bars && has_lines {
@@ -209,9 +268,6 @@ pub fn render_xychart_ascii(db: &XYChartDb) -> Result<String> {
             LINE_MARKER
         ));
     }
-
-    out.push(String::new());
-    Ok(out.join("\n"))
 }
 
 /// Compute nice Y-axis tick values.

@@ -38,68 +38,57 @@ fn process_document(db: &mut QuadrantDb, pair: pest::iterators::Pair<Rule>) -> R
 
 fn process_statement(db: &mut QuadrantDb, pair: pest::iterators::Pair<Rule>) -> Result<(), String> {
     match pair.as_rule() {
-        Rule::statement => {
-            for inner in pair.into_inner() {
-                process_statement(db, inner)?;
-            }
-        }
-        Rule::comment_stmt => {
-            // Ignore comments
-        }
-        Rule::title_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::line_content {
-                    db.set_diagram_title(inner.as_str().trim());
-                }
-            }
-        }
-        Rule::x_axis_stmt => {
-            process_x_axis(db, pair)?;
-        }
-        Rule::y_axis_stmt => {
-            process_y_axis(db, pair)?;
-        }
-        Rule::quadrant1_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::label_text {
-                    let text = extract_label_text(inner);
-                    db.set_quadrant1_text(&text);
-                }
-            }
-        }
-        Rule::quadrant2_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::label_text {
-                    let text = extract_label_text(inner);
-                    db.set_quadrant2_text(&text);
-                }
-            }
-        }
-        Rule::quadrant3_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::label_text {
-                    let text = extract_label_text(inner);
-                    db.set_quadrant3_text(&text);
-                }
-            }
-        }
-        Rule::quadrant4_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::label_text {
-                    let text = extract_label_text(inner);
-                    db.set_quadrant4_text(&text);
-                }
-            }
-        }
-        Rule::class_def_stmt => {
-            process_class_def(db, pair)?;
-        }
-        Rule::point_stmt => {
-            process_point(db, pair)?;
-        }
+        Rule::statement => process_nested_statement(db, pair)?,
+        Rule::comment_stmt => {}
+        Rule::title_stmt => process_title_stmt(db, pair),
+        Rule::x_axis_stmt => process_x_axis(db, pair)?,
+        Rule::y_axis_stmt => process_y_axis(db, pair)?,
+        Rule::quadrant1_stmt => process_quadrant_label(db, pair, 1),
+        Rule::quadrant2_stmt => process_quadrant_label(db, pair, 2),
+        Rule::quadrant3_stmt => process_quadrant_label(db, pair, 3),
+        Rule::quadrant4_stmt => process_quadrant_label(db, pair, 4),
+        Rule::class_def_stmt => process_class_def(db, pair)?,
+        Rule::point_stmt => process_point(db, pair)?,
         _ => {}
     }
     Ok(())
+}
+
+fn process_nested_statement(
+    db: &mut QuadrantDb,
+    pair: pest::iterators::Pair<Rule>,
+) -> Result<(), String> {
+    for inner in pair.into_inner() {
+        process_statement(db, inner)?;
+    }
+    Ok(())
+}
+
+fn process_title_stmt(db: &mut QuadrantDb, pair: pest::iterators::Pair<Rule>) {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::line_content {
+            db.set_diagram_title(inner.as_str().trim());
+        }
+    }
+}
+
+fn process_quadrant_label(db: &mut QuadrantDb, pair: pest::iterators::Pair<Rule>, quadrant: u8) {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::label_text {
+            let text = extract_label_text(inner);
+            set_quadrant_text(db, quadrant, &text);
+        }
+    }
+}
+
+fn set_quadrant_text(db: &mut QuadrantDb, quadrant: u8, text: &str) {
+    match quadrant {
+        1 => db.set_quadrant1_text(text),
+        2 => db.set_quadrant2_text(text),
+        3 => db.set_quadrant3_text(text),
+        4 => db.set_quadrant4_text(text),
+        _ => {}
+    }
 }
 
 fn process_x_axis(db: &mut QuadrantDb, pair: pest::iterators::Pair<Rule>) -> Result<(), String> {

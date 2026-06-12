@@ -1,8 +1,8 @@
 //! State diagram renderer
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use crate::diagrams::state::{NotePosition, State, StateDb, StateType};
+use crate::diagrams::state::{NotePosition, Relation, State, StateDb, StateType};
 use crate::error::Result;
 use crate::layout::Point;
 use crate::layout::{
@@ -11,6 +11,9 @@ use crate::layout::{
 };
 use crate::render::svg::edges::{build_curved_path, build_curved_path_with_options};
 use crate::render::svg::{Attrs, RenderConfig, SvgDocument, SvgElement};
+
+type StateBoundsMap = HashMap<String, (f64, f64, f64, f64)>;
+type StateOffsetMap = HashMap<String, (f64, f64)>;
 
 /// Generate SVG path for a rounded rectangle
 /// This is used instead of <rect> elements to match mermaid reference output
@@ -162,307 +165,495 @@ fn compute_level_layout(
     level_layouts: &mut HashMap<String, LevelLayout>,
     depth: usize, // Nesting depth for spacing adjustment
 ) -> Result<Option<LevelLayout>> {
-    use std::collections::HashSet;
-
     let states = db.get_states();
     let relations = db.get_relations();
-
-    // Find states at this level (direct children of parent_id, or root-level if None)
-    let level_state_ids: HashSet<&str> = states
-        .iter()
-        .filter(|(_, s)| s.parent.as_deref() == parent_id)
-        .map(|(id, _)| id.as_str())
-        .collect();
+    let level_state_ids = level_state_ids(states, parent_id);
 
     if level_state_ids.is_empty() {
         return Ok(None);
     }
 
-    // Identify which of these states are composites (have children)
-    let composite_ids: HashSet<&str> = states
-        .values()
-        .filter_map(|s| s.parent.as_deref())
-        .filter(|parent| level_state_ids.contains(parent))
-        .collect();
+    let composite_ids = composite_ids_at_level(states, &level_state_ids);
+    compute_child_composite_layouts(&composite_ids, db, size_estimator, level_layouts, depth)?;
+    let graph = build_level_layout_graph(
+        parent_id,
+        db,
+        states,
+        relations,
+        &level_state_ids,
+        &composite_ids,
+        level_layouts,
+        size_estimator,
+        depth,
+    );
+    let layout_result = layout(graph)?;
+    Ok(level_layout_from_result(layout_result))
+}
 
-    // First, recursively compute layouts for composite children at this level
-    for composite_id in &composite_ids {
+fn level_state_ids<'a>(
+    states: &'a HashMap<String, State>,
+    parent_id: Option<&str>,
+) -> HashSet<&'a str> {
+    states
+        .iter()
+        .filter(|(_, state)| state.parent.as_deref() == parent_id)
+        .map(|(id, _)| id.as_str())
+        .collect()
+}
+
+fn composite_ids_at_level<'a>(
+    states: &'a HashMap<String, State>,
+    level_state_ids: &HashSet<&'a str>,
+) -> HashSet<&'a str> {
+    states
+        .values()
+        .filter_map(|state| state.parent.as_deref())
+        .filter(|parent| level_state_ids.contains(parent))
+        .collect()
+}
+
+fn compute_child_composite_layouts(
+    composite_ids: &HashSet<&str>,
+    db: &StateDb,
+    size_estimator: &dyn SizeEstimator,
+    level_layouts: &mut HashMap<String, LevelLayout>,
+    depth: usize,
+) -> Result<()> {
+    for composite_id in composite_ids {
         if let Some(mut inner_layout) = compute_level_layout(
             Some(composite_id),
             db,
             size_estimator,
             level_layouts,
-            depth + 1, // Increment depth for nested composites
+            depth + 1,
         )? {
-            // Check if this is a leaf composite (no nested composites in its positions)
-            let is_leaf_composite = !inner_layout
-                .positions
-                .keys()
-                .any(|child_id| level_layouts.contains_key(child_id));
-
-            // Apply additive width expansion to approximate mermaid's getBBox() behavior.
-            // Mermaid measures rendered SVG clusters using getBBox() which includes font
-            // metrics we can't perfectly replicate. Using additive padding instead of
-            // multiplicative avoids compounding with deeply nested composites.
-            // Leaf composites need more padding since they have fewer children to
-            // establish minimum width.
-            let extra_padding = if is_leaf_composite { 50.0 } else { 20.0 };
-            let original_width = inner_layout.width;
-            let expanded_width = original_width + extra_padding;
-            let width_offset = (expanded_width - original_width) / 2.0;
-
-            // Shift all positions to center content within expanded width
-            for (_, (x, _, _, _)) in inner_layout.positions.iter_mut() {
-                *x += width_offset;
-            }
-            // Shift edge points and label positions
-            for edge in &mut inner_layout.edges {
-                for point in &mut edge.bend_points {
-                    point.x += width_offset;
-                }
-                if let Some(ref mut pos) = edge.label_position {
-                    pos.x += width_offset;
-                }
-            }
-            inner_layout.width = expanded_width;
-
-            level_layouts.insert(composite_id.to_string(), inner_layout);
+            expand_inner_composite_layout(&mut inner_layout, level_layouts);
+            level_layouts.insert((*composite_id).to_string(), inner_layout);
         }
     }
+    Ok(())
+}
 
-    // Now create layout graph for this level
-    // Mermaid's state nodes use 10px font (g.stateGroup text) and 24px height.
-    // We use 16px font for better readability, but reduce min dimensions to
-    // get closer to mermaid's overall sizing.
-    let config = NodeSizeConfig {
-        font_size: 16.0,         // Keep readable font size
-        padding_horizontal: 6.0, // Reduced from 8.0 to tighten horizontal spacing
-        padding_vertical: 6.0,   // Reduced from 8.0 to get closer to mermaid's 24px height
-        min_width: 35.0,         // Reduced from 40.0 to allow narrower nodes
-        min_height: 24.0,        // Match mermaid's node height
-        max_width: Some(200.0),
-    };
+fn expand_inner_composite_layout(
+    inner_layout: &mut LevelLayout,
+    level_layouts: &HashMap<String, LevelLayout>,
+) {
+    let is_leaf_composite = !inner_layout
+        .positions
+        .keys()
+        .any(|child_id| level_layouts.contains_key(child_id));
+    let extra_padding = if is_leaf_composite { 50.0 } else { 20.0 };
+    let expanded_width = inner_layout.width + extra_padding;
+    let width_offset = (expanded_width - inner_layout.width) / 2.0;
 
+    shift_level_layout_x(inner_layout, width_offset);
+    inner_layout.width = expanded_width;
+}
+
+fn shift_level_layout_x(layout: &mut LevelLayout, offset: f64) {
+    for (_, (x, _, _, _)) in layout.positions.iter_mut() {
+        *x += offset;
+    }
+    for edge in &mut layout.edges {
+        for point in &mut edge.bend_points {
+            point.x += offset;
+        }
+        if let Some(ref mut pos) = edge.label_position {
+            pos.x += offset;
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_level_layout_graph(
+    parent_id: Option<&str>,
+    db: &StateDb,
+    states: &HashMap<String, State>,
+    relations: &[Relation],
+    level_state_ids: &HashSet<&str>,
+    composite_ids: &HashSet<&str>,
+    level_layouts: &HashMap<String, LevelLayout>,
+    size_estimator: &dyn SizeEstimator,
+    depth: usize,
+) -> LayoutGraph {
+    let config = state_level_node_size_config();
     let mut graph = LayoutGraph::new(parent_id.unwrap_or("root"));
-
-    // Mermaid uses rankSpacing = 50 default. The per-level increment is kept lower
-    // to prevent excessive height in deeply nested diagrams while maintaining
-    // reasonable spacing at the root level.
-    // Mermaid uses rankSpacing=50 default. We add a small offset (+4) to compensate
-    // for the difference between our character-based node width estimation and
-    // mermaid's DOM-measured widths, which affects how dagre distributes vertical space.
-    let base_ranksep = 54.0;
-    let ranksep_per_level = 15.0; // Lower than mermaid's implicit +25 to control nested height
-    let layer_spacing = base_ranksep + (depth as f64 * ranksep_per_level);
-
-    graph.options = LayoutOptions {
-        direction: db.preferred_direction(),
-        node_spacing: 50.0, // mermaid's nodeSep
-        layer_spacing,      // mermaid-style: ranksep + 25 per nesting level
-        padding: Padding::uniform(8.0),
-        ranker: LayoutRanker::LongestPath, // mermaid uses 'tight-tree', LongestPath is equivalent
-    };
-
+    graph.options = state_level_layout_options(db, depth);
     let start_end_states = determine_start_end_states(db);
 
-    // Add nodes for states at this level
-    for state_id in &level_state_ids {
-        let state = states.get(*state_id).unwrap();
+    add_level_state_nodes(
+        &mut graph,
+        states,
+        level_state_ids,
+        composite_ids,
+        level_layouts,
+        &start_end_states,
+        size_estimator,
+        &config,
+    );
+    add_level_relation_edges(&mut graph, relations, level_state_ids);
+    add_level_virtual_edges(
+        &mut graph,
+        states,
+        relations,
+        level_state_ids,
+        composite_ids,
+    );
+    graph
+}
 
-        let (shape, label) = match state.state_type {
-            StateType::Start => (NodeShape::Circle, None),
-            StateType::End => (NodeShape::DoubleCircle, None),
-            StateType::Fork | StateType::Join => (NodeShape::HorizontalBar, None),
-            StateType::Choice => (NodeShape::Diamond, None),
-            StateType::Divider => (NodeShape::Rectangle, None),
-            StateType::Default => {
-                // Check if this is a start/end state (ID ends with _start or _end)
-                if let Some(info) = start_end_states.get(*state_id) {
-                    if info.is_start {
-                        (NodeShape::Circle, None)
-                    } else {
-                        (NodeShape::DoubleCircle, None)
-                    }
-                } else {
-                    let desc = state.description.as_deref().filter(|d| !d.is_empty());
-                    (NodeShape::RoundedRect, desc.or(Some(*state_id)))
-                }
-            }
-        };
-
-        // Start/end states have no label (IDs end with _start or _end)
-        let is_start_end = start_end_states.contains_key(*state_id);
-        let label_text = label.unwrap_or(if is_start_end { "" } else { *state_id });
-
-        // Determine dimensions - use pre-computed layout for composites
-        // Use the full `width` (including expansion) so parent composites
-        // properly include expanded children.
-        let (width, height) = if composite_ids.contains(state_id) {
-            if let Some(inner) = level_layouts.get(*state_id) {
-                let padding = 12.0;
-                let title_height = 25.0;
-                (
-                    inner.width + 2.0 * padding,
-                    inner.height + 2.0 * padding + title_height,
-                )
-            } else {
-                (100.0, 60.0)
-            }
-        } else if is_start_end || matches!(state.state_type, StateType::Start | StateType::End) {
-            (14.0, 14.0)
-        } else if matches!(state.state_type, StateType::Fork | StateType::Join) {
-            (70.0, 10.0)
-        } else {
-            size_estimator.estimate_node_size(Some(label_text), shape, &config)
-        };
-
-        let mut node = LayoutNode::new(*state_id, width, height).with_shape(shape);
-        if !label_text.is_empty() {
-            node = node.with_label(label_text);
-        }
-        if composite_ids.contains(state_id) {
-            node.metadata
-                .insert("is_group".to_string(), "true".to_string());
-        }
-        node.metadata
-            .insert("state_type".to_string(), format!("{:?}", state.state_type));
-
-        graph.add_node(node);
+fn state_level_node_size_config() -> NodeSizeConfig {
+    NodeSizeConfig {
+        font_size: 16.0,
+        padding_horizontal: 6.0,
+        padding_vertical: 6.0,
+        min_width: 35.0,
+        min_height: 24.0,
+        max_width: Some(200.0),
     }
+}
 
-    // Add edges for relations where BOTH endpoints are at this level
+fn state_level_layout_options(db: &StateDb, depth: usize) -> LayoutOptions {
+    let layer_spacing = 54.0 + (depth as f64 * 15.0);
+    LayoutOptions {
+        direction: db.preferred_direction(),
+        node_spacing: 50.0,
+        layer_spacing,
+        padding: Padding::uniform(8.0),
+        ranker: LayoutRanker::LongestPath,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn add_level_state_nodes(
+    graph: &mut LayoutGraph,
+    states: &HashMap<String, State>,
+    level_state_ids: &HashSet<&str>,
+    composite_ids: &HashSet<&str>,
+    level_layouts: &HashMap<String, LevelLayout>,
+    start_end_states: &HashMap<&str, StartEndInfo>,
+    size_estimator: &dyn SizeEstimator,
+    config: &NodeSizeConfig,
+) {
+    for state_id in level_state_ids {
+        if let Some(state) = states.get(*state_id) {
+            graph.add_node(level_state_node(
+                state_id,
+                state,
+                composite_ids,
+                level_layouts,
+                start_end_states,
+                size_estimator,
+                config,
+            ));
+        }
+    }
+}
+
+fn level_state_node(
+    state_id: &str,
+    state: &State,
+    composite_ids: &HashSet<&str>,
+    level_layouts: &HashMap<String, LevelLayout>,
+    start_end_states: &HashMap<&str, StartEndInfo>,
+    size_estimator: &dyn SizeEstimator,
+    config: &NodeSizeConfig,
+) -> LayoutNode {
+    let (shape, label) = level_state_shape_and_label(state_id, state, start_end_states);
+    let is_start_end = start_end_states.contains_key(state_id);
+    let label_text = label.unwrap_or(if is_start_end { "" } else { state_id });
+    let (width, height) = level_state_node_size(
+        state_id,
+        state,
+        shape,
+        label_text,
+        is_start_end,
+        composite_ids,
+        level_layouts,
+        size_estimator,
+        config,
+    );
+    let mut node = LayoutNode::new(state_id, width, height).with_shape(shape);
+    if !label_text.is_empty() {
+        node = node.with_label(label_text);
+    }
+    if composite_ids.contains(state_id) {
+        node.metadata
+            .insert("is_group".to_string(), "true".to_string());
+    }
+    node.metadata
+        .insert("state_type".to_string(), format!("{:?}", state.state_type));
+    node
+}
+
+fn level_state_shape_and_label<'a>(
+    state_id: &'a str,
+    state: &'a State,
+    start_end_states: &HashMap<&str, StartEndInfo>,
+) -> (NodeShape, Option<&'a str>) {
+    match state.state_type {
+        StateType::Start => (NodeShape::Circle, None),
+        StateType::End => (NodeShape::DoubleCircle, None),
+        StateType::Fork | StateType::Join => (NodeShape::HorizontalBar, None),
+        StateType::Choice => (NodeShape::Diamond, None),
+        StateType::Divider => (NodeShape::Rectangle, None),
+        StateType::Default => {
+            default_level_state_shape_and_label(state_id, state, start_end_states)
+        }
+    }
+}
+
+fn default_level_state_shape_and_label<'a>(
+    state_id: &'a str,
+    state: &'a State,
+    start_end_states: &HashMap<&str, StartEndInfo>,
+) -> (NodeShape, Option<&'a str>) {
+    if let Some(info) = start_end_states.get(state_id) {
+        if info.is_start {
+            (NodeShape::Circle, None)
+        } else {
+            (NodeShape::DoubleCircle, None)
+        }
+    } else {
+        let desc = state.description.as_deref().filter(|desc| !desc.is_empty());
+        (NodeShape::RoundedRect, desc.or(Some(state_id)))
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn level_state_node_size(
+    state_id: &str,
+    state: &State,
+    shape: NodeShape,
+    label_text: &str,
+    is_start_end: bool,
+    composite_ids: &HashSet<&str>,
+    level_layouts: &HashMap<String, LevelLayout>,
+    size_estimator: &dyn SizeEstimator,
+    config: &NodeSizeConfig,
+) -> (f64, f64) {
+    if composite_ids.contains(state_id) {
+        composite_level_node_size(state_id, level_layouts)
+    } else if is_start_end || matches!(state.state_type, StateType::Start | StateType::End) {
+        (14.0, 14.0)
+    } else if matches!(state.state_type, StateType::Fork | StateType::Join) {
+        (70.0, 10.0)
+    } else {
+        size_estimator.estimate_node_size(Some(label_text), shape, config)
+    }
+}
+
+fn composite_level_node_size(
+    state_id: &str,
+    level_layouts: &HashMap<String, LevelLayout>,
+) -> (f64, f64) {
+    if let Some(inner) = level_layouts.get(state_id) {
+        let padding = 12.0;
+        let title_height = 25.0;
+        (
+            inner.width + 2.0 * padding,
+            inner.height + 2.0 * padding + title_height,
+        )
+    } else {
+        (100.0, 60.0)
+    }
+}
+
+fn add_level_relation_edges(
+    graph: &mut LayoutGraph,
+    relations: &[Relation],
+    level_state_ids: &HashSet<&str>,
+) {
     for (i, relation) in relations.iter().enumerate() {
         let s1 = relation.state1.as_str();
         let s2 = relation.state2.as_str();
-
         if level_state_ids.contains(s1) && level_state_ids.contains(s2) {
-            let mut edge = LayoutEdge::new(
+            graph.add_edge(state_relation_layout_edge(
                 format!("e{}", i),
-                relation.state1.clone(),
-                relation.state2.clone(),
-            );
-            if let Some(ref desc) = relation.description {
-                edge = edge.with_label(desc);
-            }
-            graph.add_edge(edge);
+                s1,
+                s2,
+                relation,
+            ));
         }
     }
+}
 
-    // Handle cross-level edges: when a state at this level receives edges from
-    // or sends edges to states inside composites, add virtual edges to/from the
-    // outermost composite at this level. This ensures proper positioning.
+fn state_relation_layout_edge(
+    id: String,
+    source: &str,
+    target: &str,
+    relation: &Relation,
+) -> LayoutEdge {
+    let mut edge = LayoutEdge::new(id, source.to_string(), target.to_string());
+    if let Some(ref desc) = relation.description {
+        edge = edge.with_label(desc);
+    }
+    edge
+}
+
+fn add_level_virtual_edges(
+    graph: &mut LayoutGraph,
+    states: &HashMap<String, State>,
+    relations: &[Relation],
+    level_state_ids: &HashSet<&str>,
+    composite_ids: &HashSet<&str>,
+) {
     let mut virtual_edge_count = 0;
-    for relation in relations.iter() {
-        let s1 = relation.state1.as_str();
-        let s2 = relation.state2.as_str();
-
-        let s1_at_level = level_state_ids.contains(s1);
-        let s2_at_level = level_state_ids.contains(s2);
-
-        // Skip if both at this level (already handled) or neither at this level
-        if s1_at_level == s2_at_level {
-            continue;
-        }
-
-        // Find which composite at this level contains the "other" state
-        let find_containing_composite = |state_id: &str| -> Option<&str> {
-            // Walk up the parent chain until we find a composite at this level
-            let mut current = states.get(state_id)?.parent.as_deref();
-            while let Some(p) = current {
-                if level_state_ids.contains(p) && composite_ids.contains(p) {
-                    return Some(p);
-                }
-                current = states.get(p)?.parent.as_deref();
-            }
-            None
-        };
-
-        if s1_at_level && !s2_at_level {
-            // Source at this level, target inside a composite
-            // Add virtual edge: source -> composite (to position source before composite)
-            if let Some(composite_id) = find_containing_composite(s2) {
-                let mut edge = LayoutEdge::new(
-                    format!("virtual_{}", virtual_edge_count),
-                    s1.to_string(),
-                    composite_id.to_string(),
-                );
-                // Preserve edge label for layout - affects horizontal spacing
-                if let Some(ref desc) = relation.description {
-                    edge = edge.with_label(desc);
-                }
-                graph.add_edge(edge);
-                virtual_edge_count += 1;
-            }
-        } else if !s1_at_level && s2_at_level {
-            // Source inside a composite, target at this level
-            // Add virtual edge: composite -> target (to position target after composite)
-            if let Some(composite_id) = find_containing_composite(s1) {
-                let mut edge = LayoutEdge::new(
-                    format!("virtual_{}", virtual_edge_count),
-                    composite_id.to_string(),
-                    s2.to_string(),
-                );
-                // Preserve edge label for layout - affects horizontal spacing
-                if let Some(ref desc) = relation.description {
-                    edge = edge.with_label(desc);
-                }
-                graph.add_edge(edge);
-                virtual_edge_count += 1;
-            }
+    for relation in relations {
+        if let Some(edge) = level_virtual_edge(
+            relation,
+            states,
+            level_state_ids,
+            composite_ids,
+            virtual_edge_count,
+        ) {
+            graph.add_edge(edge);
+            virtual_edge_count += 1;
         }
     }
+}
 
-    // Run layout
-    let layout_result = layout(graph)?;
+fn level_virtual_edge(
+    relation: &Relation,
+    states: &HashMap<String, State>,
+    level_state_ids: &HashSet<&str>,
+    composite_ids: &HashSet<&str>,
+    edge_count: usize,
+) -> Option<LayoutEdge> {
+    let s1 = relation.state1.as_str();
+    let s2 = relation.state2.as_str();
+    let s1_at_level = level_state_ids.contains(s1);
+    let s2_at_level = level_state_ids.contains(s2);
 
-    // Extract positions and compute bounding box
-    let mut positions: HashMap<String, (f64, f64, f64, f64)> = HashMap::new();
-    let mut min_x = f64::MAX;
-    let mut min_y = f64::MAX;
-    let mut max_x = f64::MIN;
-    let mut max_y = f64::MIN;
+    if s1_at_level == s2_at_level {
+        return None;
+    }
+
+    let (source, target) = if s1_at_level {
+        (
+            s1,
+            containing_composite_at_level(s2, states, level_state_ids, composite_ids)?,
+        )
+    } else {
+        (
+            containing_composite_at_level(s1, states, level_state_ids, composite_ids)?,
+            s2,
+        )
+    };
+
+    Some(state_relation_layout_edge(
+        format!("virtual_{}", edge_count),
+        source,
+        target,
+        relation,
+    ))
+}
+
+fn containing_composite_at_level<'a>(
+    state_id: &str,
+    states: &'a HashMap<String, State>,
+    level_state_ids: &HashSet<&'a str>,
+    composite_ids: &HashSet<&'a str>,
+) -> Option<&'a str> {
+    let mut current = states.get(state_id)?.parent.as_deref();
+    while let Some(parent) = current {
+        if level_state_ids.contains(parent) && composite_ids.contains(parent) {
+            return Some(parent);
+        }
+        current = states.get(parent)?.parent.as_deref();
+    }
+    None
+}
+
+fn level_layout_from_result(mut layout_result: LayoutGraph) -> Option<LevelLayout> {
+    let mut positions = HashMap::new();
+    let mut bounds = LayoutBounds::default();
 
     for node in &layout_result.nodes {
         if let (Some(x), Some(y)) = (node.x, node.y) {
             positions.insert(node.id.clone(), (x, y, node.width, node.height));
-            min_x = min_x.min(x);
-            min_y = min_y.min(y);
-            max_x = max_x.max(x + node.width);
-            max_y = max_y.max(y + node.height);
+            bounds.include_rect(x, y, node.width, node.height);
         }
     }
-
-    // Include edge label bounds - mermaid includes labels in cluster sizing
     for edge in &layout_result.edges {
+        bounds.include_edge_label(edge);
+    }
+
+    let (min_x, min_y, width, height) = bounds.dimensions()?;
+    normalize_level_positions(&mut positions, min_x, min_y);
+    normalize_level_edges(&mut layout_result.edges, min_x, min_y);
+
+    Some(LevelLayout {
+        width,
+        height,
+        positions,
+        edges: layout_result.edges,
+    })
+}
+
+#[derive(Debug)]
+struct LayoutBounds {
+    min_x: f64,
+    min_y: f64,
+    max_x: f64,
+    max_y: f64,
+}
+
+impl Default for LayoutBounds {
+    fn default() -> Self {
+        Self {
+            min_x: f64::MAX,
+            min_y: f64::MAX,
+            max_x: f64::MIN,
+            max_y: f64::MIN,
+        }
+    }
+}
+
+impl LayoutBounds {
+    fn include_rect(&mut self, x: f64, y: f64, width: f64, height: f64) {
+        self.min_x = self.min_x.min(x);
+        self.min_y = self.min_y.min(y);
+        self.max_x = self.max_x.max(x + width);
+        self.max_y = self.max_y.max(y + height);
+    }
+
+    fn include_edge_label(&mut self, edge: &LayoutEdge) {
         if let Some(label_pos) = &edge.label_position {
             if edge.label_width > 0.0 {
-                // Labels are centered on their position
-                let label_left = label_pos.x - edge.label_width / 2.0;
-                let label_right = label_pos.x + edge.label_width / 2.0;
-                let label_top = label_pos.y - edge.label_height / 2.0;
-                let label_bottom = label_pos.y + edge.label_height / 2.0;
-
-                min_x = min_x.min(label_left);
-                max_x = max_x.max(label_right);
-                min_y = min_y.min(label_top);
-                max_y = max_y.max(label_bottom);
+                self.include_rect(
+                    label_pos.x - edge.label_width / 2.0,
+                    label_pos.y - edge.label_height / 2.0,
+                    edge.label_width,
+                    edge.label_height,
+                );
             }
         }
     }
 
-    if min_x == f64::MAX {
-        return Ok(None);
+    fn dimensions(&self) -> Option<(f64, f64, f64, f64)> {
+        (self.min_x != f64::MAX).then_some((
+            self.min_x,
+            self.min_y,
+            self.max_x - self.min_x,
+            self.max_y - self.min_y,
+        ))
     }
+}
 
-    // Normalize positions to start from (0, 0)
+fn normalize_level_positions(
+    positions: &mut HashMap<String, (f64, f64, f64, f64)>,
+    min_x: f64,
+    min_y: f64,
+) {
     for (_, (x, y, _, _)) in positions.iter_mut() {
         *x -= min_x;
         *y -= min_y;
     }
+}
 
-    // Also normalize edge bend points and label positions
-    let mut edges = layout_result.edges;
-    for edge in &mut edges {
+fn normalize_level_edges(edges: &mut [LayoutEdge], min_x: f64, min_y: f64) {
+    for edge in edges {
         for point in &mut edge.bend_points {
             point.x -= min_x;
             point.y -= min_y;
@@ -472,14 +663,6 @@ fn compute_level_layout(
             pos.y -= min_y;
         }
     }
-
-    let computed_width = max_x - min_x;
-    Ok(Some(LevelLayout {
-        width: computed_width,
-        height: max_y - min_y,
-        positions,
-        edges,
-    }))
 }
 
 /// Implement ToLayoutGraph for StateDb to enable proper DAG layout
@@ -519,114 +702,158 @@ impl ToLayoutGraph for StateDb {
             .filter_map(|s| s.parent.as_deref())
             .collect();
 
-        // Add composite state nodes FIRST (like flowchart subgraphs)
-        // These have zero dimensions initially - dagre expands them based on children
-        for composite_id in &composite_states {
-            if let Some(state) = states.get(*composite_id) {
-                let mut node = LayoutNode::new(*composite_id, 0.0, 0.0)
-                    .with_shape(NodeShape::Rectangle)
-                    .with_label(&state.id);
-
-                // Set parent if this composite is nested inside another
-                if let Some(parent_id) = &state.parent {
-                    node = node.with_parent(parent_id);
-                }
-
-                // Mark as a group (consistent with flowchart subgraphs)
-                node.metadata
-                    .insert("is_group".to_string(), "true".to_string());
-                node.metadata
-                    .insert("state_type".to_string(), format!("{:?}", state.state_type));
-
-                graph.add_node(node);
-            }
-        }
-
-        // Convert non-composite states to layout nodes (sorted for deterministic order)
-        let mut state_ids: Vec<&String> = states.keys().collect();
-        state_ids.sort();
-
-        for id in state_ids {
-            // Skip composite states - already added above
-            if composite_states.contains(id.as_str()) {
-                continue;
-            }
-
-            let state = states.get(id).unwrap();
-
-            // Determine shape based on state type
-            let (shape, label) = match state.state_type {
-                StateType::Start => (NodeShape::Circle, None),
-                StateType::End => (NodeShape::DoubleCircle, None),
-                StateType::Fork | StateType::Join => (NodeShape::HorizontalBar, None),
-                StateType::Choice => (NodeShape::Diamond, None),
-                StateType::Divider => (NodeShape::Rectangle, None),
-                StateType::Default => {
-                    // Check if this is a start/end state (ID ends with _start or _end)
-                    if let Some(state_info) = start_end_states.get(id.as_str()) {
-                        if state_info.is_start {
-                            (NodeShape::Circle, None)
-                        } else {
-                            (NodeShape::DoubleCircle, None)
-                        }
-                    } else {
-                        let desc = state.descriptions.first().map(|s| s.as_str());
-                        (NodeShape::RoundedRect, desc.or(Some(id.as_str())))
-                    }
-                }
-            };
-
-            // Start/end states have no label (IDs end with _start or _end)
-            let is_start_end = start_end_states.contains_key(id.as_str());
-            let label_text = label.unwrap_or(if is_start_end { "" } else { &state.id });
-
-            // Size based on state type
-            let (width, height) =
-                if is_start_end || matches!(state.state_type, StateType::Start | StateType::End) {
-                    // Small fixed size for start/end circles (r=7, diameter=14)
-                    (14.0, 14.0)
-                } else if matches!(state.state_type, StateType::Fork | StateType::Join) {
-                    // Horizontal bar matching mermaid reference (70×10)
-                    (70.0, 10.0)
-                } else {
-                    size_estimator.estimate_node_size(Some(label_text), shape, &config)
-                };
-
-            let mut node = LayoutNode::new(id, width, height).with_shape(shape);
-
-            if !label_text.is_empty() {
-                node = node.with_label(label_text);
-            }
-
-            // Set parent relationship for compound graph layout
-            if let Some(parent_id) = &state.parent {
-                node = node.with_parent(parent_id);
-            }
-
-            // Store state type in metadata
-            node.metadata
-                .insert("state_type".to_string(), format!("{:?}", state.state_type));
-
-            graph.add_node(node);
-        }
-
-        // Convert relations to edges
-        for (i, relation) in self.get_relations().iter().enumerate() {
-            let edge_id = format!("transition-{}", i);
-            let mut edge = LayoutEdge::new(&edge_id, &relation.state1, &relation.state2);
-
-            if let Some(desc) = &relation.description {
-                edge = edge.with_label(desc);
-            }
-
-            graph.add_edge(edge);
-        }
+        add_composite_state_nodes(&mut graph, states, &composite_states);
+        add_regular_state_nodes(
+            &mut graph,
+            states,
+            &composite_states,
+            &start_end_states,
+            size_estimator,
+            &config,
+        );
+        add_state_relation_edges(&mut graph, self);
 
         Ok(graph)
     }
 
     fn preferred_direction(&self) -> LayoutDirection {
         self.get_direction().into()
+    }
+}
+
+fn add_composite_state_nodes(
+    graph: &mut LayoutGraph,
+    states: &HashMap<String, State>,
+    composite_states: &std::collections::HashSet<&str>,
+) {
+    for composite_id in composite_states {
+        if let Some(state) = states.get(*composite_id) {
+            let mut node = LayoutNode::new(*composite_id, 0.0, 0.0)
+                .with_shape(NodeShape::Rectangle)
+                .with_label(&state.id);
+            if let Some(parent_id) = &state.parent {
+                node = node.with_parent(parent_id);
+            }
+            node.metadata
+                .insert("is_group".to_string(), "true".to_string());
+            add_state_type_metadata(&mut node, state);
+            graph.add_node(node);
+        }
+    }
+}
+
+fn add_regular_state_nodes(
+    graph: &mut LayoutGraph,
+    states: &HashMap<String, State>,
+    composite_states: &std::collections::HashSet<&str>,
+    start_end_states: &HashMap<&str, StartEndInfo>,
+    size_estimator: &dyn SizeEstimator,
+    config: &NodeSizeConfig,
+) {
+    let mut state_ids: Vec<&String> = states.keys().collect();
+    state_ids.sort();
+
+    for id in state_ids {
+        if composite_states.contains(id.as_str()) {
+            continue;
+        }
+        let state = states.get(id).unwrap();
+        let node = regular_state_node(id, state, start_end_states, size_estimator, config);
+        graph.add_node(node);
+    }
+}
+
+fn regular_state_node(
+    id: &str,
+    state: &State,
+    start_end_states: &HashMap<&str, StartEndInfo>,
+    size_estimator: &dyn SizeEstimator,
+    config: &NodeSizeConfig,
+) -> LayoutNode {
+    let (shape, label) = state_shape_and_label(id, state, start_end_states);
+    let is_start_end = start_end_states.contains_key(id);
+    let label_text = label.unwrap_or(if is_start_end { "" } else { &state.id });
+    let (width, height) = state_node_size(
+        is_start_end,
+        state,
+        shape,
+        label_text,
+        size_estimator,
+        config,
+    );
+    let mut node = LayoutNode::new(id, width, height).with_shape(shape);
+    if !label_text.is_empty() {
+        node = node.with_label(label_text);
+    }
+    if let Some(parent_id) = &state.parent {
+        node = node.with_parent(parent_id);
+    }
+    add_state_type_metadata(&mut node, state);
+    node
+}
+
+fn state_shape_and_label<'a>(
+    id: &'a str,
+    state: &'a State,
+    start_end_states: &HashMap<&str, StartEndInfo>,
+) -> (NodeShape, Option<&'a str>) {
+    match state.state_type {
+        StateType::Start => (NodeShape::Circle, None),
+        StateType::End => (NodeShape::DoubleCircle, None),
+        StateType::Fork | StateType::Join => (NodeShape::HorizontalBar, None),
+        StateType::Choice => (NodeShape::Diamond, None),
+        StateType::Divider => (NodeShape::Rectangle, None),
+        StateType::Default => default_state_shape_and_label(id, state, start_end_states),
+    }
+}
+
+fn default_state_shape_and_label<'a>(
+    id: &'a str,
+    state: &'a State,
+    start_end_states: &HashMap<&str, StartEndInfo>,
+) -> (NodeShape, Option<&'a str>) {
+    if let Some(state_info) = start_end_states.get(id) {
+        if state_info.is_start {
+            (NodeShape::Circle, None)
+        } else {
+            (NodeShape::DoubleCircle, None)
+        }
+    } else {
+        let desc = state.descriptions.first().map(|s| s.as_str());
+        (NodeShape::RoundedRect, desc.or(Some(id)))
+    }
+}
+
+fn state_node_size(
+    is_start_end: bool,
+    state: &State,
+    shape: NodeShape,
+    label_text: &str,
+    size_estimator: &dyn SizeEstimator,
+    config: &NodeSizeConfig,
+) -> (f64, f64) {
+    if is_start_end || matches!(state.state_type, StateType::Start | StateType::End) {
+        (14.0, 14.0)
+    } else if matches!(state.state_type, StateType::Fork | StateType::Join) {
+        (70.0, 10.0)
+    } else {
+        size_estimator.estimate_node_size(Some(label_text), shape, config)
+    }
+}
+
+fn add_state_type_metadata(node: &mut LayoutNode, state: &State) {
+    node.metadata
+        .insert("state_type".to_string(), format!("{:?}", state.state_type));
+}
+
+fn add_state_relation_edges(graph: &mut LayoutGraph, db: &StateDb) {
+    for (i, relation) in db.get_relations().iter().enumerate() {
+        let edge_id = format!("transition-{}", i);
+        let mut edge = LayoutEdge::new(&edge_id, &relation.state1, &relation.state2);
+        if let Some(desc) = &relation.description {
+            edge = edge.with_label(desc);
+        }
+        graph.add_edge(edge);
     }
 }
 
@@ -920,658 +1147,1000 @@ pub fn render_state(db: &StateDb, config: &RenderConfig) -> Result<String> {
         return Ok(doc.to_string());
     }
 
-    // Use recursive layout like mermaid - each composite level gets its own dagre layout
-    // This naturally accumulates spacing at each nesting level
-    // Try to use font-based measurements for accuracy, fall back to character estimates
     let size_estimator = create_size_estimator();
+    let (root_layout, level_layouts) = compute_state_level_layouts(db, &*size_estimator)?;
+    let (mut state_positions, level_offsets) =
+        position_state_level_layouts(&root_layout, &level_layouts);
+    let all_edges = collect_state_level_edges(&root_layout, &level_layouts, &level_offsets);
+    let composite_ids: HashSet<&str> = level_layouts.keys().map(|s| s.as_str()).collect();
+    let composite_offsets =
+        center_state_composites(db, states, &mut state_positions, &composite_ids);
+    let start_node_offsets =
+        center_start_nodes_over_composites(db, &all_edges, &mut state_positions, &composite_ids);
+    let fork_join_ids = fork_join_state_ids(states);
+    center_fork_join_states(&all_edges, states, &mut state_positions, &fork_join_ids);
+    let (edge_bend_points, edge_label_positions) = adjusted_state_edge_maps(
+        db,
+        states,
+        &all_edges,
+        &state_positions,
+        &composite_ids,
+        &composite_offsets,
+        &start_node_offsets,
+        &fork_join_ids,
+    );
 
-    // Compute recursive layouts starting from root level
-    let mut level_layouts: HashMap<String, LevelLayout> = HashMap::new();
-    let root_layout = compute_level_layout(None, db, &*size_estimator, &mut level_layouts, 0)?
+    let view = state_diagram_view(
+        db,
+        &state_positions,
+        &edge_bend_points,
+        &edge_label_positions,
+        &composite_ids,
+        margin,
+    );
+    configure_state_document(&mut doc, config, &db.diagram_title, view);
+    render_state_layers(
+        &mut doc,
+        db,
+        config,
+        states,
+        &state_positions,
+        &edge_bend_points,
+        &edge_label_positions,
+        &level_layouts,
+        &start_end_states,
+        start_end_radius,
+    );
+
+    Ok(doc.to_string())
+}
+
+fn compute_state_level_layouts(
+    db: &StateDb,
+    size_estimator: &dyn SizeEstimator,
+) -> Result<(LevelLayout, HashMap<String, LevelLayout>)> {
+    let mut level_layouts = HashMap::new();
+    let root_layout = compute_level_layout(None, db, size_estimator, &mut level_layouts, 0)?
         .ok_or_else(|| {
             crate::error::MermaidError::LayoutError("No states to layout".to_string())
         })?;
+    Ok((root_layout, level_layouts))
+}
 
-    // Build final state_positions by combining all level layouts
-    let mut state_positions: HashMap<String, (f64, f64, f64, f64)> = HashMap::new();
-
-    // Position all content starting from root AND collect edges with proper offsets
-    // We need to track offsets for each level so we can transform edge bend points
-    let mut level_offsets: HashMap<String, (f64, f64)> = HashMap::new();
+fn position_state_level_layouts(
+    root_layout: &LevelLayout,
+    level_layouts: &HashMap<String, LevelLayout>,
+) -> (StateBoundsMap, StateOffsetMap) {
+    let mut state_positions = HashMap::new();
+    let mut level_offsets = HashMap::new();
     level_offsets.insert("root".to_string(), (0.0, 0.0));
-
-    fn position_level_content_with_offsets(
-        level_layout: &LevelLayout,
-        offset_x: f64,
-        offset_y: f64,
-        level_layouts: &HashMap<String, LevelLayout>,
-        state_positions: &mut HashMap<String, (f64, f64, f64, f64)>,
-        level_offsets: &mut HashMap<String, (f64, f64)>,
-    ) {
-        for (id, (x, y, w, h)) in &level_layout.positions {
-            let final_x = offset_x + x;
-            let final_y = offset_y + y;
-            state_positions.insert(id.clone(), (final_x, final_y, *w, *h));
-
-            // If this is a composite, recursively position its contents
-            if let Some(inner_layout) = level_layouts.get(id) {
-                let padding = 12.0;
-                let title_height = 25.0;
-                let inner_offset_x = final_x + padding;
-                let inner_offset_y = final_y + padding + title_height;
-                level_offsets.insert(id.clone(), (inner_offset_x, inner_offset_y));
-                position_level_content_with_offsets(
-                    inner_layout,
-                    inner_offset_x,
-                    inner_offset_y,
-                    level_layouts,
-                    state_positions,
-                    level_offsets,
-                );
-            }
-        }
-    }
-
     position_level_content_with_offsets(
-        &root_layout,
+        root_layout,
         0.0,
         0.0,
-        &level_layouts,
+        level_layouts,
         &mut state_positions,
         &mut level_offsets,
     );
+    (state_positions, level_offsets)
+}
 
-    // Collect all edges from all levels, applying parent offsets to bend points
-    let mut all_edges: Vec<LayoutEdge> = root_layout.edges.clone();
-    // Root level edges have no offset (already at origin)
+fn position_level_content_with_offsets(
+    level_layout: &LevelLayout,
+    offset_x: f64,
+    offset_y: f64,
+    level_layouts: &HashMap<String, LevelLayout>,
+    state_positions: &mut HashMap<String, (f64, f64, f64, f64)>,
+    level_offsets: &mut HashMap<String, (f64, f64)>,
+) {
+    for (id, (x, y, w, h)) in &level_layout.positions {
+        let final_x = offset_x + x;
+        let final_y = offset_y + y;
+        state_positions.insert(id.clone(), (final_x, final_y, *w, *h));
 
-    // Add edges from nested levels with their offsets applied
-    for (level_id, level_layout) in &level_layouts {
-        if let Some(&(off_x, off_y)) = level_offsets.get(level_id) {
-            for edge in &level_layout.edges {
-                let mut transformed_edge = edge.clone();
-                for point in &mut transformed_edge.bend_points {
-                    point.x += off_x;
-                    point.y += off_y;
-                }
-                if let Some(ref mut pos) = transformed_edge.label_position {
-                    pos.x += off_x;
-                    pos.y += off_y;
-                }
-                all_edges.push(transformed_edge);
-            }
+        if let Some(inner_layout) = level_layouts.get(id) {
+            let inner_offset_x = final_x + 12.0;
+            let inner_offset_y = final_y + 12.0 + 25.0;
+            level_offsets.insert(id.clone(), (inner_offset_x, inner_offset_y));
+            position_level_content_with_offsets(
+                inner_layout,
+                inner_offset_x,
+                inner_offset_y,
+                level_layouts,
+                state_positions,
+                level_offsets,
+            );
         }
     }
+}
 
-    // Identify composite states
-    let composite_ids: std::collections::HashSet<&str> =
-        level_layouts.keys().map(|s| s.as_str()).collect();
+fn collect_state_level_edges(
+    root_layout: &LevelLayout,
+    level_layouts: &HashMap<String, LevelLayout>,
+    level_offsets: &HashMap<String, (f64, f64)>,
+) -> Vec<LayoutEdge> {
+    let mut all_edges = root_layout.edges.clone();
+    for (level_id, level_layout) in level_layouts {
+        if let Some(&(off_x, off_y)) = level_offsets.get(level_id) {
+            all_edges.extend(level_layout.edges.iter().cloned().map(|mut edge| {
+                shift_layout_edge(&mut edge, off_x, off_y);
+                edge
+            }));
+        }
+    }
+    all_edges
+}
 
-    // Post-process: Center all composite states on a common vertical axis
-    // This matches mermaid's rendering where all composites align vertically
-    // Returns offsets per composite so we can shift edge bend points too
-    let mut composite_offsets = center_composite_states(db, &mut state_positions, &composite_ids);
+fn shift_layout_edge(edge: &mut LayoutEdge, off_x: f64, off_y: f64) {
+    for point in &mut edge.bend_points {
+        point.x += off_x;
+        point.y += off_y;
+    }
+    if let Some(ref mut pos) = edge.label_position {
+        pos.x += off_x;
+        pos.y += off_y;
+    }
+}
 
-    // Post-process: Center nested composites within their parent composites
-    // Dagre layout doesn't inherently center nested content, so we do it here
-    // Merge nested offsets into composite_offsets for edge bend point adjustment
-    // Note: nested offsets need to include parent's offset for correct edge positioning
-    let nested_offsets = center_nested_composites(db, &mut state_positions, &composite_ids);
+fn center_state_composites(
+    db: &StateDb,
+    states: &HashMap<String, State>,
+    state_positions: &mut HashMap<String, (f64, f64, f64, f64)>,
+    composite_ids: &HashSet<&str>,
+) -> HashMap<String, f64> {
+    let mut composite_offsets = center_composite_states(db, state_positions, composite_ids);
+    let nested_offsets = center_nested_composites(db, state_positions, composite_ids);
     for (id, nested_offset) in &nested_offsets {
-        // Get the parent's total offset (if any) and add to this nested offset
         let parent_offset = states
             .get(id)
-            .and_then(|s| s.parent.as_ref())
+            .and_then(|state| state.parent.as_ref())
             .and_then(|parent| composite_offsets.get(parent.as_str()))
             .copied()
             .unwrap_or(0.0);
         composite_offsets.insert(id.clone(), parent_offset + nested_offset);
     }
+    composite_offsets
+}
 
-    // Post-process: Center start nodes above the composite states they connect to
-    // This improves visual alignment matching the mermaid reference
-
-    // Track which start nodes were repositioned and by how much
-    let mut start_node_offsets: HashMap<String, f64> = HashMap::new();
-
-    for edge in &all_edges {
+fn center_start_nodes_over_composites(
+    db: &StateDb,
+    all_edges: &[LayoutEdge],
+    state_positions: &mut HashMap<String, (f64, f64, f64, f64)>,
+    composite_ids: &HashSet<&str>,
+) -> HashMap<String, f64> {
+    let mut start_node_offsets = HashMap::new();
+    for edge in all_edges {
         if let (Some(source), Some(target)) = (edge.source(), edge.target()) {
-            // Check if this is a start node connecting to a composite
-            // Start node IDs are in format {parent}_start (e.g., root_start, Idle_start)
-            if source.ends_with("_start") && composite_ids.contains(target) {
-                // Use calculate_composite_bounds to get actual rendered composite bounds
-                // (not dagre's placeholder position which doesn't account for children)
-                if let (Some((start_x, start_y, start_w, start_h)), Some((comp_x, _, comp_w, _))) = (
-                    state_positions.get(source).copied(),
-                    calculate_composite_bounds(target, db, &state_positions),
-                ) {
-                    // Center the start node horizontally above the composite
-                    let comp_center_x = comp_x + comp_w / 2.0;
-                    let new_start_x = comp_center_x - start_w / 2.0;
-                    let offset_x = new_start_x - start_x;
-                    state_positions
-                        .insert(source.to_string(), (new_start_x, start_y, start_w, start_h));
-                    start_node_offsets.insert(source.to_string(), offset_x);
-                }
-            }
+            center_start_node_over_composite(
+                source,
+                target,
+                db,
+                state_positions,
+                composite_ids,
+                &mut start_node_offsets,
+            );
         }
     }
+    start_node_offsets
+}
 
-    // Post-process: Center fork/join bars between their parallel branches
-    // Fork bars should be centered between their target states
-    // Join bars should be centered between their source states
-    let mut fork_join_offsets: HashMap<String, f64> = HashMap::new();
+fn center_start_node_over_composite(
+    source: &str,
+    target: &str,
+    db: &StateDb,
+    state_positions: &mut HashMap<String, (f64, f64, f64, f64)>,
+    composite_ids: &HashSet<&str>,
+    start_node_offsets: &mut HashMap<String, f64>,
+) {
+    if !source.ends_with("_start") || !composite_ids.contains(target) {
+        return;
+    }
 
-    // Collect fork and join states
-    let fork_join_ids: Vec<&str> = states
+    if let (Some((start_x, start_y, start_w, start_h)), Some((comp_x, _, comp_w, _))) = (
+        state_positions.get(source).copied(),
+        calculate_composite_bounds(target, db, state_positions),
+    ) {
+        let new_start_x = comp_x + comp_w / 2.0 - start_w / 2.0;
+        let offset_x = new_start_x - start_x;
+        state_positions.insert(source.to_string(), (new_start_x, start_y, start_w, start_h));
+        start_node_offsets.insert(source.to_string(), offset_x);
+    }
+}
+
+fn fork_join_state_ids(states: &HashMap<String, State>) -> Vec<&str> {
+    states
         .iter()
-        .filter(|(_, s)| matches!(s.state_type, StateType::Fork | StateType::Join))
+        .filter(|(_, state)| matches!(state.state_type, StateType::Fork | StateType::Join))
         .map(|(id, _)| id.as_str())
-        .collect();
+        .collect()
+}
 
-    for fj_id in &fork_join_ids {
-        let is_fork = states
-            .get(*fj_id)
-            .map(|s| matches!(s.state_type, StateType::Fork))
-            .unwrap_or(false);
-
-        // Collect connected state centers (targets for fork, sources for join)
-        let mut connected_centers: Vec<f64> = Vec::new();
-
-        for edge in &all_edges {
-            if let (Some(source), Some(target)) = (edge.source(), edge.target()) {
-                if is_fork && source == *fj_id {
-                    // Fork: collect target centers
-                    if let Some(&(x, _, w, _)) = state_positions.get(target) {
-                        connected_centers.push(x + w / 2.0);
-                    }
-                } else if !is_fork && target == *fj_id {
-                    // Join: collect source centers
-                    if let Some(&(x, _, w, _)) = state_positions.get(source) {
-                        connected_centers.push(x + w / 2.0);
-                    }
-                }
-            }
-        }
-
-        // Center fork/join between connected states
-        if connected_centers.len() >= 2 {
-            let min_x = connected_centers.iter().copied().fold(f64::MAX, f64::min);
-            let max_x = connected_centers.iter().copied().fold(f64::MIN, f64::max);
-            let ideal_center = (min_x + max_x) / 2.0;
-
+fn center_fork_join_states(
+    all_edges: &[LayoutEdge],
+    states: &HashMap<String, State>,
+    state_positions: &mut HashMap<String, (f64, f64, f64, f64)>,
+    fork_join_ids: &[&str],
+) {
+    for fj_id in fork_join_ids {
+        if let Some(offset_x) = fork_join_center_offset(fj_id, all_edges, states, state_positions) {
             if let Some(&(fj_x, fj_y, fj_w, fj_h)) = state_positions.get(*fj_id) {
-                let current_center = fj_x + fj_w / 2.0;
-                let offset_x = ideal_center - current_center;
-                let new_x = fj_x + offset_x;
-                state_positions.insert(fj_id.to_string(), (new_x, fj_y, fj_w, fj_h));
-                fork_join_offsets.insert(fj_id.to_string(), offset_x);
+                state_positions.insert(fj_id.to_string(), (fj_x + offset_x, fj_y, fj_w, fj_h));
             }
         }
     }
+}
 
-    // Extract edge bend points and label positions from layout
-    // Adjust bend points for edges from repositioned start nodes
-    let mut edge_bend_points: HashMap<(String, String), Vec<Point>> = HashMap::new();
-    let mut edge_label_positions: HashMap<(String, String), Point> = HashMap::new();
-    for edge in &all_edges {
-        if let (Some(source), Some(target)) = (edge.source(), edge.target()) {
-            let mut bend_points = edge.bend_points.clone();
-            let mut label_pos = edge.label_position;
+fn fork_join_center_offset(
+    fj_id: &str,
+    all_edges: &[LayoutEdge],
+    states: &HashMap<String, State>,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+) -> Option<f64> {
+    let is_fork = states
+        .get(fj_id)
+        .map(|state| matches!(state.state_type, StateType::Fork))
+        .unwrap_or(false);
+    let connected_centers = fork_join_connected_centers(fj_id, is_fork, all_edges, state_positions);
 
-            // If both source and target are inside a shifted composite,
-            // apply the composite offset to all edge bend points and label position
-            // This keeps edges aligned with their shifted parent states
-            // We need to accumulate offsets from ALL ancestor composites, not just the direct parent
-            if !bend_points.is_empty() {
-                let source_parent = states.get(source).and_then(|s| s.parent.as_deref());
-                let target_parent = states.get(target).and_then(|s| s.parent.as_deref());
-
-                // Check if they share a common ancestor composite that was shifted
-                if let (Some(sp), Some(tp)) = (source_parent, target_parent) {
-                    // If both have the same parent composite
-                    if sp == tp {
-                        // Accumulate offsets from this parent and all ancestor composites
-                        let mut total_offset = 0.0;
-                        let mut current_composite: Option<&str> = Some(sp);
-                        while let Some(comp) = current_composite {
-                            if let Some(&offset_x) = composite_offsets.get(comp) {
-                                total_offset += offset_x;
-                            }
-                            // Move to parent composite
-                            current_composite = states
-                                .get(comp)
-                                .and_then(|s| s.parent.as_deref())
-                                .filter(|p| composite_ids.contains(p));
-                        }
-
-                        if total_offset.abs() > 0.001 {
-                            for point in &mut bend_points {
-                                point.x += total_offset;
-                            }
-                            // Also shift the label position
-                            if let Some(ref mut lp) = label_pos {
-                                lp.x += total_offset;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // If the source is a repositioned start node going to a composite,
-            // make the edge a straight vertical line by aligning all points
-            if let Some(&offset_x) = start_node_offsets.get(source) {
-                if composite_ids.contains(target) && !bend_points.is_empty() {
-                    // Get the new start position x coordinate (center)
-                    let new_x = bend_points[0].x + offset_x;
-                    // Make all points vertically aligned for a straight edge
-                    for point in &mut bend_points {
-                        point.x = new_x;
-                    }
-                } else if !bend_points.is_empty() {
-                    // For non-composite targets, just shift the first point
-                    bend_points[0].x += offset_x;
-                }
-            }
-
-            // If the source is a composite state, adjust the first bend point
-            // to exit from the center-bottom of the rendered composite box
-            if composite_ids.contains(source) && !bend_points.is_empty() {
-                if let Some((comp_x, comp_y, comp_w, comp_h)) =
-                    calculate_composite_bounds(source, db, &state_positions)
-                {
-                    let comp_center_x = comp_x + comp_w / 2.0;
-                    let comp_bottom_y = comp_y + comp_h;
-
-                    // If target is a fork/join, use the fork's center X for a straight edge
-                    // Otherwise use the composite's center
-                    let target_x = if fork_join_ids.contains(&target) {
-                        state_positions
-                            .get(target)
-                            .map(|(x, _, w, _)| x + w / 2.0)
-                            .unwrap_or(comp_center_x)
-                    } else {
-                        comp_center_x
-                    };
-
-                    // Set the first bend point to exit from composite at target's X
-                    bend_points[0].x = target_x;
-                    bend_points[0].y = comp_bottom_y;
-
-                    // If target is a fork/join, make all points align vertically
-                    // for a straight edge (matches mermaid behavior)
-                    if fork_join_ids.contains(&target) {
-                        for point in &mut bend_points {
-                            point.x = target_x;
-                        }
-                    }
-                }
-            }
-
-            // If the target is a fork/join state, use rectangle intersection algorithm
-            // (same approach as mermaid reference: intersect-rect.js)
-            if fork_join_ids.contains(&target) && !bend_points.is_empty() {
-                if let Some(&(fj_x, fj_y, fj_w, fj_h)) = state_positions.get(target) {
-                    let last_idx = bend_points.len() - 1;
-                    // Get the source point for intersection calculation
-                    let (point_x, point_y) = if bend_points.len() > 1 {
-                        (bend_points[last_idx - 1].x, bend_points[last_idx - 1].y)
-                    } else if let Some(&(sx, sy, sw, sh)) = state_positions.get(source) {
-                        (sx + sw / 2.0, sy + sh / 2.0)
-                    } else {
-                        (bend_points[last_idx].x, bend_points[last_idx].y - 50.0)
-                    };
-
-                    // Rectangle intersection algorithm (mermaid style)
-                    let node_x = fj_x + fj_w / 2.0;
-                    let node_y = fj_y + fj_h / 2.0;
-                    let dx = point_x - node_x;
-                    let dy = point_y - node_y;
-                    let w = fj_w / 2.0;
-                    let h = fj_h / 2.0;
-
-                    let (sx, sy) = if (dy.abs() * w) > (dx.abs() * h) {
-                        // Intersection is top or bottom
-                        let h_signed = if dy < 0.0 { -h } else { h };
-                        let sx = if dy.abs() < 0.001 {
-                            0.0
-                        } else {
-                            (h_signed * dx) / dy
-                        };
-                        (sx, h_signed)
-                    } else {
-                        // Intersection is left or right
-                        let w_signed = if dx < 0.0 { -w } else { w };
-                        let sy = if dx.abs() < 0.001 {
-                            0.0
-                        } else {
-                            (w_signed * dy) / dx
-                        };
-                        (w_signed, sy)
-                    };
-
-                    bend_points[last_idx].x = node_x + sx;
-                    bend_points[last_idx].y = node_y + sy;
-                }
-            }
-
-            // If the target is a composite state, adjust the last bend point
-            // to hit the top-center of the rendered composite box (not the border node)
-            if composite_ids.contains(target) && !bend_points.is_empty() {
-                if let Some((comp_x, comp_y, comp_w, _comp_h)) =
-                    calculate_composite_bounds(target, db, &state_positions)
-                {
-                    let comp_center_x = comp_x + comp_w / 2.0;
-                    let comp_top_y = comp_y;
-
-                    // If source is a fork/join, use the fork's center X for a straight edge
-                    // Otherwise use the composite's center
-                    let source_x = if fork_join_ids.contains(&source) {
-                        state_positions
-                            .get(source)
-                            .map(|(x, _, w, _)| x + w / 2.0)
-                            .unwrap_or(comp_center_x)
-                    } else {
-                        comp_center_x
-                    };
-
-                    let last_idx = bend_points.len() - 1;
-                    bend_points[last_idx].x = source_x;
-                    bend_points[last_idx].y = comp_top_y;
-
-                    // If source is a fork/join, make all points align vertically
-                    // for a straight edge (matches mermaid behavior)
-                    if fork_join_ids.contains(&source) {
-                        for point in &mut bend_points {
-                            point.x = source_x;
-                        }
-                    }
-                }
-            }
-
-            // If the source is a fork/join state, use rectangle intersection algorithm
-            // (same approach as mermaid reference: intersect-rect.js)
-            if fork_join_ids.contains(&source) && !bend_points.is_empty() {
-                if let Some(&(fj_x, fj_y, fj_w, fj_h)) = state_positions.get(source) {
-                    // Get the target point for intersection calculation
-                    let (point_x, point_y) = if bend_points.len() > 1 {
-                        (bend_points[1].x, bend_points[1].y)
-                    } else if let Some(&(tx, ty, tw, th)) = state_positions.get(target) {
-                        (tx + tw / 2.0, ty + th / 2.0)
-                    } else {
-                        (bend_points[0].x, bend_points[0].y + 50.0)
-                    };
-
-                    // Rectangle intersection algorithm (mermaid style)
-                    let node_x = fj_x + fj_w / 2.0;
-                    let node_y = fj_y + fj_h / 2.0;
-                    let dx = point_x - node_x;
-                    let dy = point_y - node_y;
-                    let w = fj_w / 2.0;
-                    let h = fj_h / 2.0;
-
-                    let (sx, sy) = if (dy.abs() * w) > (dx.abs() * h) {
-                        // Intersection is top or bottom
-                        let h_signed = if dy < 0.0 { -h } else { h };
-                        let sx = if dy.abs() < 0.001 {
-                            0.0
-                        } else {
-                            (h_signed * dx) / dy
-                        };
-                        (sx, h_signed)
-                    } else {
-                        // Intersection is left or right
-                        let w_signed = if dx < 0.0 { -w } else { w };
-                        let sy = if dx.abs() < 0.001 {
-                            0.0
-                        } else {
-                            (w_signed * dy) / dx
-                        };
-                        (w_signed, sy)
-                    };
-
-                    bend_points[0].x = node_x + sx;
-                    bend_points[0].y = node_y + sy;
-                }
-            }
-
-            edge_bend_points.insert((source.to_string(), target.to_string()), bend_points);
-            // Use adjusted label position (shifted with composite offset if applicable)
-            if let Some(lp) = label_pos {
-                edge_label_positions.insert((source.to_string(), target.to_string()), lp);
-            }
-        }
+    if connected_centers.len() < 2 {
+        return None;
     }
 
-    // Title offset
-    let title_offset = if !db.diagram_title.is_empty() {
-        40.0
+    let min_x = connected_centers.iter().copied().fold(f64::MAX, f64::min);
+    let max_x = connected_centers.iter().copied().fold(f64::MIN, f64::max);
+    let ideal_center = (min_x + max_x) / 2.0;
+    let (fj_x, _, fj_w, _) = state_positions.get(fj_id).copied()?;
+    Some(ideal_center - (fj_x + fj_w / 2.0))
+}
+
+fn fork_join_connected_centers(
+    fj_id: &str,
+    is_fork: bool,
+    all_edges: &[LayoutEdge],
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+) -> Vec<f64> {
+    all_edges
+        .iter()
+        .filter_map(|edge| fork_join_connected_center(edge, fj_id, is_fork, state_positions))
+        .collect()
+}
+
+fn fork_join_connected_center(
+    edge: &LayoutEdge,
+    fj_id: &str,
+    is_fork: bool,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+) -> Option<f64> {
+    let (source, target) = (edge.source()?, edge.target()?);
+    let connected_id = if is_fork && source == fj_id {
+        target
+    } else if !is_fork && target == fj_id {
+        source
     } else {
-        0.0
+        return None;
+    };
+    state_positions
+        .get(connected_id)
+        .map(|(x, _, w, _)| x + w / 2.0)
+}
+
+type EdgePointMap = HashMap<(String, String), Vec<Point>>;
+type EdgeLabelMap = HashMap<(String, String), Point>;
+
+#[allow(clippy::too_many_arguments)]
+fn adjusted_state_edge_maps(
+    db: &StateDb,
+    states: &HashMap<String, State>,
+    all_edges: &[LayoutEdge],
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    composite_ids: &HashSet<&str>,
+    composite_offsets: &HashMap<String, f64>,
+    start_node_offsets: &HashMap<String, f64>,
+    fork_join_ids: &[&str],
+) -> (EdgePointMap, EdgeLabelMap) {
+    let mut edge_bend_points = HashMap::new();
+    let mut edge_label_positions = HashMap::new();
+
+    for edge in all_edges {
+        if let Some((source, target, bend_points, label_pos)) = adjusted_state_edge(
+            db,
+            states,
+            edge,
+            state_positions,
+            composite_ids,
+            composite_offsets,
+            start_node_offsets,
+            fork_join_ids,
+        ) {
+            let key = (source, target);
+            edge_bend_points.insert(key.clone(), bend_points);
+            if let Some(label_pos) = label_pos {
+                edge_label_positions.insert(key, label_pos);
+            }
+        }
+    }
+
+    (edge_bend_points, edge_label_positions)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn adjusted_state_edge(
+    db: &StateDb,
+    states: &HashMap<String, State>,
+    edge: &LayoutEdge,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    composite_ids: &HashSet<&str>,
+    composite_offsets: &HashMap<String, f64>,
+    start_node_offsets: &HashMap<String, f64>,
+    fork_join_ids: &[&str],
+) -> Option<(String, String, Vec<Point>, Option<Point>)> {
+    let source = edge.source()?.to_string();
+    let target = edge.target()?.to_string();
+    let mut bend_points = edge.bend_points.clone();
+    let mut label_pos = edge.label_position;
+
+    apply_shared_composite_edge_offset(
+        &source,
+        &target,
+        states,
+        composite_ids,
+        composite_offsets,
+        &mut bend_points,
+        &mut label_pos,
+    );
+    apply_start_node_edge_offset(
+        &source,
+        &target,
+        composite_ids,
+        start_node_offsets,
+        &mut bend_points,
+    );
+    adjust_source_composite_edge(
+        &source,
+        &target,
+        db,
+        state_positions,
+        composite_ids,
+        fork_join_ids,
+        &mut bend_points,
+    );
+    adjust_target_fork_join_edge(
+        &source,
+        &target,
+        state_positions,
+        fork_join_ids,
+        &mut bend_points,
+    );
+    adjust_target_composite_edge(
+        &source,
+        &target,
+        db,
+        state_positions,
+        composite_ids,
+        fork_join_ids,
+        &mut bend_points,
+    );
+    adjust_source_fork_join_edge(
+        &source,
+        &target,
+        state_positions,
+        fork_join_ids,
+        &mut bend_points,
+    );
+
+    Some((source, target, bend_points, label_pos))
+}
+
+fn apply_shared_composite_edge_offset(
+    source: &str,
+    target: &str,
+    states: &HashMap<String, State>,
+    composite_ids: &HashSet<&str>,
+    composite_offsets: &HashMap<String, f64>,
+    bend_points: &mut [Point],
+    label_pos: &mut Option<Point>,
+) {
+    if bend_points.is_empty() {
+        return;
+    }
+    let Some(total_offset) =
+        shared_composite_offset(source, target, states, composite_ids, composite_offsets)
+    else {
+        return;
+    };
+    if total_offset.abs() <= 0.001 {
+        return;
+    }
+
+    for point in bend_points {
+        point.x += total_offset;
+    }
+    if let Some(label_pos) = label_pos {
+        label_pos.x += total_offset;
+    }
+}
+
+fn shared_composite_offset(
+    source: &str,
+    target: &str,
+    states: &HashMap<String, State>,
+    composite_ids: &HashSet<&str>,
+    composite_offsets: &HashMap<String, f64>,
+) -> Option<f64> {
+    let source_parent = states
+        .get(source)
+        .and_then(|state| state.parent.as_deref())?;
+    let target_parent = states
+        .get(target)
+        .and_then(|state| state.parent.as_deref())?;
+
+    (source_parent == target_parent)
+        .then(|| ancestor_composite_offset(source_parent, states, composite_ids, composite_offsets))
+}
+
+fn ancestor_composite_offset(
+    composite_id: &str,
+    states: &HashMap<String, State>,
+    composite_ids: &HashSet<&str>,
+    composite_offsets: &HashMap<String, f64>,
+) -> f64 {
+    let mut total_offset = 0.0;
+    let mut current_composite = Some(composite_id);
+
+    while let Some(composite) = current_composite {
+        total_offset += composite_offsets.get(composite).copied().unwrap_or(0.0);
+        current_composite = states
+            .get(composite)
+            .and_then(|state| state.parent.as_deref())
+            .filter(|parent| composite_ids.contains(parent));
+    }
+
+    total_offset
+}
+
+fn apply_start_node_edge_offset(
+    source: &str,
+    target: &str,
+    composite_ids: &HashSet<&str>,
+    start_node_offsets: &HashMap<String, f64>,
+    bend_points: &mut [Point],
+) {
+    let Some(&offset_x) = start_node_offsets.get(source) else {
+        return;
+    };
+    if bend_points.is_empty() {
+        return;
+    }
+
+    if composite_ids.contains(target) {
+        let new_x = bend_points[0].x + offset_x;
+        align_points_x(bend_points, new_x);
+    } else {
+        bend_points[0].x += offset_x;
+    }
+}
+
+fn adjust_source_composite_edge(
+    source: &str,
+    target: &str,
+    db: &StateDb,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    composite_ids: &HashSet<&str>,
+    fork_join_ids: &[&str],
+    bend_points: &mut [Point],
+) {
+    if !composite_ids.contains(source) || bend_points.is_empty() {
+        return;
+    }
+    let Some((comp_x, comp_y, comp_w, comp_h)) =
+        calculate_composite_bounds(source, db, state_positions)
+    else {
+        return;
     };
 
-    // Calculate diagram bounds from state positions, edge bend points, and labels
-    // Initialize bounds from all positioned elements
-    let mut min_x = f64::MAX;
-    let mut min_y = f64::MAX;
-    let mut max_x = f64::MIN;
-    let mut max_y = f64::MIN;
-
-    // Include all state positions
-    for &(x, y, w, h) in state_positions.values() {
-        min_x = min_x.min(x);
-        min_y = min_y.min(y);
-        max_x = max_x.max(x + w);
-        max_y = max_y.max(y + h);
+    let comp_center_x = comp_x + comp_w / 2.0;
+    let target_x = endpoint_center_x(target, state_positions, fork_join_ids, comp_center_x);
+    bend_points[0].x = target_x;
+    bend_points[0].y = comp_y + comp_h;
+    if contains_str(fork_join_ids, target) {
+        align_points_x(bend_points, target_x);
     }
+}
 
-    // Include composite state bounds (they may extend beyond individual state positions)
-    for composite_id in &composite_ids {
-        if let Some((cx, cy, cw, ch)) =
-            calculate_composite_bounds(composite_id, db, &state_positions)
+fn adjust_target_composite_edge(
+    source: &str,
+    target: &str,
+    db: &StateDb,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    composite_ids: &HashSet<&str>,
+    fork_join_ids: &[&str],
+    bend_points: &mut [Point],
+) {
+    if !composite_ids.contains(target) || bend_points.is_empty() {
+        return;
+    }
+    let Some((comp_x, comp_y, comp_w, _)) = calculate_composite_bounds(target, db, state_positions)
+    else {
+        return;
+    };
+
+    let comp_center_x = comp_x + comp_w / 2.0;
+    let source_x = endpoint_center_x(source, state_positions, fork_join_ids, comp_center_x);
+    let last_idx = bend_points.len() - 1;
+    bend_points[last_idx].x = source_x;
+    bend_points[last_idx].y = comp_y;
+    if contains_str(fork_join_ids, source) {
+        align_points_x(bend_points, source_x);
+    }
+}
+
+fn adjust_target_fork_join_edge(
+    source: &str,
+    target: &str,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    fork_join_ids: &[&str],
+    bend_points: &mut [Point],
+) {
+    if !contains_str(fork_join_ids, target) || bend_points.is_empty() {
+        return;
+    }
+    let Some(&(fj_x, fj_y, fj_w, fj_h)) = state_positions.get(target) else {
+        return;
+    };
+
+    let last_idx = bend_points.len() - 1;
+    let point = if bend_points.len() > 1 {
+        (bend_points[last_idx - 1].x, bend_points[last_idx - 1].y)
+    } else {
+        state_center(source, state_positions)
+            .unwrap_or((bend_points[last_idx].x, bend_points[last_idx].y - 50.0))
+    };
+    let (x, y) = rect_intersection((fj_x, fj_y, fj_w, fj_h), point);
+    bend_points[last_idx].x = x;
+    bend_points[last_idx].y = y;
+}
+
+fn adjust_source_fork_join_edge(
+    source: &str,
+    target: &str,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    fork_join_ids: &[&str],
+    bend_points: &mut [Point],
+) {
+    if !contains_str(fork_join_ids, source) || bend_points.is_empty() {
+        return;
+    }
+    let Some(&(fj_x, fj_y, fj_w, fj_h)) = state_positions.get(source) else {
+        return;
+    };
+
+    let point = if bend_points.len() > 1 {
+        (bend_points[1].x, bend_points[1].y)
+    } else {
+        state_center(target, state_positions).unwrap_or((bend_points[0].x, bend_points[0].y + 50.0))
+    };
+    let (x, y) = rect_intersection((fj_x, fj_y, fj_w, fj_h), point);
+    bend_points[0].x = x;
+    bend_points[0].y = y;
+}
+
+fn endpoint_center_x(
+    id: &str,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    fork_join_ids: &[&str],
+    fallback: f64,
+) -> f64 {
+    if contains_str(fork_join_ids, id) {
+        state_positions
+            .get(id)
+            .map(|(x, _, w, _)| x + w / 2.0)
+            .unwrap_or(fallback)
+    } else {
+        fallback
+    }
+}
+
+fn state_center(
+    id: &str,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+) -> Option<(f64, f64)> {
+    state_positions
+        .get(id)
+        .map(|(x, y, w, h)| (x + w / 2.0, y + h / 2.0))
+}
+
+fn rect_intersection(
+    (x, y, width, height): (f64, f64, f64, f64),
+    (point_x, point_y): (f64, f64),
+) -> (f64, f64) {
+    let node_x = x + width / 2.0;
+    let node_y = y + height / 2.0;
+    let dx = point_x - node_x;
+    let dy = point_y - node_y;
+    let half_w = width / 2.0;
+    let half_h = height / 2.0;
+    let (sx, sy) = rect_intersection_offset(dx, dy, half_w, half_h);
+    (node_x + sx, node_y + sy)
+}
+
+fn rect_intersection_offset(dx: f64, dy: f64, half_w: f64, half_h: f64) -> (f64, f64) {
+    if (dy.abs() * half_w) > (dx.abs() * half_h) {
+        let signed_h = if dy < 0.0 { -half_h } else { half_h };
+        let sx = if dy.abs() < 0.001 {
+            0.0
+        } else {
+            (signed_h * dx) / dy
+        };
+        (sx, signed_h)
+    } else {
+        let signed_w = if dx < 0.0 { -half_w } else { half_w };
+        let sy = if dx.abs() < 0.001 {
+            0.0
+        } else {
+            (signed_w * dy) / dx
+        };
+        (signed_w, sy)
+    }
+}
+
+fn align_points_x(points: &mut [Point], x: f64) {
+    for point in points {
+        point.x = x;
+    }
+}
+
+fn contains_str(values: &[&str], value: &str) -> bool {
+    values.contains(&value)
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StateDiagramView {
+    view_x: f64,
+    view_y: f64,
+    width: f64,
+    height: f64,
+}
+
+fn state_diagram_view(
+    db: &StateDb,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    edge_bend_points: &EdgePointMap,
+    edge_label_positions: &EdgeLabelMap,
+    composite_ids: &HashSet<&str>,
+    margin: f64,
+) -> StateDiagramView {
+    let mut bounds = LayoutBounds::default();
+    include_state_position_bounds(&mut bounds, state_positions);
+    include_composite_position_bounds(&mut bounds, db, state_positions, composite_ids);
+    include_edge_point_bounds(&mut bounds, edge_bend_points);
+    include_edge_label_bounds(&mut bounds, edge_label_positions);
+
+    let (_, _, width, height) = bounds.dimensions().unwrap_or((0.0, 0.0, 400.0, 200.0));
+    let bounds_x = if bounds.min_x == f64::MAX {
+        0.0
+    } else {
+        bounds.min_x
+    };
+    let bounds_y = if bounds.min_y == f64::MAX {
+        0.0
+    } else {
+        bounds.min_y
+    };
+    let title_offset = if db.diagram_title.is_empty() {
+        0.0
+    } else {
+        40.0
+    };
+
+    StateDiagramView {
+        view_x: bounds_x - margin,
+        view_y: bounds_y - margin - title_offset,
+        width: width + margin * 2.0,
+        height: height + margin * 2.0 + title_offset,
+    }
+}
+
+fn include_state_position_bounds(
+    bounds: &mut LayoutBounds,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+) {
+    for &(x, y, width, height) in state_positions.values() {
+        bounds.include_rect(x, y, width, height);
+    }
+}
+
+fn include_composite_position_bounds(
+    bounds: &mut LayoutBounds,
+    db: &StateDb,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    composite_ids: &HashSet<&str>,
+) {
+    for composite_id in composite_ids {
+        if let Some((x, y, width, height)) =
+            calculate_composite_bounds(composite_id, db, state_positions)
         {
-            min_x = min_x.min(cx);
-            min_y = min_y.min(cy);
-            max_x = max_x.max(cx + cw);
-            max_y = max_y.max(cy + ch);
+            bounds.include_rect(x, y, width, height);
         }
     }
+}
 
-    // Include edge bend points and labels
+fn include_edge_point_bounds(bounds: &mut LayoutBounds, edge_bend_points: &EdgePointMap) {
     for points in edge_bend_points.values() {
         for point in points {
-            min_x = min_x.min(point.x);
-            min_y = min_y.min(point.y);
-            max_x = max_x.max(point.x);
-            max_y = max_y.max(point.y);
+            bounds.include_rect(point.x, point.y, 0.0, 0.0);
         }
     }
+}
 
-    // Include edge label positions (estimate label size based on typical label dimensions)
-    // Edge labels are positioned on edges which already fall within state bounds,
-    // so we only need minimal padding for the label text itself (not 50px!)
-    // Typical short labels (5 chars) at ~8px/char = ~40px, so half-width ~20px
-    // But since edges are between states, labels shouldn't extend much past them
-    let label_half_width = 15.0; // Conservative for most single-word labels
-    let label_half_height = 10.0;
+fn include_edge_label_bounds(bounds: &mut LayoutBounds, edge_label_positions: &EdgeLabelMap) {
     for pos in edge_label_positions.values() {
-        min_x = min_x.min(pos.x - label_half_width);
-        min_y = min_y.min(pos.y - label_half_height);
-        max_x = max_x.max(pos.x + label_half_width);
-        max_y = max_y.max(pos.y + label_half_height);
+        bounds.include_rect(pos.x - 15.0, pos.y - 10.0, 30.0, 20.0);
     }
+}
 
-    // Handle empty diagram case
-    if min_x == f64::MAX {
-        min_x = 0.0;
-        min_y = 0.0;
-        max_x = 400.0;
-        max_y = 200.0;
-    }
-
-    let bounds_x = min_x;
-    let bounds_y = min_y;
-    let max_width = (max_x - min_x) + margin * 2.0;
-    let max_height = (max_y - min_y) + margin * 2.0 + title_offset;
-
-    // ViewBox origin accounts for margin offset from content bounds
-    let view_x = bounds_x - margin;
-    let view_y = bounds_y - margin - title_offset;
-    doc.set_size_with_origin(view_x, view_y, max_width, max_height);
-
-    // Add state-specific theme styles (no base flowchart CSS - state has its own complete styles)
+fn configure_state_document(
+    doc: &mut SvgDocument,
+    config: &RenderConfig,
+    title: &str,
+    view: StateDiagramView,
+) {
+    doc.set_size_with_origin(view.view_x, view.view_y, view.width, view.height);
     if config.embed_css {
         doc.add_style(&generate_state_css(&config.theme));
     }
-
-    // Add arrow marker (uses theme colors)
     doc.add_defs(vec![create_arrow_marker(&config.theme)]);
+    render_state_title(doc, title, view.width);
+}
 
-    // Render title
-    if !db.diagram_title.is_empty() {
-        let title_elem = SvgElement::Text {
-            x: max_width / 2.0,
-            y: 25.0,
-            content: db.diagram_title.clone(),
-            attrs: Attrs::new()
-                .with_attr("text-anchor", "middle")
-                .with_class("state-title")
-                .with_attr("font-size", "20")
-                .with_attr("font-weight", "bold"),
-        };
-        doc.add_element(title_elem);
+fn render_state_title(doc: &mut SvgDocument, title: &str, width: f64) {
+    if title.is_empty() {
+        return;
     }
 
-    // Identify composite states (states that are parents of other states)
-    let composite_states: std::collections::HashSet<&str> = states
-        .values()
-        .filter_map(|s| s.parent.as_deref())
-        .collect();
+    doc.add_element(SvgElement::Text {
+        x: width / 2.0,
+        y: 25.0,
+        content: title.to_string(),
+        attrs: Attrs::new()
+            .with_attr("text-anchor", "middle")
+            .with_class("state-title")
+            .with_attr("font-size", "20")
+            .with_attr("font-weight", "bold"),
+    });
+}
 
-    // Sort states for consistent ordering
+#[allow(clippy::too_many_arguments)]
+fn render_state_layers(
+    doc: &mut SvgDocument,
+    db: &StateDb,
+    config: &RenderConfig,
+    states: &HashMap<String, State>,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    edge_bend_points: &EdgePointMap,
+    edge_label_positions: &EdgeLabelMap,
+    level_layouts: &HashMap<String, LevelLayout>,
+    start_end_states: &HashMap<&str, StartEndInfo>,
+    start_end_radius: f64,
+) {
+    let composite_states = composite_state_ids(states);
+    let sorted_states = sorted_state_entries(states);
+    let sorted_composites = sorted_composite_ids(states, &composite_states);
+
+    render_state_composites(
+        doc,
+        db,
+        state_positions,
+        &composite_states,
+        level_layouts,
+        &sorted_composites,
+    );
+    render_state_nodes(
+        doc,
+        config,
+        state_positions,
+        start_end_states,
+        start_end_radius,
+        &composite_states,
+        &sorted_states,
+    );
+    render_state_transitions(
+        doc,
+        db,
+        states,
+        state_positions,
+        edge_bend_points,
+        edge_label_positions,
+        start_end_radius,
+    );
+}
+
+fn composite_state_ids(states: &HashMap<String, State>) -> HashSet<&str> {
+    states
+        .values()
+        .filter_map(|state| state.parent.as_deref())
+        .collect()
+}
+
+fn sorted_state_entries(states: &HashMap<String, State>) -> Vec<(&String, &State)> {
     let mut sorted_states: Vec<_> = states.iter().collect();
     sorted_states.sort_by(|a, b| a.0.cmp(b.0));
+    sorted_states
+}
 
-    // Sort composite states by nesting depth (parents before children)
-    // This ensures correct z-order: parent composites render first, children on top
+fn sorted_composite_ids<'a>(
+    states: &'a HashMap<String, State>,
+    composite_states: &HashSet<&'a str>,
+) -> Vec<&'a str> {
     let mut sorted_composites: Vec<&str> = composite_states.iter().copied().collect();
     sorted_composites.sort_by(|a, b| {
-        // Calculate depth for each composite
-        let depth_a = {
-            let mut depth = 0;
-            let mut current = *a;
-            while let Some(parent) = states.get(current).and_then(|s| s.parent.as_deref()) {
-                if composite_states.contains(parent) {
-                    depth += 1;
-                }
-                current = parent;
-            }
-            depth
-        };
-        let depth_b = {
-            let mut depth = 0;
-            let mut current = *b;
-            while let Some(parent) = states.get(current).and_then(|s| s.parent.as_deref()) {
-                if composite_states.contains(parent) {
-                    depth += 1;
-                }
-                current = parent;
-            }
-            depth
-        };
-        // Sort by depth first (parents before children), then by name for consistency
-        depth_a.cmp(&depth_b).then_with(|| a.cmp(b))
+        composite_depth(a, states, composite_states)
+            .cmp(&composite_depth(b, states, composite_states))
+            .then_with(|| a.cmp(b))
     });
+    sorted_composites
+}
 
-    // First, render composite state containers (behind everything else)
-    // Sorted by depth ensures parents render before children for correct z-order
-    for composite_id in &sorted_composites {
+fn composite_depth(
+    composite_id: &str,
+    states: &HashMap<String, State>,
+    composite_states: &HashSet<&str>,
+) -> usize {
+    let mut depth = 0;
+    let mut current = composite_id;
+    while let Some(parent) = states
+        .get(current)
+        .and_then(|state| state.parent.as_deref())
+    {
+        if composite_states.contains(parent) {
+            depth += 1;
+        }
+        current = parent;
+    }
+    depth
+}
+
+fn render_state_composites(
+    doc: &mut SvgDocument,
+    db: &StateDb,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    composite_states: &HashSet<&str>,
+    level_layouts: &HashMap<String, LevelLayout>,
+    sorted_composites: &[&str],
+) {
+    for composite_id in sorted_composites {
         if let Some(composite_elem) = render_composite_state(
             composite_id,
             db,
-            &state_positions,
-            &composite_states,
-            &level_layouts,
+            state_positions,
+            composite_states,
+            level_layouts,
         ) {
             doc.add_element(composite_elem);
         }
     }
+}
 
-    // Render each non-composite state
-    for (id, state) in &sorted_states {
-        // Skip composite states - they're rendered as containers above
+#[allow(clippy::too_many_arguments)]
+fn render_state_nodes(
+    doc: &mut SvgDocument,
+    config: &RenderConfig,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    start_end_states: &HashMap<&str, StartEndInfo>,
+    start_end_radius: f64,
+    composite_states: &HashSet<&str>,
+    sorted_states: &[(&String, &State)],
+) {
+    for (id, state) in sorted_states {
         if composite_states.contains(id.as_str()) {
             continue;
         }
-
-        if let Some(&(x, y, width, height)) = state_positions.get(*id) {
-            // Check if this [*] state is a start or end
-            let state_info = start_end_states.get(id.as_str());
-            let is_end_state = state_info.map(|info| !info.is_start).unwrap_or(false);
-
-            let state_elem = render_state_node(
-                state,
-                x,
-                y,
-                width,
-                height,
-                start_end_radius,
-                70.0, // fork_join_width (horizontal bar)
-                10.0, // fork_join_height
-                is_end_state,
-                &config.theme,
-            );
-            doc.add_element(state_elem);
-
-            // Render note if present
-            if let Some(note) = &state.note {
-                let note_x = match note.position {
-                    NotePosition::LeftOf => x - 120.0,
-                    NotePosition::RightOf => x + width + 20.0,
-                };
-                let note_elem = render_note(note_x, y, &note.text);
-                doc.add_element(note_elem);
-            }
-        }
+        render_state_node_and_note(
+            doc,
+            config,
+            id,
+            state,
+            state_positions,
+            start_end_states,
+            start_end_radius,
+        );
     }
+}
 
-    // Render transitions
+fn render_state_node_and_note(
+    doc: &mut SvgDocument,
+    config: &RenderConfig,
+    id: &str,
+    state: &State,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    start_end_states: &HashMap<&str, StartEndInfo>,
+    start_end_radius: f64,
+) {
+    let Some(&(x, y, width, height)) = state_positions.get(id) else {
+        return;
+    };
+    let is_end_state = start_end_states
+        .get(id)
+        .map(|info| !info.is_start)
+        .unwrap_or(false);
+
+    doc.add_element(render_state_node(
+        state,
+        x,
+        y,
+        width,
+        height,
+        start_end_radius,
+        70.0,
+        10.0,
+        is_end_state,
+        &config.theme,
+    ));
+    render_state_note(doc, state, x, y, width);
+}
+
+fn render_state_note(doc: &mut SvgDocument, state: &State, x: f64, y: f64, width: f64) {
+    if let Some(note) = &state.note {
+        let note_x = match note.position {
+            NotePosition::LeftOf => x - 120.0,
+            NotePosition::RightOf => x + width + 20.0,
+        };
+        doc.add_element(render_note(note_x, y, &note.text));
+    }
+}
+
+fn render_state_transitions(
+    doc: &mut SvgDocument,
+    db: &StateDb,
+    states: &HashMap<String, State>,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    edge_bend_points: &EdgePointMap,
+    edge_label_positions: &EdgeLabelMap,
+    start_end_radius: f64,
+) {
     for relation in db.get_relations() {
-        if let (Some(&(x1, y1, w1, h1)), Some(&(x2, y2, w2, h2))) = (
-            state_positions.get(&relation.state1),
-            state_positions.get(&relation.state2),
+        if let Some(transition) = state_transition_element(
+            relation,
+            states,
+            state_positions,
+            edge_bend_points,
+            edge_label_positions,
+            start_end_radius,
         ) {
-            let state1 = states.get(&relation.state1);
-            let state2 = states.get(&relation.state2);
-
-            // Get bend points and label position from layout
-            let edge_key = (relation.state1.clone(), relation.state2.clone());
-            let bend_points = edge_bend_points.get(&edge_key);
-            let label_position = edge_label_positions.get(&edge_key);
-
-            let transition_elem = render_transition(
-                x1,
-                y1,
-                x2,
-                y2,
-                w1,
-                h1,
-                w2,
-                h2,
-                start_end_radius,
-                70.0, // fork_join_width (horizontal bar)
-                10.0, // fork_join_height
-                state1.map(|s| s.state_type),
-                state2.map(|s| s.state_type),
-                relation.description.as_deref(),
-                bend_points,
-                label_position,
-            );
-            doc.add_element(transition_elem);
+            doc.add_element(transition);
         }
     }
+}
 
-    Ok(doc.to_string())
+fn state_transition_element(
+    relation: &Relation,
+    states: &HashMap<String, State>,
+    state_positions: &HashMap<String, (f64, f64, f64, f64)>,
+    edge_bend_points: &EdgePointMap,
+    edge_label_positions: &EdgeLabelMap,
+    start_end_radius: f64,
+) -> Option<SvgElement> {
+    let &(x1, y1, w1, h1) = state_positions.get(&relation.state1)?;
+    let &(x2, y2, w2, h2) = state_positions.get(&relation.state2)?;
+    let edge_key = (relation.state1.clone(), relation.state2.clone());
+
+    Some(render_transition(
+        x1,
+        y1,
+        x2,
+        y2,
+        w1,
+        h1,
+        w2,
+        h2,
+        start_end_radius,
+        70.0,
+        10.0,
+        states.get(&relation.state1).map(|state| state.state_type),
+        states.get(&relation.state2).map(|state| state.state_type),
+        relation.description.as_deref(),
+        edge_bend_points.get(&edge_key),
+        edge_label_positions.get(&edge_key),
+    ))
 }
 
 /// Render a composite state as a container box with a title

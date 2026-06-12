@@ -1457,378 +1457,434 @@ fn draw_arrow(
     let p1 = commit_pos.get(&commit_a.id)?;
     let p2 = commit_pos.get(&commit_b.id)?;
     let arrow_needs_rerouting = should_reroute_arrow(commit_a, commit_b, p1, p2, all_commits, dir);
-
-    let mut color_class_num = branch_pos
-        .get(&commit_b.branch)
-        .map(|b| b.index)
-        .unwrap_or(0);
-    if commit_b.commit_type == CommitType::Merge && commit_a.id != commit_b.parents[0] {
-        color_class_num = branch_pos
-            .get(&commit_a.branch)
-            .map(|b| b.index)
-            .unwrap_or(0);
-    }
-
-    let line_def = if arrow_needs_rerouting {
-        let arc = "A 10 10, 0, 0, 0,";
-        let arc2 = "A 10 10, 0, 0, 1,";
-        let radius = 10.0;
-        let offset = 10.0;
-
-        let line_y = if p1.y < p2.y {
-            find_lane(p1.y, p2.y, lanes, 0)
-        } else {
-            find_lane(p2.y, p1.y, lanes, 0)
-        };
-        let line_x = if p1.x < p2.x {
-            find_lane(p1.x, p2.x, lanes, 0)
-        } else {
-            find_lane(p2.x, p1.x, lanes, 0)
-        };
-
-        match dir {
-            DiagramOrientation::TopToBottom => {
-                if p1.x < p2.x {
-                    format!(
-                        "M {} {} L {} {} {} {} {} L {} {} {} {} {} L {} {}",
-                        p1.x,
-                        p1.y,
-                        line_x - radius,
-                        p1.y,
-                        arc2,
-                        line_x,
-                        p1.y + offset,
-                        line_x,
-                        p2.y - radius,
-                        arc,
-                        line_x + offset,
-                        p2.y,
-                        p2.x,
-                        p2.y
-                    )
-                } else {
-                    color_class_num = branch_pos
-                        .get(&commit_a.branch)
-                        .map(|b| b.index)
-                        .unwrap_or(0);
-                    format!(
-                        "M {} {} L {} {} {} {} {} L {} {} {} {} {} L {} {}",
-                        p1.x,
-                        p1.y,
-                        line_x + radius,
-                        p1.y,
-                        arc,
-                        line_x,
-                        p1.y + offset,
-                        line_x,
-                        p2.y - radius,
-                        arc2,
-                        line_x - offset,
-                        p2.y,
-                        p2.x,
-                        p2.y
-                    )
-                }
-            }
-            DiagramOrientation::BottomToTop => {
-                if p1.x < p2.x {
-                    format!(
-                        "M {} {} L {} {} {} {} {} L {} {} {} {} {} L {} {}",
-                        p1.x,
-                        p1.y,
-                        line_x - radius,
-                        p1.y,
-                        arc,
-                        line_x,
-                        p1.y - offset,
-                        line_x,
-                        p2.y + radius,
-                        arc2,
-                        line_x + offset,
-                        p2.y,
-                        p2.x,
-                        p2.y
-                    )
-                } else {
-                    color_class_num = branch_pos
-                        .get(&commit_a.branch)
-                        .map(|b| b.index)
-                        .unwrap_or(0);
-                    format!(
-                        "M {} {} L {} {} {} {} {} L {} {} {} {} {} L {} {}",
-                        p1.x,
-                        p1.y,
-                        line_x + radius,
-                        p1.y,
-                        arc2,
-                        line_x,
-                        p1.y - offset,
-                        line_x,
-                        p2.y + radius,
-                        arc,
-                        line_x - offset,
-                        p2.y,
-                        p2.x,
-                        p2.y
-                    )
-                }
-            }
-            DiagramOrientation::LeftToRight => {
-                if p1.y < p2.y {
-                    format!(
-                        "M {} {} L {} {} {} {} {} L {} {} {} {} {} L {} {}",
-                        p1.x,
-                        p1.y,
-                        p1.x,
-                        line_y - radius,
-                        arc,
-                        p1.x + offset,
-                        line_y,
-                        p2.x - radius,
-                        line_y,
-                        arc2,
-                        p2.x,
-                        line_y + offset,
-                        p2.x,
-                        p2.y
-                    )
-                } else {
-                    color_class_num = branch_pos
-                        .get(&commit_a.branch)
-                        .map(|b| b.index)
-                        .unwrap_or(0);
-                    format!(
-                        "M {} {} L {} {} {} {} {} L {} {} {} {} {} L {} {}",
-                        p1.x,
-                        p1.y,
-                        p1.x,
-                        line_y + radius,
-                        arc2,
-                        p1.x + offset,
-                        line_y,
-                        p2.x - radius,
-                        line_y,
-                        arc,
-                        p2.x,
-                        line_y - offset,
-                        p2.x,
-                        p2.y
-                    )
-                }
-            }
-        }
+    let arrow_line = if arrow_needs_rerouting {
+        rerouted_arrow_line(p1, p2, dir, lanes)
     } else {
-        let arc = "A 20 20, 0, 0, 0,";
-        let arc2 = "A 20 20, 0, 0, 1,";
-        let radius = 20.0;
-        let offset = 20.0;
-
-        match dir {
-            DiagramOrientation::TopToBottom => {
-                if p1.x < p2.x {
-                    if commit_b.commit_type == CommitType::Merge
-                        && commit_a.id != commit_b.parents[0]
-                    {
-                        format!(
-                            "M {} {} L {} {} {} {} {} L {} {}",
-                            p1.x,
-                            p1.y,
-                            p1.x,
-                            p2.y - radius,
-                            arc,
-                            p1.x + offset,
-                            p2.y,
-                            p2.x,
-                            p2.y
-                        )
-                    } else {
-                        format!(
-                            "M {} {} L {} {} {} {} {} L {} {}",
-                            p1.x,
-                            p1.y,
-                            p2.x - radius,
-                            p1.y,
-                            arc2,
-                            p2.x,
-                            p1.y + offset,
-                            p2.x,
-                            p2.y
-                        )
-                    }
-                } else if p1.x > p2.x {
-                    if commit_b.commit_type == CommitType::Merge
-                        && commit_a.id != commit_b.parents[0]
-                    {
-                        format!(
-                            "M {} {} L {} {} {} {} {} L {} {}",
-                            p1.x,
-                            p1.y,
-                            p1.x,
-                            p2.y - radius,
-                            arc2,
-                            p1.x - offset,
-                            p2.y,
-                            p2.x,
-                            p2.y
-                        )
-                    } else {
-                        format!(
-                            "M {} {} L {} {} {} {} {} L {} {}",
-                            p1.x,
-                            p1.y,
-                            p2.x + radius,
-                            p1.y,
-                            arc,
-                            p2.x,
-                            p1.y + offset,
-                            p2.x,
-                            p2.y
-                        )
-                    }
-                } else {
-                    format!("M {} {} L {} {}", p1.x, p1.y, p2.x, p2.y)
-                }
-            }
-            DiagramOrientation::BottomToTop => {
-                if p1.x < p2.x {
-                    if commit_b.commit_type == CommitType::Merge
-                        && commit_a.id != commit_b.parents[0]
-                    {
-                        format!(
-                            "M {} {} L {} {} {} {} {} L {} {}",
-                            p1.x,
-                            p1.y,
-                            p1.x,
-                            p2.y + radius,
-                            arc2,
-                            p1.x + offset,
-                            p2.y,
-                            p2.x,
-                            p2.y
-                        )
-                    } else {
-                        format!(
-                            "M {} {} L {} {} {} {} {} L {} {}",
-                            p1.x,
-                            p1.y,
-                            p2.x - radius,
-                            p1.y,
-                            arc,
-                            p2.x,
-                            p1.y - offset,
-                            p2.x,
-                            p2.y
-                        )
-                    }
-                } else if p1.x > p2.x {
-                    if commit_b.commit_type == CommitType::Merge
-                        && commit_a.id != commit_b.parents[0]
-                    {
-                        format!(
-                            "M {} {} L {} {} {} {} {} L {} {}",
-                            p1.x,
-                            p1.y,
-                            p1.x,
-                            p2.y + radius,
-                            arc,
-                            p1.x - offset,
-                            p2.y,
-                            p2.x,
-                            p2.y
-                        )
-                    } else {
-                        format!(
-                            "M {} {} L {} {} {} {} {} L {} {}",
-                            p1.x,
-                            p1.y,
-                            p2.x - radius,
-                            p1.y,
-                            arc,
-                            p2.x,
-                            p1.y - offset,
-                            p2.x,
-                            p2.y
-                        )
-                    }
-                } else {
-                    format!("M {} {} L {} {}", p1.x, p1.y, p2.x, p2.y)
-                }
-            }
-            DiagramOrientation::LeftToRight => {
-                if p1.y < p2.y {
-                    if commit_b.commit_type == CommitType::Merge
-                        && commit_a.id != commit_b.parents[0]
-                    {
-                        format!(
-                            "M {} {} L {} {} {} {} {} L {} {}",
-                            p1.x,
-                            p1.y,
-                            p2.x - radius,
-                            p1.y,
-                            arc2,
-                            p2.x,
-                            p1.y + offset,
-                            p2.x,
-                            p2.y
-                        )
-                    } else {
-                        format!(
-                            "M {} {} L {} {} {} {} {} L {} {}",
-                            p1.x,
-                            p1.y,
-                            p1.x,
-                            p2.y - radius,
-                            arc,
-                            p1.x + offset,
-                            p2.y,
-                            p2.x,
-                            p2.y
-                        )
-                    }
-                } else if p1.y > p2.y {
-                    if commit_b.commit_type == CommitType::Merge
-                        && commit_a.id != commit_b.parents[0]
-                    {
-                        format!(
-                            "M {} {} L {} {} {} {} {} L {} {}",
-                            p1.x,
-                            p1.y,
-                            p2.x - radius,
-                            p1.y,
-                            arc,
-                            p2.x,
-                            p1.y - offset,
-                            p2.x,
-                            p2.y
-                        )
-                    } else {
-                        format!(
-                            "M {} {} L {} {} {} {} {} L {} {}",
-                            p1.x,
-                            p1.y,
-                            p1.x,
-                            p2.y + radius,
-                            arc2,
-                            p1.x + offset,
-                            p2.y,
-                            p2.x,
-                            p2.y
-                        )
-                    }
-                } else {
-                    format!("M {} {} L {} {}", p1.x, p1.y, p2.x, p2.y)
-                }
-            }
-        }
+        direct_arrow_line(p1, p2, dir, is_secondary_merge(commit_a, commit_b))
     };
+    let color_class_num =
+        arrow_color_class(commit_a, commit_b, branch_pos, arrow_line.use_source_color);
 
     Some(SvgElement::Path {
-        d: line_def,
+        d: arrow_line.path,
         attrs: Attrs::new().with_class(&format!(
             "arrow arrow{}",
             color_class_num % THEME_COLOR_LIMIT
         )),
     })
+}
+
+struct ArrowLine {
+    path: String,
+    use_source_color: bool,
+}
+
+fn arrow_color_class(
+    commit_a: &Commit,
+    commit_b: &Commit,
+    branch_pos: &HashMap<String, BranchPosition>,
+    use_source_color: bool,
+) -> usize {
+    let branch = if use_source_color || is_secondary_merge(commit_a, commit_b) {
+        &commit_a.branch
+    } else {
+        &commit_b.branch
+    };
+
+    branch_pos
+        .get(branch)
+        .map(|branch| branch.index)
+        .unwrap_or(0)
+}
+
+fn is_secondary_merge(commit_a: &Commit, commit_b: &Commit) -> bool {
+    commit_b.commit_type == CommitType::Merge && commit_a.id != commit_b.parents[0]
+}
+
+fn rerouted_arrow_line(
+    p1: &CommitPosition,
+    p2: &CommitPosition,
+    dir: DiagramOrientation,
+    lanes: &mut Vec<f64>,
+) -> ArrowLine {
+    let line_y = find_lane(p1.y.min(p2.y), p1.y.max(p2.y), lanes, 0);
+    let line_x = find_lane(p1.x.min(p2.x), p1.x.max(p2.x), lanes, 0);
+    match dir {
+        DiagramOrientation::TopToBottom => rerouted_top_to_bottom_arrow(p1, p2, line_x, false),
+        DiagramOrientation::BottomToTop => rerouted_bottom_to_top_arrow(p1, p2, line_x, false),
+        DiagramOrientation::LeftToRight => rerouted_left_to_right_arrow(p1, p2, line_y, false),
+    }
+}
+
+fn rerouted_top_to_bottom_arrow(
+    p1: &CommitPosition,
+    p2: &CommitPosition,
+    line_x: f64,
+    _unused: bool,
+) -> ArrowLine {
+    let (arc, arc2, radius, offset) = small_arrow_curve_parts();
+    let use_source_color = p1.x >= p2.x;
+    let path = if p1.x < p2.x {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            line_x - radius,
+            p1.y,
+            arc2,
+            line_x,
+            p1.y + offset,
+            line_x,
+            p2.y - radius,
+            arc,
+            line_x + offset,
+            p2.y,
+            p2.x,
+            p2.y
+        )
+    } else {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            line_x + radius,
+            p1.y,
+            arc,
+            line_x,
+            p1.y + offset,
+            line_x,
+            p2.y - radius,
+            arc2,
+            line_x - offset,
+            p2.y,
+            p2.x,
+            p2.y
+        )
+    };
+    ArrowLine {
+        path,
+        use_source_color,
+    }
+}
+
+fn rerouted_bottom_to_top_arrow(
+    p1: &CommitPosition,
+    p2: &CommitPosition,
+    line_x: f64,
+    _unused: bool,
+) -> ArrowLine {
+    let (arc, arc2, radius, offset) = small_arrow_curve_parts();
+    let use_source_color = p1.x >= p2.x;
+    let path = if p1.x < p2.x {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            line_x - radius,
+            p1.y,
+            arc,
+            line_x,
+            p1.y - offset,
+            line_x,
+            p2.y + radius,
+            arc2,
+            line_x + offset,
+            p2.y,
+            p2.x,
+            p2.y
+        )
+    } else {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            line_x + radius,
+            p1.y,
+            arc2,
+            line_x,
+            p1.y - offset,
+            line_x,
+            p2.y + radius,
+            arc,
+            line_x - offset,
+            p2.y,
+            p2.x,
+            p2.y
+        )
+    };
+    ArrowLine {
+        path,
+        use_source_color,
+    }
+}
+
+fn rerouted_left_to_right_arrow(
+    p1: &CommitPosition,
+    p2: &CommitPosition,
+    line_y: f64,
+    _unused: bool,
+) -> ArrowLine {
+    let (arc, arc2, radius, offset) = small_arrow_curve_parts();
+    let use_source_color = p1.y >= p2.y;
+    let path = if p1.y < p2.y {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p1.x,
+            line_y - radius,
+            arc,
+            p1.x + offset,
+            line_y,
+            p2.x - radius,
+            line_y,
+            arc2,
+            p2.x,
+            line_y + offset,
+            p2.x,
+            p2.y
+        )
+    } else {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p1.x,
+            line_y + radius,
+            arc2,
+            p1.x + offset,
+            line_y,
+            p2.x - radius,
+            line_y,
+            arc,
+            p2.x,
+            line_y - offset,
+            p2.x,
+            p2.y
+        )
+    };
+    ArrowLine {
+        path,
+        use_source_color,
+    }
+}
+
+fn direct_arrow_line(
+    p1: &CommitPosition,
+    p2: &CommitPosition,
+    dir: DiagramOrientation,
+    secondary_merge: bool,
+) -> ArrowLine {
+    let path = match dir {
+        DiagramOrientation::TopToBottom => direct_top_to_bottom_arrow(p1, p2, secondary_merge),
+        DiagramOrientation::BottomToTop => direct_bottom_to_top_arrow(p1, p2, secondary_merge),
+        DiagramOrientation::LeftToRight => direct_left_to_right_arrow(p1, p2, secondary_merge),
+    };
+    ArrowLine {
+        path,
+        use_source_color: false,
+    }
+}
+
+fn direct_top_to_bottom_arrow(
+    p1: &CommitPosition,
+    p2: &CommitPosition,
+    secondary_merge: bool,
+) -> String {
+    let (arc, arc2, radius, offset) = large_arrow_curve_parts();
+    if p1.x < p2.x && secondary_merge {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p1.x,
+            p2.y - radius,
+            arc,
+            p1.x + offset,
+            p2.y,
+            p2.x,
+            p2.y
+        )
+    } else if p1.x < p2.x {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p2.x - radius,
+            p1.y,
+            arc2,
+            p2.x,
+            p1.y + offset,
+            p2.x,
+            p2.y
+        )
+    } else if p1.x > p2.x && secondary_merge {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p1.x,
+            p2.y - radius,
+            arc2,
+            p1.x - offset,
+            p2.y,
+            p2.x,
+            p2.y
+        )
+    } else if p1.x > p2.x {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p2.x + radius,
+            p1.y,
+            arc,
+            p2.x,
+            p1.y + offset,
+            p2.x,
+            p2.y
+        )
+    } else {
+        direct_line(p1, p2)
+    }
+}
+
+fn direct_bottom_to_top_arrow(
+    p1: &CommitPosition,
+    p2: &CommitPosition,
+    secondary_merge: bool,
+) -> String {
+    let (arc, arc2, radius, offset) = large_arrow_curve_parts();
+    if p1.x < p2.x && secondary_merge {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p1.x,
+            p2.y + radius,
+            arc2,
+            p1.x + offset,
+            p2.y,
+            p2.x,
+            p2.y
+        )
+    } else if p1.x < p2.x {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p2.x - radius,
+            p1.y,
+            arc,
+            p2.x,
+            p1.y - offset,
+            p2.x,
+            p2.y
+        )
+    } else if p1.x > p2.x && secondary_merge {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p1.x,
+            p2.y + radius,
+            arc,
+            p1.x - offset,
+            p2.y,
+            p2.x,
+            p2.y
+        )
+    } else if p1.x > p2.x {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p2.x - radius,
+            p1.y,
+            arc,
+            p2.x,
+            p1.y - offset,
+            p2.x,
+            p2.y
+        )
+    } else {
+        direct_line(p1, p2)
+    }
+}
+
+fn direct_left_to_right_arrow(
+    p1: &CommitPosition,
+    p2: &CommitPosition,
+    secondary_merge: bool,
+) -> String {
+    let (arc, arc2, radius, offset) = large_arrow_curve_parts();
+    if p1.y < p2.y && secondary_merge {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p2.x - radius,
+            p1.y,
+            arc2,
+            p2.x,
+            p1.y + offset,
+            p2.x,
+            p2.y
+        )
+    } else if p1.y < p2.y {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p1.x,
+            p2.y - radius,
+            arc,
+            p1.x + offset,
+            p2.y,
+            p2.x,
+            p2.y
+        )
+    } else if p1.y > p2.y && secondary_merge {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p2.x - radius,
+            p1.y,
+            arc,
+            p2.x,
+            p1.y - offset,
+            p2.x,
+            p2.y
+        )
+    } else if p1.y > p2.y {
+        format!(
+            "M {} {} L {} {} {} {} {} L {} {}",
+            p1.x,
+            p1.y,
+            p1.x,
+            p2.y + radius,
+            arc2,
+            p1.x + offset,
+            p2.y,
+            p2.x,
+            p2.y
+        )
+    } else {
+        direct_line(p1, p2)
+    }
+}
+
+fn small_arrow_curve_parts() -> (&'static str, &'static str, f64, f64) {
+    ("A 10 10, 0, 0, 0,", "A 10 10, 0, 0, 1,", 10.0, 10.0)
+}
+
+fn large_arrow_curve_parts() -> (&'static str, &'static str, f64, f64) {
+    ("A 20 20, 0, 0, 0,", "A 20 20, 0, 0, 1,", 20.0, 20.0)
+}
+
+fn direct_line(p1: &CommitPosition, p2: &CommitPosition) -> String {
+    format!("M {} {} L {} {}", p1.x, p1.y, p2.x, p2.y)
 }
 
 fn should_reroute_arrow(

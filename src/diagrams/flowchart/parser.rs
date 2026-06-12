@@ -36,65 +36,67 @@ pub fn parse_into(input: &str, db: &mut FlowchartDb) -> Result<()> {
 }
 
 fn process_rule(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> Result<()> {
-    match pair.as_rule() {
-        Rule::graph_config => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::direction {
-                    db.set_direction(inner.as_str());
-                }
-            }
-        }
-        Rule::document => {
-            for inner in pair.into_inner() {
-                process_rule(inner, db)?;
-            }
-        }
-        Rule::statement => {
-            for inner in pair.into_inner() {
-                process_rule(inner, db)?;
-            }
-        }
-        Rule::direction_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::direction {
-                    db.set_direction(inner.as_str());
-                }
-            }
-        }
-        Rule::vertex_statement => {
-            process_vertex_statement(pair, db)?;
-        }
-        Rule::acc_title_stmt => {
-            for inner in pair.into_inner() {
-                if inner.as_rule() == Rule::line_content {
-                    db.set_acc_title(inner.as_str().trim());
-                }
-            }
-        }
-        Rule::acc_descr_stmt => {
-            process_acc_descr(pair, db)?;
-        }
-        Rule::class_def_stmt => {
-            process_class_def(pair, db)?;
-        }
-        Rule::class_stmt => {
-            process_class_stmt(pair, db)?;
-        }
-        Rule::style_stmt => {
-            process_style_stmt(pair, db)?;
-        }
-        Rule::link_style_stmt => {
-            process_link_style_stmt(pair, db)?;
-        }
-        Rule::click_stmt => {
-            process_click_stmt(pair, db)?;
-        }
-        Rule::subgraph_stmt => {
-            process_subgraph(pair, db)?;
-        }
+    let rule = pair.as_rule();
+    if process_primary_rule(rule, pair.clone(), db)? {
+        return Ok(());
+    }
+    process_secondary_rule(rule, pair, db)
+}
+
+fn process_primary_rule(
+    rule: Rule,
+    pair: pest::iterators::Pair<Rule>,
+    db: &mut FlowchartDb,
+) -> Result<bool> {
+    match rule {
+        Rule::graph_config | Rule::direction_stmt => process_direction_rule(pair, db),
+        Rule::document | Rule::statement => process_nested_rule(pair, db)?,
+        Rule::vertex_statement => process_vertex_statement(pair, db)?,
+        Rule::acc_title_stmt => process_acc_title(pair, db),
+        Rule::acc_descr_stmt => process_acc_descr(pair, db)?,
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
+fn process_secondary_rule(
+    rule: Rule,
+    pair: pest::iterators::Pair<Rule>,
+    db: &mut FlowchartDb,
+) -> Result<()> {
+    match rule {
+        Rule::class_def_stmt => process_class_def(pair, db)?,
+        Rule::class_stmt => process_class_stmt(pair, db)?,
+        Rule::style_stmt => process_style_stmt(pair, db)?,
+        Rule::link_style_stmt => process_link_style_stmt(pair, db)?,
+        Rule::click_stmt => process_click_stmt(pair, db)?,
+        Rule::subgraph_stmt => process_subgraph(pair, db)?,
         _ => {}
     }
     Ok(())
+}
+
+fn process_nested_rule(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> Result<()> {
+    for inner in pair.into_inner() {
+        process_rule(inner, db)?;
+    }
+    Ok(())
+}
+
+fn process_direction_rule(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::direction {
+            db.set_direction(inner.as_str());
+        }
+    }
+}
+
+fn process_acc_title(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::line_content {
+            db.set_acc_title(inner.as_str().trim());
+        }
+    }
 }
 
 fn process_vertex_statement(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> Result<()> {
@@ -204,27 +206,31 @@ fn process_vertex(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> Re
 
 fn process_vertex_shape(pair: pest::iterators::Pair<Rule>) -> Result<(FlowVertexType, FlowText)> {
     let inner = pair.into_inner().next().unwrap();
-
-    let (shape_type, text) = match inner.as_rule() {
-        Rule::shape_square => (FlowVertexType::Square, extract_text(inner)?),
-        Rule::shape_round => (FlowVertexType::Round, extract_text(inner)?),
-        Rule::shape_circle => (FlowVertexType::Circle, extract_text(inner)?),
-        Rule::shape_double_circle => (FlowVertexType::DoubleCircle, extract_text(inner)?),
-        Rule::shape_stadium => (FlowVertexType::Stadium, extract_text(inner)?),
-        Rule::shape_subroutine => (FlowVertexType::Subroutine, extract_text(inner)?),
-        Rule::shape_cylinder => (FlowVertexType::Cylinder, extract_text(inner)?),
-        Rule::shape_diamond => (FlowVertexType::Diamond, extract_text(inner)?),
-        Rule::shape_hexagon => (FlowVertexType::Hexagon, extract_text(inner)?),
-        Rule::shape_ellipse => (FlowVertexType::Ellipse, extract_text(inner)?),
-        Rule::shape_odd => (FlowVertexType::Odd, extract_text(inner)?),
-        Rule::shape_trapezoid => (FlowVertexType::Trapezoid, extract_text(inner)?),
-        Rule::shape_inv_trapezoid => (FlowVertexType::InvTrapezoid, extract_text(inner)?),
-        Rule::shape_lean_right => (FlowVertexType::LeanRight, extract_text(inner)?),
-        Rule::shape_lean_left => (FlowVertexType::LeanLeft, extract_text(inner)?),
-        _ => return Err(MermaidError::ParseError("Unknown shape type".to_string())),
-    };
+    let shape_type = flow_vertex_type(inner.as_rule())?;
+    let text = extract_text(inner)?;
 
     Ok((shape_type, text))
+}
+
+fn flow_vertex_type(rule: Rule) -> Result<FlowVertexType> {
+    match rule {
+        Rule::shape_square => Ok(FlowVertexType::Square),
+        Rule::shape_round => Ok(FlowVertexType::Round),
+        Rule::shape_circle => Ok(FlowVertexType::Circle),
+        Rule::shape_double_circle => Ok(FlowVertexType::DoubleCircle),
+        Rule::shape_stadium => Ok(FlowVertexType::Stadium),
+        Rule::shape_subroutine => Ok(FlowVertexType::Subroutine),
+        Rule::shape_cylinder => Ok(FlowVertexType::Cylinder),
+        Rule::shape_diamond => Ok(FlowVertexType::Diamond),
+        Rule::shape_hexagon => Ok(FlowVertexType::Hexagon),
+        Rule::shape_ellipse => Ok(FlowVertexType::Ellipse),
+        Rule::shape_odd => Ok(FlowVertexType::Odd),
+        Rule::shape_trapezoid => Ok(FlowVertexType::Trapezoid),
+        Rule::shape_inv_trapezoid => Ok(FlowVertexType::InvTrapezoid),
+        Rule::shape_lean_right => Ok(FlowVertexType::LeanRight),
+        Rule::shape_lean_left => Ok(FlowVertexType::LeanLeft),
+        _ => Err(MermaidError::ParseError("Unknown shape type".to_string())),
+    }
 }
 
 fn extract_text(pair: pest::iterators::Pair<Rule>) -> Result<FlowText> {
@@ -495,51 +501,13 @@ fn process_click_stmt(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -
             }
             Rule::click_action => {
                 for action in inner.into_inner() {
-                    match action.as_rule() {
-                        Rule::callback_action | Rule::simple_callback => {
-                            for a in action.into_inner() {
-                                match a.as_rule() {
-                                    Rule::identifier => {
-                                        callback = Some(a.as_str().to_string());
-                                    }
-                                    Rule::tooltip => {
-                                        for t in a.into_inner() {
-                                            if t.as_rule() == Rule::quoted_string {
-                                                let s = t.as_str();
-                                                tooltip = Some(s[1..s.len() - 1].to_string());
-                                            }
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        Rule::href_action => {
-                            for a in action.into_inner() {
-                                match a.as_rule() {
-                                    Rule::quoted_string => {
-                                        let s = a.as_str();
-                                        href = Some(s[1..s.len() - 1].to_string());
-                                    }
-                                    Rule::link_target => {
-                                        for t in a.into_inner() {
-                                            link_target = Some(t.as_str().to_string());
-                                        }
-                                    }
-                                    Rule::tooltip => {
-                                        for t in a.into_inner() {
-                                            if t.as_rule() == Rule::quoted_string {
-                                                let s = t.as_str();
-                                                tooltip = Some(s[1..s.len() - 1].to_string());
-                                            }
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
+                    process_click_action(
+                        action,
+                        &mut callback,
+                        &mut href,
+                        &mut tooltip,
+                        &mut link_target,
+                    );
                 }
             }
             _ => {}
@@ -557,6 +525,71 @@ fn process_click_stmt(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -
     }
 
     Ok(())
+}
+
+fn process_click_action(
+    action: pest::iterators::Pair<Rule>,
+    callback: &mut Option<String>,
+    href: &mut Option<String>,
+    tooltip: &mut Option<String>,
+    link_target: &mut Option<String>,
+) {
+    match action.as_rule() {
+        Rule::callback_action | Rule::simple_callback => {
+            process_callback_action(action, callback, tooltip);
+        }
+        Rule::href_action => {
+            process_href_action(action, href, tooltip, link_target);
+        }
+        _ => {}
+    }
+}
+
+fn process_callback_action(
+    action: pest::iterators::Pair<Rule>,
+    callback: &mut Option<String>,
+    tooltip: &mut Option<String>,
+) {
+    for part in action.into_inner() {
+        match part.as_rule() {
+            Rule::identifier => *callback = Some(part.as_str().to_string()),
+            Rule::tooltip => *tooltip = extract_quoted_child(part),
+            _ => {}
+        }
+    }
+}
+
+fn process_href_action(
+    action: pest::iterators::Pair<Rule>,
+    href: &mut Option<String>,
+    tooltip: &mut Option<String>,
+    link_target: &mut Option<String>,
+) {
+    for part in action.into_inner() {
+        match part.as_rule() {
+            Rule::quoted_string => *href = Some(unquote(part.as_str())),
+            Rule::link_target => {
+                for target in part.into_inner() {
+                    *link_target = Some(target.as_str().to_string());
+                }
+            }
+            Rule::tooltip => *tooltip = extract_quoted_child(part),
+            _ => {}
+        }
+    }
+}
+
+fn extract_quoted_child(pair: pest::iterators::Pair<Rule>) -> Option<String> {
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::quoted_string {
+            return Some(unquote(inner.as_str()));
+        }
+    }
+    None
+}
+
+fn unquote(value: &str) -> String {
+    value[1..value.len() - 1].to_string()
 }
 
 fn process_subgraph(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> Result<()> {

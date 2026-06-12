@@ -77,80 +77,96 @@ pub fn detect_type(input: &str) -> Result<DiagramType> {
     let cleaned = remove_frontmatter(input);
     let cleaned = remove_comments(&cleaned);
 
-    // Check in order of specificity (more specific patterns first)
-    if SEQUENCE_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Sequence);
-    }
-    if CLASS_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Class);
-    }
-    if STATE_RE.is_match(&cleaned) {
-        return Ok(DiagramType::State);
-    }
-    if ER_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Er);
-    }
-    if GANTT_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Gantt);
-    }
-    if JOURNEY_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Journey);
-    }
-    if GIT_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Git);
-    }
-    if REQUIREMENT_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Requirement);
-    }
-    if QUADRANT_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Quadrant);
-    }
-    if C4_RE.is_match(&cleaned) {
-        return Ok(DiagramType::C4);
-    }
-    if PIE_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Pie);
-    }
-    if MINDMAP_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Mindmap);
-    }
-    if INFO_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Info);
-    }
-    if TIMELINE_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Timeline);
-    }
-    if SANKEY_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Sankey);
-    }
-    if XYCHART_RE.is_match(&cleaned) {
-        return Ok(DiagramType::XyChart);
-    }
-    if BLOCK_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Block);
-    }
-    if PACKET_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Packet);
-    }
-    if ARCHITECTURE_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Architecture);
-    }
-    if KANBAN_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Kanban);
-    }
-    if RADAR_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Radar);
-    }
-    if TREEMAP_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Treemap);
-    }
-    if FLOWCHART_RE.is_match(&cleaned) {
-        return Ok(DiagramType::Flowchart);
-    }
+    detect_structural_type(&cleaned)
+        .or_else(|| detect_chart_type(&cleaned))
+        .or_else(|| detect_beta_type(&cleaned))
+        .or_else(|| {
+            FLOWCHART_RE
+                .is_match(&cleaned)
+                .then_some(DiagramType::Flowchart)
+        })
+        .ok_or_else(|| {
+            MermaidError::UnknownDiagramType("Could not detect diagram type".to_string())
+        })
+}
 
-    Err(MermaidError::UnknownDiagramType(
-        "Could not detect diagram type".to_string(),
-    ))
+fn detect_structural_type(cleaned: &str) -> Option<DiagramType> {
+    // Check in order of specificity (more specific patterns first)
+    if SEQUENCE_RE.is_match(cleaned) {
+        return Some(DiagramType::Sequence);
+    }
+    if CLASS_RE.is_match(cleaned) {
+        return Some(DiagramType::Class);
+    }
+    if STATE_RE.is_match(cleaned) {
+        return Some(DiagramType::State);
+    }
+    if ER_RE.is_match(cleaned) {
+        return Some(DiagramType::Er);
+    }
+    if GANTT_RE.is_match(cleaned) {
+        return Some(DiagramType::Gantt);
+    }
+    if JOURNEY_RE.is_match(cleaned) {
+        return Some(DiagramType::Journey);
+    }
+    if GIT_RE.is_match(cleaned) {
+        return Some(DiagramType::Git);
+    }
+    if REQUIREMENT_RE.is_match(cleaned) {
+        return Some(DiagramType::Requirement);
+    }
+    if QUADRANT_RE.is_match(cleaned) {
+        return Some(DiagramType::Quadrant);
+    }
+    if C4_RE.is_match(cleaned) {
+        return Some(DiagramType::C4);
+    }
+    None
+}
+
+fn detect_chart_type(cleaned: &str) -> Option<DiagramType> {
+    if PIE_RE.is_match(cleaned) {
+        return Some(DiagramType::Pie);
+    }
+    if MINDMAP_RE.is_match(cleaned) {
+        return Some(DiagramType::Mindmap);
+    }
+    if INFO_RE.is_match(cleaned) {
+        return Some(DiagramType::Info);
+    }
+    if TIMELINE_RE.is_match(cleaned) {
+        return Some(DiagramType::Timeline);
+    }
+    if SANKEY_RE.is_match(cleaned) {
+        return Some(DiagramType::Sankey);
+    }
+    if XYCHART_RE.is_match(cleaned) {
+        return Some(DiagramType::XyChart);
+    }
+    None
+}
+
+fn detect_beta_type(cleaned: &str) -> Option<DiagramType> {
+    if BLOCK_RE.is_match(cleaned) {
+        return Some(DiagramType::Block);
+    }
+    if PACKET_RE.is_match(cleaned) {
+        return Some(DiagramType::Packet);
+    }
+    if ARCHITECTURE_RE.is_match(cleaned) {
+        return Some(DiagramType::Architecture);
+    }
+    if KANBAN_RE.is_match(cleaned) {
+        return Some(DiagramType::Kanban);
+    }
+    if RADAR_RE.is_match(cleaned) {
+        return Some(DiagramType::Radar);
+    }
+    if TREEMAP_RE.is_match(cleaned) {
+        return Some(DiagramType::Treemap);
+    }
+    None
 }
 
 /// Remove YAML frontmatter from input

@@ -87,65 +87,105 @@ pub fn render_text(text: &str) -> Result<String> {
 
 /// Render a diagram to SVG with custom configuration
 pub fn render_with_config(diagram: &Diagram, config: &RenderConfig) -> Result<String> {
+    render_primary_diagram(diagram, config)
+        .or_else(|| render_secondary_diagram(diagram, config))
+        .or_else(|| render_tertiary_diagram(diagram, config))
+        .unwrap_or_else(|| {
+            Err(MermaidError::RenderError(format!(
+                "Diagram type {:?} not yet supported for rendering",
+                diagram_type_name(diagram)
+            )))
+        })
+}
+
+fn render_primary_diagram(diagram: &Diagram, config: &RenderConfig) -> Option<Result<String>> {
     match diagram {
-        Diagram::Architecture(db) => render_architecture(db, config),
-        Diagram::Block(db) => block::render_block(db, config),
-        Diagram::C4(db) => c4::render_c4(db, config),
-        Diagram::Flowchart(db) => render_flowchart(db, config),
-        Diagram::Git(db) => git::render_git(db, config),
-        Diagram::Pie(db) => pie::render_pie(db, config),
-        Diagram::Sequence(db) => sequence::render_sequence(db, config),
-        Diagram::Class(db) => class::render_class(db, config),
-        Diagram::State(db) => state::render_state(db, config),
-        Diagram::Er(db) => er::render_er(db, config),
+        Diagram::Architecture(db) => Some(render_architecture(db, config)),
+        Diagram::Block(db) => Some(block::render_block(db, config)),
+        Diagram::C4(db) => Some(c4::render_c4(db, config)),
+        Diagram::Class(db) => Some(class::render_class(db, config)),
+        Diagram::Er(db) => Some(er::render_er(db, config)),
+        Diagram::Flowchart(db) => Some(render_flowchart(db, config)),
         Diagram::Gantt(db) => {
             let mut db_clone = db.clone();
-            gantt::render_gantt(&mut db_clone, config)
+            Some(gantt::render_gantt(&mut db_clone, config))
         }
-        Diagram::Mindmap(db) => mindmap::render_mindmap(db, config),
-        Diagram::Timeline(db) => timeline::render_timeline(db, config),
-        Diagram::Requirement(db) => requirement::render_requirement(db, config),
-        Diagram::Sankey(db) => sankey::render_sankey(db, config),
-        Diagram::Radar(db) => radar::render_radar(db, config),
-        Diagram::Packet(db) => packet::render_packet(db, config),
-        Diagram::XyChart(db) => xychart::render_xychart(db, config),
-        Diagram::Quadrant(db) => quadrant::render_quadrant(db, config),
-        Diagram::Treemap(db) => treemap::render_treemap(db, config),
-        Diagram::Journey(db) => journey::render_journey(db, config),
-        Diagram::Kanban(db) => kanban::render_kanban(db, config),
-        _ => Err(MermaidError::RenderError(format!(
-            "Diagram type {:?} not yet supported for rendering",
-            diagram_type_name(diagram)
-        ))),
+        Diagram::Git(db) => Some(git::render_git(db, config)),
+        _ => None,
+    }
+}
+
+fn render_secondary_diagram(diagram: &Diagram, config: &RenderConfig) -> Option<Result<String>> {
+    match diagram {
+        Diagram::Journey(db) => Some(journey::render_journey(db, config)),
+        Diagram::Kanban(db) => Some(kanban::render_kanban(db, config)),
+        Diagram::Mindmap(db) => Some(mindmap::render_mindmap(db, config)),
+        Diagram::Packet(db) => Some(packet::render_packet(db, config)),
+        Diagram::Pie(db) => Some(pie::render_pie(db, config)),
+        Diagram::Quadrant(db) => Some(quadrant::render_quadrant(db, config)),
+        Diagram::Radar(db) => Some(radar::render_radar(db, config)),
+        Diagram::Requirement(db) => Some(requirement::render_requirement(db, config)),
+        _ => None,
+    }
+}
+
+fn render_tertiary_diagram(diagram: &Diagram, config: &RenderConfig) -> Option<Result<String>> {
+    match diagram {
+        Diagram::Sankey(db) => Some(sankey::render_sankey(db, config)),
+        Diagram::Sequence(db) => Some(sequence::render_sequence(db, config)),
+        Diagram::State(db) => Some(state::render_state(db, config)),
+        Diagram::Timeline(db) => Some(timeline::render_timeline(db, config)),
+        Diagram::Treemap(db) => Some(treemap::render_treemap(db, config)),
+        Diagram::XyChart(db) => Some(xychart::render_xychart(db, config)),
+        _ => None,
     }
 }
 
 /// Get the name of the diagram type for error messages
 fn diagram_type_name(diagram: &Diagram) -> &'static str {
+    primary_diagram_type_name(diagram)
+        .or_else(|| secondary_diagram_type_name(diagram))
+        .unwrap_or_else(|| tertiary_diagram_type_name(diagram))
+}
+
+fn primary_diagram_type_name(diagram: &Diagram) -> Option<&'static str> {
     match diagram {
-        Diagram::Architecture(_) => "Architecture",
-        Diagram::Block(_) => "Block",
-        Diagram::C4(_) => "C4",
-        Diagram::Class(_) => "Class",
-        Diagram::Er(_) => "ER",
-        Diagram::Flowchart(_) => "Flowchart",
-        Diagram::Gantt(_) => "Gantt",
-        Diagram::Git(_) => "Git",
-        Diagram::Info(_) => "Info",
-        Diagram::Journey(_) => "Journey",
-        Diagram::Kanban(_) => "Kanban",
-        Diagram::Mindmap(_) => "Mindmap",
-        Diagram::Packet(_) => "Packet",
-        Diagram::Pie(_) => "Pie",
-        Diagram::Quadrant(_) => "Quadrant",
-        Diagram::Radar(_) => "Radar",
-        Diagram::Requirement(_) => "Requirement",
+        Diagram::Architecture(_) => Some("Architecture"),
+        Diagram::Block(_) => Some("Block"),
+        Diagram::C4(_) => Some("C4"),
+        Diagram::Class(_) => Some("Class"),
+        Diagram::Er(_) => Some("ER"),
+        Diagram::Flowchart(_) => Some("Flowchart"),
+        Diagram::Gantt(_) => Some("Gantt"),
+        Diagram::Git(_) => Some("Git"),
+        _ => None,
+    }
+}
+
+fn secondary_diagram_type_name(diagram: &Diagram) -> Option<&'static str> {
+    match diagram {
+        Diagram::Info(_) => Some("Info"),
+        Diagram::Journey(_) => Some("Journey"),
+        Diagram::Kanban(_) => Some("Kanban"),
+        Diagram::Mindmap(_) => Some("Mindmap"),
+        Diagram::Packet(_) => Some("Packet"),
+        Diagram::Pie(_) => Some("Pie"),
+        Diagram::Quadrant(_) => Some("Quadrant"),
+        Diagram::Radar(_) => Some("Radar"),
+        Diagram::Requirement(_) => Some("Requirement"),
+        _ => None,
+    }
+}
+
+fn tertiary_diagram_type_name(diagram: &Diagram) -> &'static str {
+    match diagram {
         Diagram::Sankey(_) => "Sankey",
         Diagram::Sequence(_) => "Sequence",
         Diagram::State(_) => "State",
         Diagram::Timeline(_) => "Timeline",
         Diagram::Treemap(_) => "Treemap",
         Diagram::XyChart(_) => "XyChart",
+        _ => "Unknown",
     }
 }
 
@@ -202,69 +242,121 @@ pub fn render_ascii_with_config(
     diagram: &Diagram,
     config: &ascii::AsciiRenderConfig,
 ) -> Result<String> {
-    use crate::layout::{self, CharacterSizeEstimator, ToLayoutGraph};
-
     let estimator = CharacterSizeEstimator::default();
 
-    let result = match diagram {
-        Diagram::Flowchart(db) => {
-            let graph = db.to_layout_graph(&estimator)?;
-            let graph = layout::layout(graph)?;
-            Ok(ascii::render_flowchart_ascii_with_config(
-                db, &graph, config,
-            )?)
-        }
-        Diagram::Sequence(db) => Ok(ascii::render_sequence_ascii(db)?),
-        Diagram::Class(db) => {
-            let graph = db.to_layout_graph(&estimator)?;
-            let graph = layout::layout(graph)?;
-            Ok(ascii::render_class_ascii(db, &graph)?)
-        }
-        Diagram::State(db) => {
-            let graph = db.to_layout_graph(&estimator)?;
-            let graph = layout::layout(graph)?;
-            Ok(ascii::render_graph_ascii_with_config(&graph, config)?)
-        }
-        Diagram::Er(db) => {
-            let graph = db.to_layout_graph(&estimator)?;
-            let graph = layout::layout(graph)?;
-            Ok(ascii::render_er_ascii(db, &graph)?)
-        }
-        Diagram::Architecture(db) => {
-            let graph = architecture::layout_architecture(db, &estimator)?;
-            Ok(ascii::render_graph_ascii_with_config(&graph, config)?)
-        }
-        Diagram::Requirement(db) => {
-            let graph = db.to_layout_graph(&estimator)?;
-            let graph = layout::layout(graph)?;
-            Ok(ascii::render_graph_ascii_with_config(&graph, config)?)
-        }
-        Diagram::Pie(db) => Ok(ascii::pie::render_pie_ascii(db)?),
-        Diagram::Gantt(db) => {
-            let mut db_clone = db.clone();
-            Ok(ascii::gantt::render_gantt_ascii(&mut db_clone)?)
-        }
-        Diagram::Mindmap(db) => Ok(ascii::mindmap::render_mindmap_ascii(db)?),
-        Diagram::Journey(db) => Ok(ascii::journey::render_journey_ascii(db)?),
-        Diagram::Timeline(db) => Ok(ascii::timeline::render_timeline_ascii(db)?),
-        Diagram::Kanban(db) => Ok(ascii::kanban::render_kanban_ascii(db)?),
-        Diagram::Packet(db) => Ok(ascii::packet::render_packet_ascii(db)?),
-        Diagram::XyChart(db) => Ok(ascii::xychart::render_xychart_ascii(db)?),
-        Diagram::Quadrant(db) => Ok(ascii::quadrant::render_quadrant_ascii(db)?),
-        Diagram::Radar(db) => Ok(ascii::radar::render_radar_ascii(db)?),
-        Diagram::Git(db) => Ok(ascii::gitgraph::render_gitgraph_ascii(db)?),
-        Diagram::Sankey(db) => Ok(ascii::sankey::render_sankey_ascii(db)?),
-        Diagram::Block(db) => Ok(ascii::block::render_block_ascii(db)?),
-        Diagram::C4(db) => Ok(ascii::c4::render_c4_ascii(db)?),
-        Diagram::Treemap(db) => Ok(ascii::treemap::render_treemap_ascii(db)?),
-        _ => Err(MermaidError::RenderError(
-            "ASCII format not yet supported for this diagram type".to_string(),
-        )),
-    }?;
+    let result = render_layout_ascii(diagram, config, &estimator)
+        .or_else(|| render_chart_ascii(diagram))
+        .or_else(|| render_board_ascii(diagram))
+        .unwrap_or_else(|| {
+            Err(MermaidError::RenderError(
+                "ASCII format not yet supported for this diagram type".to_string(),
+            ))
+        })?;
 
     // For diagram types that don't yet thread config internally,
     // apply max_width truncation at the output level.
     Ok(truncate_ascii_width(&result, config))
+}
+
+fn render_layout_ascii(
+    diagram: &Diagram,
+    config: &ascii::AsciiRenderConfig,
+    estimator: &CharacterSizeEstimator,
+) -> Option<Result<String>> {
+    match diagram {
+        Diagram::Flowchart(db) => Some(render_flowchart_ascii_configured(db, config, estimator)),
+        Diagram::Class(db) => Some(render_class_ascii_configured(db, estimator)),
+        Diagram::State(db) => Some(render_layout_graph_ascii_configured(db, config, estimator)),
+        Diagram::Er(db) => Some(render_er_ascii_configured(db, estimator)),
+        Diagram::Architecture(db) => {
+            Some(render_architecture_ascii_configured(db, config, estimator))
+        }
+        Diagram::Requirement(db) => {
+            Some(render_layout_graph_ascii_configured(db, config, estimator))
+        }
+        _ => None,
+    }
+}
+
+fn render_flowchart_ascii_configured(
+    db: &crate::diagrams::flowchart::FlowchartDb,
+    config: &ascii::AsciiRenderConfig,
+    estimator: &CharacterSizeEstimator,
+) -> Result<String> {
+    let graph = db.to_layout_graph(estimator)?;
+    let graph = layout::layout(graph)?;
+    ascii::render_flowchart_ascii_with_config(db, &graph, config)
+}
+
+fn render_class_ascii_configured(
+    db: &crate::diagrams::class::ClassDb,
+    estimator: &CharacterSizeEstimator,
+) -> Result<String> {
+    let graph = db.to_layout_graph(estimator)?;
+    let graph = layout::layout(graph)?;
+    ascii::render_class_ascii(db, &graph)
+}
+
+fn render_er_ascii_configured(
+    db: &crate::diagrams::er::ErDb,
+    estimator: &CharacterSizeEstimator,
+) -> Result<String> {
+    let graph = db.to_layout_graph(estimator)?;
+    let graph = layout::layout(graph)?;
+    ascii::render_er_ascii(db, &graph)
+}
+
+fn render_layout_graph_ascii_configured<T>(
+    db: &T,
+    config: &ascii::AsciiRenderConfig,
+    estimator: &CharacterSizeEstimator,
+) -> Result<String>
+where
+    T: ToLayoutGraph,
+{
+    let graph = db.to_layout_graph(estimator)?;
+    let graph = layout::layout(graph)?;
+    ascii::render_graph_ascii_with_config(&graph, config)
+}
+
+fn render_architecture_ascii_configured(
+    db: &crate::diagrams::architecture::ArchitectureDb,
+    config: &ascii::AsciiRenderConfig,
+    estimator: &CharacterSizeEstimator,
+) -> Result<String> {
+    let graph = architecture::layout_architecture(db, estimator)?;
+    ascii::render_graph_ascii_with_config(&graph, config)
+}
+
+fn render_chart_ascii(diagram: &Diagram) -> Option<Result<String>> {
+    match diagram {
+        Diagram::Sequence(db) => Some(ascii::render_sequence_ascii(db)),
+        Diagram::Pie(db) => Some(ascii::pie::render_pie_ascii(db)),
+        Diagram::Gantt(db) => {
+            let mut db_clone = db.clone();
+            Some(ascii::gantt::render_gantt_ascii(&mut db_clone))
+        }
+        Diagram::Mindmap(db) => Some(ascii::mindmap::render_mindmap_ascii(db)),
+        Diagram::Journey(db) => Some(ascii::journey::render_journey_ascii(db)),
+        Diagram::Timeline(db) => Some(ascii::timeline::render_timeline_ascii(db)),
+        Diagram::Kanban(db) => Some(ascii::kanban::render_kanban_ascii(db)),
+        Diagram::Packet(db) => Some(ascii::packet::render_packet_ascii(db)),
+        _ => None,
+    }
+}
+
+fn render_board_ascii(diagram: &Diagram) -> Option<Result<String>> {
+    match diagram {
+        Diagram::XyChart(db) => Some(ascii::xychart::render_xychart_ascii(db)),
+        Diagram::Quadrant(db) => Some(ascii::quadrant::render_quadrant_ascii(db)),
+        Diagram::Radar(db) => Some(ascii::radar::render_radar_ascii(db)),
+        Diagram::Git(db) => Some(ascii::gitgraph::render_gitgraph_ascii(db)),
+        Diagram::Sankey(db) => Some(ascii::sankey::render_sankey_ascii(db)),
+        Diagram::Block(db) => Some(ascii::block::render_block_ascii(db)),
+        Diagram::C4(db) => Some(ascii::c4::render_c4_ascii(db)),
+        Diagram::Treemap(db) => Some(ascii::treemap::render_treemap_ascii(db)),
+        _ => None,
+    }
 }
 
 /// Truncate each line of ASCII output to the configured max_width.

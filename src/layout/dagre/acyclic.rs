@@ -157,19 +157,7 @@ fn greedy_fas(g: &DagreGraph) -> Vec<EdgeKey> {
         return Vec::new();
     }
 
-    // Create a working copy of the graph structure
-    let mut in_degree: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
-    let mut out_degree: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
-    let mut active_nodes: HashSet<String> = HashSet::new();
-
-    // Initialize degrees
-    for v in g.nodes() {
-        let in_deg = g.in_edges(v).len() as i32;
-        let out_deg = g.out_edges(v).len() as i32;
-        in_degree.insert(v.clone(), in_deg);
-        out_degree.insert(v.clone(), out_deg);
-        active_nodes.insert(v.clone());
-    }
+    let (mut in_degree, mut out_degree, mut active_nodes) = initialize_degrees(g);
 
     let mut fas = Vec::new();
     let mut sources: Vec<String> = Vec::new();
@@ -180,75 +168,26 @@ fn greedy_fas(g: &DagreGraph) -> Vec<EdgeKey> {
         // Find sources (in-degree 0) and sinks (out-degree 0)
         sources.clear();
         sinks.clear();
-
-        // Iterate in sorted order for determinism
-        let mut sorted_nodes: Vec<&String> = active_nodes.iter().collect();
-        sorted_nodes.sort();
-        for v in sorted_nodes {
-            if *in_degree.get(v).unwrap_or(&0) == 0 {
-                sources.push(v.clone());
-            }
-            if *out_degree.get(v).unwrap_or(&0) == 0 {
-                sinks.push(v.clone());
-            }
-        }
-
-        // Remove all sources
-        for v in &sources {
-            for edge in g.out_edges(v) {
-                if active_nodes.contains(&edge.w) {
-                    *in_degree.get_mut(&edge.w).unwrap() -= 1;
-                }
-            }
-            active_nodes.remove(v);
-        }
-
-        // Remove all sinks
-        for v in &sinks {
-            for edge in g.in_edges(v) {
-                if active_nodes.contains(&edge.v) {
-                    *out_degree.get_mut(&edge.v).unwrap() -= 1;
-                }
-            }
-            active_nodes.remove(v);
-        }
+        collect_sources_and_sinks(
+            &active_nodes,
+            &in_degree,
+            &out_degree,
+            &mut sources,
+            &mut sinks,
+        );
+        remove_sources(g, &sources, &mut active_nodes, &mut in_degree);
+        remove_sinks(g, &sinks, &mut active_nodes, &mut out_degree);
 
         // If there are remaining nodes, we have a cycle
         // Remove the node with highest out-degree - in-degree (most likely cycle contributor)
         if !active_nodes.is_empty() {
-            let mut best_node: Option<String> = None;
-            let mut best_score = i32::MIN;
-
-            // Iterate in sorted order so ties are resolved deterministically
-            let mut sorted_nodes: Vec<&String> = active_nodes.iter().collect();
-            sorted_nodes.sort();
-            for v in sorted_nodes {
-                let score = *out_degree.get(v).unwrap_or(&0) - *in_degree.get(v).unwrap_or(&0);
-                if score > best_score {
-                    best_score = score;
-                    best_node = Some(v.clone());
-                }
-            }
-
-            if let Some(v) = best_node {
-                // Add incoming edges to FAS (they point "backwards" relative to this node)
-                for edge in g.in_edges(&v) {
-                    if active_nodes.contains(&edge.v) {
-                        // Add the lowest weight incoming edge to FAS
-                        fas.push(edge.clone());
-                        *out_degree.get_mut(&edge.v).unwrap() -= 1;
-                    }
-                }
-
-                // Update outgoing edge degrees
-                for edge in g.out_edges(&v) {
-                    if active_nodes.contains(&edge.w) {
-                        *in_degree.get_mut(&edge.w).unwrap() -= 1;
-                    }
-                }
-
-                active_nodes.remove(&v);
-            }
+            remove_cycle_contributor(
+                g,
+                &mut active_nodes,
+                &mut in_degree,
+                &mut out_degree,
+                &mut fas,
+            );
         }
     }
 
@@ -257,6 +196,114 @@ fn greedy_fas(g: &DagreGraph) -> Vec<EdgeKey> {
     fas.retain(|e| seen.insert(e.clone()));
 
     fas
+}
+
+type DegreeMap = std::collections::HashMap<String, i32>;
+
+fn initialize_degrees(g: &DagreGraph) -> (DegreeMap, DegreeMap, HashSet<String>) {
+    let mut in_degree = DegreeMap::new();
+    let mut out_degree = DegreeMap::new();
+    let mut active_nodes = HashSet::new();
+
+    for v in g.nodes() {
+        in_degree.insert(v.clone(), g.in_edges(v).len() as i32);
+        out_degree.insert(v.clone(), g.out_edges(v).len() as i32);
+        active_nodes.insert(v.clone());
+    }
+    (in_degree, out_degree, active_nodes)
+}
+
+fn collect_sources_and_sinks(
+    active_nodes: &HashSet<String>,
+    in_degree: &DegreeMap,
+    out_degree: &DegreeMap,
+    sources: &mut Vec<String>,
+    sinks: &mut Vec<String>,
+) {
+    let mut sorted_nodes: Vec<&String> = active_nodes.iter().collect();
+    sorted_nodes.sort();
+    for v in sorted_nodes {
+        if *in_degree.get(v).unwrap_or(&0) == 0 {
+            sources.push(v.clone());
+        }
+        if *out_degree.get(v).unwrap_or(&0) == 0 {
+            sinks.push(v.clone());
+        }
+    }
+}
+
+fn remove_sources(
+    g: &DagreGraph,
+    sources: &[String],
+    active_nodes: &mut HashSet<String>,
+    in_degree: &mut DegreeMap,
+) {
+    for v in sources {
+        for edge in g.out_edges(v) {
+            if active_nodes.contains(&edge.w) {
+                *in_degree.get_mut(&edge.w).unwrap() -= 1;
+            }
+        }
+        active_nodes.remove(v);
+    }
+}
+
+fn remove_sinks(
+    g: &DagreGraph,
+    sinks: &[String],
+    active_nodes: &mut HashSet<String>,
+    out_degree: &mut DegreeMap,
+) {
+    for v in sinks {
+        for edge in g.in_edges(v) {
+            if active_nodes.contains(&edge.v) {
+                *out_degree.get_mut(&edge.v).unwrap() -= 1;
+            }
+        }
+        active_nodes.remove(v);
+    }
+}
+
+fn remove_cycle_contributor(
+    g: &DagreGraph,
+    active_nodes: &mut HashSet<String>,
+    in_degree: &mut DegreeMap,
+    out_degree: &mut DegreeMap,
+    fas: &mut Vec<EdgeKey>,
+) {
+    if let Some(v) = best_cycle_node(active_nodes, in_degree, out_degree) {
+        for edge in g.in_edges(&v) {
+            if active_nodes.contains(&edge.v) {
+                fas.push(edge.clone());
+                *out_degree.get_mut(&edge.v).unwrap() -= 1;
+            }
+        }
+        for edge in g.out_edges(&v) {
+            if active_nodes.contains(&edge.w) {
+                *in_degree.get_mut(&edge.w).unwrap() -= 1;
+            }
+        }
+        active_nodes.remove(&v);
+    }
+}
+
+fn best_cycle_node(
+    active_nodes: &HashSet<String>,
+    in_degree: &DegreeMap,
+    out_degree: &DegreeMap,
+) -> Option<String> {
+    let mut best_node: Option<String> = None;
+    let mut best_score = i32::MIN;
+    let mut sorted_nodes: Vec<&String> = active_nodes.iter().collect();
+    sorted_nodes.sort();
+    for v in sorted_nodes {
+        let score = *out_degree.get(v).unwrap_or(&0) - *in_degree.get(v).unwrap_or(&0);
+        if score > best_score {
+            best_score = score;
+            best_node = Some(v.clone());
+        }
+    }
+    best_node
 }
 
 #[cfg(test)]

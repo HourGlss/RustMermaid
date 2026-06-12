@@ -258,116 +258,14 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_render(args: RenderArgs) -> Result<(), Box<dyn std::error::Error>> {
-    // Positional input takes precedence over -i flag
-    let input_path = args
-        .input_positional
-        .as_ref()
-        .or(args.input.as_ref())
-        .ok_or("Input file is required. Usage: selkie <INPUT> [-o OUTPUT]")?;
-
-    // Read input
+    let input_path = render_input_path(&args)?;
     let input = read_input(input_path)?;
-
     if args.verbose {
         eprintln!("Read {} bytes from input", input.len());
     }
 
-    // Load config file if specified
-    let config_file = if let Some(ref path) = args.config_file {
-        let content =
-            fs::read_to_string(path).map_err(|e| format!("Failed to read config file: {}", e))?;
-        let cfg: ConfigFile = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse config file: {}", e))?;
-        if args.verbose {
-            eprintln!("Loaded config from {}", path.display());
-        }
-        Some(cfg)
-    } else {
-        None
-    };
-
-    // Build render config - CLI args override config file
-    let mut theme = match args.theme {
-        ThemeArg::Default => {
-            // Check config file for theme
-            if let Some(ref cfg) = config_file {
-                match cfg.theme.as_deref() {
-                    Some("dark") => Theme::dark(),
-                    Some("forest") => Theme::forest(),
-                    Some("neutral") => Theme::neutral(),
-                    _ => Theme::default(),
-                }
-            } else {
-                Theme::default()
-            }
-        }
-        ThemeArg::Dark => Theme::dark(),
-        ThemeArg::Forest => Theme::forest(),
-        ThemeArg::Neutral => Theme::neutral(),
-        #[cfg(feature = "kitty")]
-        ThemeArg::Auto => {
-            // Auto-detect based on terminal background
-            if selkie::kitty::is_terminal_dark() {
-                if args.verbose {
-                    eprintln!("Auto-detected dark terminal, using dark theme");
-                }
-                Theme::dark()
-            } else {
-                if args.verbose {
-                    eprintln!("Auto-detected light terminal, using default theme");
-                }
-                Theme::default()
-            }
-        }
-    };
-
-    // Apply theme variables from config file
-    if let Some(ref cfg) = config_file {
-        if let Some(ref vars) = cfg.theme_variables {
-            if let Some(ref c) = vars.primary_color {
-                theme.primary_color = c.clone();
-            }
-            if let Some(ref c) = vars.primary_text_color {
-                theme.primary_text_color = c.clone();
-            }
-            if let Some(ref c) = vars.primary_border_color {
-                theme.primary_border_color = c.clone();
-            }
-            if let Some(ref c) = vars.secondary_color {
-                theme.secondary_color = c.clone();
-            }
-            if let Some(ref c) = vars.tertiary_color {
-                theme.tertiary_color = c.clone();
-            }
-            if let Some(ref c) = vars.line_color {
-                theme.line_color = c.clone();
-            }
-            if let Some(ref c) = vars.background {
-                theme.background = c.clone();
-            }
-            if let Some(ref f) = vars.font_family {
-                theme.font_family = f.clone();
-            }
-        }
-        // Apply background from config file
-        if let Some(ref bg) = cfg.background {
-            if bg == "transparent" {
-                theme.background = "none".to_string();
-            } else {
-                theme.background = bg.clone();
-            }
-        }
-    }
-
-    // CLI background flag overrides config file
-    if let Some(ref bg) = args.background {
-        if bg == "transparent" {
-            theme.background = "none".to_string();
-        } else {
-            theme.background = bg.clone();
-        }
-    }
-
+    let config_file = load_config_file(&args)?;
+    let theme = build_render_theme(&args, config_file.as_ref());
     let config = RenderConfig {
         theme,
         ..RenderConfig::default()
@@ -380,86 +278,136 @@ fn run_render(args: RenderArgs) -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Parsed diagram successfully");
     }
 
-    // Check if ASCII format is requested — uses a separate render path
-    let format_hint = args.output_format.unwrap_or_else(|| {
-        args.output
-            .as_deref()
-            .and_then(|p| {
-                if p == "-" {
-                    None
-                } else {
-                    OutputFormat::from_extension(p)
-                }
-            })
-            .unwrap_or(OutputFormat::Svg)
-    });
-
-    if format_hint == OutputFormat::Ascii {
-        let output_str = selkie::render_ascii(&diagram)?;
-        if args.verbose {
-            eprintln!("Rendered {} bytes of ASCII output", output_str.len());
-        }
-        write_output(&args.output, output_str.as_bytes())?;
-        if !args.quiet && args.output.as_deref() != Some("-") {
-            if let Some(ref output) = args.output {
-                eprintln!("Created {}", output);
-            }
-        }
+    if render_format(&args) == OutputFormat::Ascii {
+        render_ascii_output(&diagram, &args)?;
         return Ok(());
     }
 
-    // Render to SVG
     let svg = render_with_config(&diagram, &config).map_err(|e| format!("Render error: {}", e))?;
-
     if args.verbose {
         eprintln!("Rendered {} bytes of SVG", svg.len());
     }
 
-    // Handle terminal display mode
     #[cfg(feature = "kitty")]
-    if args.display || args.force_display {
-        // Check for kitty support
-        if !args.force_display && !selkie::kitty::is_supported() {
-            return Err("Terminal does not support kitty graphics protocol. Use --force-display to override.".into());
-        }
-
-        if args.verbose {
-            eprintln!("Displaying diagram in terminal using kitty graphics protocol");
-        }
-
-        // Convert to PNG for display
-        let png_data = svg_to_png(&svg, args.width, args.height)?;
-        selkie::kitty::display_png(&png_data)
-            .map_err(|e| format!("Failed to display image: {}", e))?;
-
-        // Also write to file if output was specified
-        if let Some(ref output) = args.output {
-            if output != "-" {
-                let format = args.output_format.unwrap_or_else(|| {
-                    OutputFormat::from_extension(output).unwrap_or(OutputFormat::Svg)
-                });
-                match format {
-                    OutputFormat::Svg => write_output(&Some(output.clone()), svg.as_bytes())?,
-                    #[cfg(feature = "png")]
-                    OutputFormat::Png => write_binary_output(&Some(output.clone()), &png_data)?,
-                    #[cfg(feature = "pdf")]
-                    OutputFormat::Pdf => {
-                        let pdf_data = svg_to_pdf(&svg)?;
-                        write_binary_output(&Some(output.clone()), &pdf_data)?;
-                    }
-                    OutputFormat::Ascii => unreachable!("ASCII format handled above"),
-                }
-                if !args.quiet {
-                    eprintln!("Created {}", output);
-                }
-            }
-        }
-
+    if render_to_terminal_if_requested(&args, &svg)? {
         return Ok(());
     }
 
-    // Determine output format
-    let format = args.output_format.unwrap_or_else(|| {
+    write_rendered_output(&args, &svg)?;
+    report_created(&args);
+    Ok(())
+}
+
+fn render_input_path(args: &RenderArgs) -> Result<&str, Box<dyn std::error::Error>> {
+    args.input_positional
+        .as_deref()
+        .or(args.input.as_deref())
+        .ok_or_else(|| "Input file is required. Usage: selkie <INPUT> [-o OUTPUT]".into())
+}
+
+fn load_config_file(args: &RenderArgs) -> Result<Option<ConfigFile>, Box<dyn std::error::Error>> {
+    let Some(ref path) = args.config_file else {
+        return Ok(None);
+    };
+    let content =
+        fs::read_to_string(path).map_err(|e| format!("Failed to read config file: {}", e))?;
+    let cfg: ConfigFile = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse config file: {}", e))?;
+    if args.verbose {
+        eprintln!("Loaded config from {}", path.display());
+    }
+    Ok(Some(cfg))
+}
+
+fn build_render_theme(args: &RenderArgs, config_file: Option<&ConfigFile>) -> Theme {
+    let mut theme = base_theme(args, config_file);
+    apply_config_theme(&mut theme, config_file);
+    if let Some(ref bg) = args.background {
+        apply_background(&mut theme, bg);
+    }
+    theme
+}
+
+fn base_theme(args: &RenderArgs, config_file: Option<&ConfigFile>) -> Theme {
+    match args.theme {
+        ThemeArg::Default => config_file_theme(config_file),
+        ThemeArg::Dark => Theme::dark(),
+        ThemeArg::Forest => Theme::forest(),
+        ThemeArg::Neutral => Theme::neutral(),
+        #[cfg(feature = "kitty")]
+        ThemeArg::Auto => auto_terminal_theme(args.verbose),
+    }
+}
+
+fn config_file_theme(config_file: Option<&ConfigFile>) -> Theme {
+    match config_file.and_then(|cfg| cfg.theme.as_deref()) {
+        Some("dark") => Theme::dark(),
+        Some("forest") => Theme::forest(),
+        Some("neutral") => Theme::neutral(),
+        _ => Theme::default(),
+    }
+}
+
+#[cfg(feature = "kitty")]
+fn auto_terminal_theme(verbose: bool) -> Theme {
+    if selkie::kitty::is_terminal_dark() {
+        if verbose {
+            eprintln!("Auto-detected dark terminal, using dark theme");
+        }
+        Theme::dark()
+    } else {
+        if verbose {
+            eprintln!("Auto-detected light terminal, using default theme");
+        }
+        Theme::default()
+    }
+}
+
+fn apply_config_theme(theme: &mut Theme, config_file: Option<&ConfigFile>) {
+    let Some(cfg) = config_file else {
+        return;
+    };
+    if let Some(ref vars) = cfg.theme_variables {
+        if let Some(ref c) = vars.primary_color {
+            theme.primary_color = c.clone();
+        }
+        if let Some(ref c) = vars.primary_text_color {
+            theme.primary_text_color = c.clone();
+        }
+        if let Some(ref c) = vars.primary_border_color {
+            theme.primary_border_color = c.clone();
+        }
+        if let Some(ref c) = vars.secondary_color {
+            theme.secondary_color = c.clone();
+        }
+        if let Some(ref c) = vars.tertiary_color {
+            theme.tertiary_color = c.clone();
+        }
+        if let Some(ref c) = vars.line_color {
+            theme.line_color = c.clone();
+        }
+        if let Some(ref c) = vars.background {
+            theme.background = c.clone();
+        }
+        if let Some(ref f) = vars.font_family {
+            theme.font_family = f.clone();
+        }
+    }
+    if let Some(ref bg) = cfg.background {
+        apply_background(theme, bg);
+    }
+}
+
+fn apply_background(theme: &mut Theme, background: &str) {
+    theme.background = if background == "transparent" {
+        "none".to_string()
+    } else {
+        background.to_string()
+    };
+}
+
+fn render_format(args: &RenderArgs) -> OutputFormat {
+    args.output_format.unwrap_or_else(|| {
         args.output
             .as_deref()
             .and_then(|p| {
@@ -470,122 +418,128 @@ fn run_render(args: RenderArgs) -> Result<(), Box<dyn std::error::Error>> {
                 }
             })
             .unwrap_or(OutputFormat::Svg)
-    });
+    })
+}
 
-    // Write output based on format
+fn render_ascii_output(
+    diagram: &selkie::diagrams::Diagram,
+    args: &RenderArgs,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let output_str = selkie::render_ascii(diagram)?;
+    if args.verbose {
+        eprintln!("Rendered {} bytes of ASCII output", output_str.len());
+    }
+    write_output(&args.output, output_str.as_bytes())?;
+    report_created(args);
+    Ok(())
+}
+
+#[cfg(feature = "kitty")]
+fn render_to_terminal_if_requested(
+    args: &RenderArgs,
+    svg: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    if !args.display && !args.force_display {
+        return Ok(false);
+    }
+    if !args.force_display && !selkie::kitty::is_supported() {
+        return Err(
+            "Terminal does not support kitty graphics protocol. Use --force-display to override."
+                .into(),
+        );
+    }
+    if args.verbose {
+        eprintln!("Displaying diagram in terminal using kitty graphics protocol");
+    }
+
+    let png_data = svg_to_png(svg, args.width, args.height)?;
+    selkie::kitty::display_png(&png_data).map_err(|e| format!("Failed to display image: {}", e))?;
+    write_terminal_output_file(args, svg, &png_data)?;
+    Ok(true)
+}
+
+#[cfg(feature = "kitty")]
+fn write_terminal_output_file(
+    args: &RenderArgs,
+    svg: &str,
+    png_data: &[u8],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(ref output) = args.output else {
+        return Ok(());
+    };
+    if output == "-" {
+        return Ok(());
+    }
+    let format = args
+        .output_format
+        .unwrap_or_else(|| OutputFormat::from_extension(output).unwrap_or(OutputFormat::Svg));
     match format {
-        OutputFormat::Svg => {
-            write_output(&args.output, svg.as_bytes())?;
+        OutputFormat::Svg => write_output(&Some(output.clone()), svg.as_bytes())?,
+        #[cfg(feature = "png")]
+        OutputFormat::Png => write_binary_output(&Some(output.clone()), png_data)?,
+        #[cfg(feature = "pdf")]
+        OutputFormat::Pdf => {
+            let pdf_data = svg_to_pdf(svg)?;
+            write_binary_output(&Some(output.clone()), &pdf_data)?;
         }
+        OutputFormat::Ascii => unreachable!("ASCII format handled above"),
+    }
+    if !args.quiet {
+        eprintln!("Created {}", output);
+    }
+    Ok(())
+}
+
+#[cfg(not(feature = "kitty"))]
+fn render_to_terminal_if_requested(
+    _args: &RenderArgs,
+    _svg: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    Ok(false)
+}
+
+fn write_rendered_output(args: &RenderArgs, svg: &str) -> Result<(), Box<dyn std::error::Error>> {
+    match render_format(args) {
+        OutputFormat::Svg => write_output(&args.output, svg.as_bytes())?,
         #[cfg(feature = "png")]
         OutputFormat::Png => {
-            let png_data = svg_to_png(&svg, args.width, args.height)?;
+            let png_data = svg_to_png(svg, args.width, args.height)?;
             write_binary_output(&args.output, &png_data)?;
         }
         #[cfg(feature = "pdf")]
         OutputFormat::Pdf => {
-            let pdf_data = svg_to_pdf(&svg)?;
+            let pdf_data = svg_to_pdf(svg)?;
             write_binary_output(&args.output, &pdf_data)?;
         }
         OutputFormat::Ascii => unreachable!("ASCII format handled above"),
     }
+    Ok(())
+}
 
+fn report_created(args: &RenderArgs) {
     if !args.quiet && args.output.as_deref() != Some("-") {
         if let Some(ref output) = args.output {
             eprintln!("Created {}", output);
         }
     }
-
-    Ok(())
 }
 
 #[cfg(feature = "eval")]
 fn run_eval(args: EvalArgs) -> Result<(), Box<dyn std::error::Error>> {
     let cache = eval::cache::ReferenceCache::with_defaults();
 
-    // Handle --force-refresh: clear cache before re-rendering
-    if args.force_refresh {
-        let cache_dir = cache.cache_dir();
-        if cache_dir.exists() {
-            let stats = cache.stats();
-            cache.clear()?;
-            eprintln!(
-                "Cleared {} cached files ({:.2} KB)",
-                stats.count,
-                stats.total_size as f64 / 1024.0,
-            );
-        }
-    }
-
-    // Handle --cache-info: show cache info and exit
+    clear_eval_cache_if_requested(&args, &cache)?;
     if args.cache_info {
-        let stats = cache.stats();
-        println!("Reference SVG Cache");
-        println!("===================");
-        println!("Location: {}", cache.cache_dir().display());
-        println!("Files:    {}", stats.count);
-        println!("Size:     {:.2} KB", stats.total_size as f64 / 1024.0);
-        if stats.count == 0 {
-            println!();
-            println!("Cache is empty. Run 'selkie eval' to populate.");
-        }
+        print_eval_cache_info(&cache);
         return Ok(());
     }
-
-    // Handle --ascii: run ASCII-specific evaluation
     if args.ascii {
         return run_eval_ascii(args);
     }
 
-    // Build evaluation config
-    // Enable visual comparison when png feature is available
-    #[cfg(feature = "png")]
-    let skip_visual = false;
-    #[cfg(not(feature = "png"))]
-    let skip_visual = true;
-
-    let eval_config = eval::runner::EvalConfig {
-        diagram_type_filter: args.diagram_type.clone(),
-        skip_visual: skip_visual || args.use_repo_svgs,
-        use_repo_svgs: args.use_repo_svgs,
-        ..Default::default()
-    };
+    let eval_config = eval_config(&args);
     let runner = eval::runner::EvalRunner::new(eval_config, cache);
-
-    // Get diagrams to evaluate
-    let inputs = match &args.target {
-        None => {
-            // Use docs/sources/*.mmd files + embedded samples
-            eprintln!("Using gallery samples (docs/sources/ + embedded)...");
-            samples::all_samples_owned()
-                .into_iter()
-                .map(DiagramInput::from)
-                .collect()
-        }
-        Some(target) => {
-            let path = PathBuf::from(target);
-            if path.is_dir() {
-                // Evaluate all .mmd files in directory
-                load_directory(&path)?
-            } else if target.ends_with(".json") {
-                // Load from JSON file (extract_diagrams output)
-                load_json_diagrams(&path)?
-            } else {
-                // Single .mmd file
-                let content = fs::read_to_string(&path)
-                    .map_err(|e| format!("Failed to read {}: {}", target, e))?;
-                vec![DiagramInput {
-                    name: path
-                        .file_stem()
-                        .map(|s| s.to_string_lossy().to_string())
-                        .unwrap_or_else(|| "diagram".to_string()),
-                    source: Some(target.clone()),
-                    diagram_type: None,
-                    text: content,
-                }]
-            }
-        }
-    };
+    let inputs = load_eval_inputs(args.target.as_deref(), true)?;
 
     if inputs.is_empty() {
         return Err("No diagrams to evaluate".into());
@@ -596,128 +550,19 @@ fn run_eval(args: EvalArgs) -> Result<(), Box<dyn std::error::Error>> {
     // Run evaluation
     let result = runner.evaluate(&inputs);
 
-    // Create output directory with random ID
-    let base_dir = args
-        .output
-        .unwrap_or_else(|| PathBuf::from("./eval-report"));
-    let random_id = &Uuid::new_v4().to_string()[..8];
-    let output_dir = base_dir.join(format!("selkie-eval-{}", random_id));
-
-    fs::create_dir_all(&output_dir)?;
-
-    // Write HTML report as index.html
-    eprint!("Writing HTML report...");
-    let html_path = output_dir.join("index.html");
-    eval::report::write_html(&result, &html_path)?;
-    eprintln!(" done");
-
-    // Write SVGs to subdirectories organized by diagram type
-    eprint!("Writing SVG files...");
-
-    // Also write to docs/images directories if they exist
-    let docs_images = Path::new("docs/images");
-    let docs_images_ref = Path::new("docs/images/reference");
-    let write_to_docs = docs_images.exists() && docs_images_ref.exists();
-
-    for diagram in &result.diagrams {
-        let type_dir = output_dir.join(&diagram.diagram_type);
-        let safe_name = diagram.name.replace(['/', ' '], "_");
-
-        // Only create directory if we have at least one SVG to write
-        if diagram.selkie_svg.is_some() || diagram.reference_svg.is_some() {
-            fs::create_dir_all(&type_dir)?;
-        }
-
-        // Write selkie SVG if available
-        if let Some(ref svg) = diagram.selkie_svg {
-            let path = type_dir.join(format!("{}_selkie.svg", safe_name));
-            fs::write(&path, svg)?;
-
-            // Also write to docs/images/ (without _selkie suffix)
-            if write_to_docs {
-                let docs_path = docs_images.join(format!("{}.svg", safe_name));
-                fs::write(&docs_path, svg)?;
-            }
-        }
-
-        // Write reference SVG if available
-        if let Some(ref svg) = diagram.reference_svg {
-            let path = type_dir.join(format!("{}_reference.svg", safe_name));
-            fs::write(&path, svg)?;
-
-            // Also write to docs/images/reference/ (without _reference suffix)
-            if write_to_docs {
-                let docs_path = docs_images_ref.join(format!("{}.svg", safe_name));
-                fs::write(&docs_path, svg)?;
-            }
-        }
-    }
-    eprintln!(" done");
-
-    // Write comparison PNGs if png feature is enabled (requires both SVGs)
+    let output_dir = create_eval_output_dir(args.output)?;
+    write_eval_report_files(&result, &output_dir)?;
     let svg_pairs = runner.take_svg_pairs();
-    #[cfg(feature = "png")]
-    if !svg_pairs.is_empty() {
-        eprint!(
-            "Generating comparison PNGs ({} diagrams)...",
-            svg_pairs.len()
-        );
-        match eval::png::write_comparison_pngs(&output_dir, &svg_pairs, runner.cache()) {
-            Ok(_) => {
-                eprintln!(" done");
-            }
-            Err(e) => {
-                eprintln!(" failed");
-                eprintln!("Warning: Failed to generate comparison PNGs: {}", e);
-            }
-        }
-    }
-    #[cfg(not(feature = "png"))]
-    let _ = svg_pairs; // Suppress unused warning
-
-    // Write JSON reports split by diagram type (easier for AI agents to read specific types)
+    write_comparison_pngs_if_enabled(&output_dir, &svg_pairs, runner.cache());
     eval::report::write_json_by_type(&result, &output_dir)?;
-
-    // Output results to stderr (default=agent, --verbose, or --brief)
-    if args.brief {
-        // Compact summary (old default)
-        eprintln!("{}", eval::report::text_summary(&result, Some(&output_dir)));
-    } else if args.verbose {
-        // Detailed diff per diagram (legacy format)
-        eprintln!(
-            "{}",
-            eval::report::text_detailed(&result, Some(&output_dir))
-        );
-    } else {
-        // Default: AI-agent friendly output
-        eprintln!(
-            "{}",
-            eval::report::text_agent_friendly(&result, Some(&output_dir))
-        );
-    }
+    print_eval_summary(&args, &result, &output_dir);
 
     // Print the output directory path
     let report_path = output_dir.join("index.html");
     eprintln!("Evaluation report written to: {}", report_path.display());
 
-    // Open report in browser if requested
     if args.open_report {
-        #[cfg(target_os = "macos")]
-        {
-            let _ = std::process::Command::new("open").arg(&report_path).spawn();
-        }
-        #[cfg(target_os = "linux")]
-        {
-            let _ = std::process::Command::new("xdg-open")
-                .arg(&report_path)
-                .spawn();
-        }
-        #[cfg(target_os = "windows")]
-        {
-            let _ = std::process::Command::new("cmd")
-                .args(["/C", "start", "", &report_path.to_string_lossy()])
-                .spawn();
-        }
+        open_eval_report(&report_path);
     }
 
     // Exit with error code if there are failures
@@ -728,84 +573,243 @@ fn run_eval(args: EvalArgs) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(feature = "eval")]
+fn clear_eval_cache_if_requested(
+    args: &EvalArgs,
+    cache: &eval::cache::ReferenceCache,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if args.force_refresh && cache.cache_dir().exists() {
+        let stats = cache.stats();
+        cache.clear()?;
+        eprintln!(
+            "Cleared {} cached files ({:.2} KB)",
+            stats.count,
+            stats.total_size as f64 / 1024.0,
+        );
+    }
+    Ok(())
+}
+
+#[cfg(feature = "eval")]
+fn print_eval_cache_info(cache: &eval::cache::ReferenceCache) {
+    let stats = cache.stats();
+    println!("Reference SVG Cache");
+    println!("===================");
+    println!("Location: {}", cache.cache_dir().display());
+    println!("Files:    {}", stats.count);
+    println!("Size:     {:.2} KB", stats.total_size as f64 / 1024.0);
+    if stats.count == 0 {
+        println!();
+        println!("Cache is empty. Run 'selkie eval' to populate.");
+    }
+}
+
+#[cfg(feature = "eval")]
+fn eval_config(args: &EvalArgs) -> eval::runner::EvalConfig {
+    #[cfg(feature = "png")]
+    let skip_visual = false;
+    #[cfg(not(feature = "png"))]
+    let skip_visual = true;
+
+    eval::runner::EvalConfig {
+        diagram_type_filter: args.diagram_type.clone(),
+        skip_visual: skip_visual || args.use_repo_svgs,
+        use_repo_svgs: args.use_repo_svgs,
+        ..Default::default()
+    }
+}
+
+#[cfg(feature = "eval")]
+fn load_eval_inputs(
+    target: Option<&str>,
+    allow_json: bool,
+) -> Result<Vec<DiagramInput>, Box<dyn std::error::Error>> {
+    match target {
+        None => {
+            eprintln!("Using gallery samples (docs/sources/ + embedded)...");
+            Ok(samples::all_samples_owned()
+                .into_iter()
+                .map(DiagramInput::from)
+                .collect())
+        }
+        Some(target) => load_eval_target(target, allow_json),
+    }
+}
+
+#[cfg(feature = "eval")]
+fn load_eval_target(
+    target: &str,
+    allow_json: bool,
+) -> Result<Vec<DiagramInput>, Box<dyn std::error::Error>> {
+    let path = PathBuf::from(target);
+    if path.is_dir() {
+        return load_directory(&path);
+    }
+    if allow_json && target.ends_with(".json") {
+        return load_json_diagrams(&path);
+    }
+    load_single_diagram(&path, target)
+}
+
+#[cfg(feature = "eval")]
+fn load_single_diagram(
+    path: &Path,
+    target: &str,
+) -> Result<Vec<DiagramInput>, Box<dyn std::error::Error>> {
+    let content =
+        fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {}", target, e))?;
+    Ok(vec![DiagramInput {
+        name: path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "diagram".to_string()),
+        source: Some(target.to_string()),
+        diagram_type: None,
+        text: content,
+    }])
+}
+
+#[cfg(feature = "eval")]
+fn create_eval_output_dir(
+    base_dir: Option<PathBuf>,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let base_dir = base_dir.unwrap_or_else(|| PathBuf::from("./eval-report"));
+    let random_id = &Uuid::new_v4().to_string()[..8];
+    let output_dir = base_dir.join(format!("selkie-eval-{}", random_id));
+    fs::create_dir_all(&output_dir)?;
+    Ok(output_dir)
+}
+
+#[cfg(feature = "eval")]
+fn write_eval_report_files(
+    result: &eval::runner::EvalResult,
+    output_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    eprint!("Writing HTML report...");
+    eval::report::write_html(result, &output_dir.join("index.html"))?;
+    eprintln!(" done");
+
+    eprint!("Writing SVG files...");
+    write_eval_svgs(result, output_dir)?;
+    eprintln!(" done");
+    Ok(())
+}
+
+#[cfg(feature = "eval")]
+fn write_eval_svgs(
+    result: &eval::runner::EvalResult,
+    output_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let docs_images = Path::new("docs/images");
+    let docs_images_ref = Path::new("docs/images/reference");
+    let write_to_docs = docs_images.exists() && docs_images_ref.exists();
+
+    for diagram in &result.diagrams {
+        let type_dir = output_dir.join(&diagram.diagram_type);
+        let safe_name = diagram.name.replace(['/', ' '], "_");
+        if diagram.selkie_svg.is_some() || diagram.reference_svg.is_some() {
+            fs::create_dir_all(&type_dir)?;
+        }
+        write_eval_svg_pair(diagram, &type_dir, &safe_name, write_to_docs)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "eval")]
+fn write_eval_svg_pair(
+    diagram: &eval::runner::DiagramResult,
+    type_dir: &Path,
+    safe_name: &str,
+    write_to_docs: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(ref svg) = diagram.selkie_svg {
+        fs::write(type_dir.join(format!("{}_selkie.svg", safe_name)), svg)?;
+        if write_to_docs {
+            fs::write(
+                Path::new("docs/images").join(format!("{}.svg", safe_name)),
+                svg,
+            )?;
+        }
+    }
+    if let Some(ref svg) = diagram.reference_svg {
+        fs::write(type_dir.join(format!("{}_reference.svg", safe_name)), svg)?;
+        if write_to_docs {
+            fs::write(
+                Path::new("docs/images/reference").join(format!("{}.svg", safe_name)),
+                svg,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "eval")]
+fn write_comparison_pngs_if_enabled(
+    output_dir: &Path,
+    svg_pairs: &[(String, String, String)],
+    cache: &eval::cache::ReferenceCache,
+) {
+    #[cfg(feature = "png")]
+    if !svg_pairs.is_empty() {
+        eprint!(
+            "Generating comparison PNGs ({} diagrams)...",
+            svg_pairs.len()
+        );
+        match eval::png::write_comparison_pngs(output_dir, svg_pairs, cache) {
+            Ok(_) => eprintln!(" done"),
+            Err(e) => {
+                eprintln!(" failed");
+                eprintln!("Warning: Failed to generate comparison PNGs: {}", e);
+            }
+        }
+    }
+    #[cfg(not(feature = "png"))]
+    let _ = (output_dir, svg_pairs, cache);
+}
+
+#[cfg(feature = "eval")]
+fn print_eval_summary(args: &EvalArgs, result: &eval::runner::EvalResult, output_dir: &Path) {
+    if args.brief {
+        eprintln!("{}", eval::report::text_summary(result, Some(output_dir)));
+    } else if args.verbose {
+        eprintln!("{}", eval::report::text_detailed(result, Some(output_dir)));
+    } else {
+        eprintln!(
+            "{}",
+            eval::report::text_agent_friendly(result, Some(output_dir))
+        );
+    }
+}
+
+#[cfg(feature = "eval")]
+fn open_eval_report(report_path: &Path) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(report_path).spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg(report_path)
+            .spawn();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", &report_path.to_string_lossy()])
+            .spawn();
+    }
+}
+
 /// Run ASCII-specific evaluation: parse → layout → render ASCII → parse ASCII → check
 #[cfg(feature = "eval")]
 fn run_eval_ascii(args: EvalArgs) -> Result<(), Box<dyn std::error::Error>> {
-    use selkie::eval::ascii_checks;
     use selkie::layout::CharacterSizeEstimator;
 
-    // Get diagrams to evaluate (reuse same loading logic)
-    let inputs: Vec<DiagramInput> = match &args.target {
-        None => {
-            eprintln!("Using gallery samples (docs/sources/ + embedded)...");
-            samples::all_samples_owned()
-                .into_iter()
-                .map(DiagramInput::from)
-                .collect()
-        }
-        Some(target) => {
-            let path = PathBuf::from(target);
-            if path.is_dir() {
-                load_directory(&path)?
-            } else {
-                let content = fs::read_to_string(&path)
-                    .map_err(|e| format!("Failed to read {}: {}", target, e))?;
-                vec![DiagramInput {
-                    name: path
-                        .file_stem()
-                        .map(|s| s.to_string_lossy().to_string())
-                        .unwrap_or_else(|| "diagram".to_string()),
-                    source: Some(target.clone()),
-                    diagram_type: None,
-                    text: content,
-                }]
-            }
-        }
-    };
-
-    // ASCII-supported diagram types (all diagram types now have ASCII renderers)
-    let ascii_supported_types = [
-        "flowchart",
-        "sequence",
-        "state",
-        "class",
-        "er",
-        "architecture",
-        "requirement",
-        "mindmap",
-        "pie",
-        "gantt",
-        "journey",
-        "timeline",
-        "kanban",
-        "packet",
-        "xychart",
-        "quadrant",
-        "radar",
-        "git",
-        "sankey",
-        "block",
-        "c4",
-        "treemap",
-    ];
-
-    // Filter to ASCII-supported types, or a specific type if requested
+    let inputs = load_eval_inputs(args.target.as_deref(), false)?;
     let ascii_diagrams: Vec<_> = inputs
         .iter()
-        .filter(|i| {
-            if let Some(ref filter) = args.diagram_type {
-                i.diagram_type.as_deref() == Some(filter.as_str())
-                    || detect_diagram_type(&i.text) == Some(filter.as_str())
-            } else {
-                // Default to all ASCII-supported types
-                if let Some(ref dt) = i.diagram_type {
-                    ascii_supported_types.contains(&dt.as_str())
-                } else {
-                    let detected = detect_diagram_type(&i.text);
-                    detected.is_some_and(|t| ascii_supported_types.contains(&t))
-                }
-            }
-        })
+        .filter(|input| is_ascii_eval_candidate(input, args.diagram_type.as_deref()))
         .collect();
 
     if ascii_diagrams.is_empty() {
@@ -818,10 +822,7 @@ fn run_eval_ascii(args: EvalArgs) -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let estimator = CharacterSizeEstimator::default();
-    let mut total_issues = 0;
-    let mut total_errors = 0;
-    let mut total_diagrams = 0;
-    let mut total_similarity = 0.0;
+    let mut totals = AsciiEvalTotals::default();
 
     for (i, input) in ascii_diagrams.iter().enumerate() {
         eprint!(
@@ -831,438 +832,355 @@ fn run_eval_ascii(args: EvalArgs) -> Result<(), Box<dyn std::error::Error>> {
             input.name
         );
 
-        total_diagrams += 1;
-
-        // Parse
-        let parsed = match selkie::parse(&input.text) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!(" PARSE ERROR: {}", e);
-                total_errors += 1;
-                continue;
-            }
-        };
-
-        // Pie charts don't use LayoutGraph — handle with dedicated eval path
-        if let selkie::diagrams::Diagram::Pie(ref db) = parsed {
-            let ascii_output = match ascii_render::pie::render_pie_ascii(db) {
-                Ok(output) => output,
-                Err(e) => {
-                    eprintln!(" RENDER ERROR: {}", e);
-                    total_errors += 1;
-                    continue;
-                }
-            };
-
-            let issues = ascii_checks::check_ascii_pie_structure(&ascii_output, db);
-            let similarity = ascii_checks::calculate_ascii_pie_similarity(&ascii_output, db);
-            total_similarity += similarity;
-
-            let error_count = issues
-                .iter()
-                .filter(|i| i.level == eval::Level::Error)
-                .count();
-            let warning_count = issues
-                .iter()
-                .filter(|i| i.level == eval::Level::Warning)
-                .count();
-            total_issues += issues.len();
-            total_errors += error_count;
-
-            if args.verbose && !issues.is_empty() {
-                eprintln!();
-                eprintln!(
-                    "  {} ({} errors, {} warnings, similarity: {:.1}%):",
-                    input.name,
-                    error_count,
-                    warning_count,
-                    similarity * 100.0
-                );
-                for issue in &issues {
-                    let level = match issue.level {
-                        eval::Level::Error => "ERROR",
-                        eval::Level::Warning => "WARN",
-                        eval::Level::Info => "INFO",
-                    };
-                    eprintln!("    [{}] {}: {}", level, issue.check, issue.message);
-                }
-            }
-            continue;
-        }
-
-        // Sequence diagrams use their own renderer and eval checks (no LayoutGraph)
-        if let selkie::diagrams::Diagram::Sequence(db) = &parsed {
-            let ascii_output = match ascii_render::render_sequence_ascii(db) {
-                Ok(output) => output,
-                Err(e) => {
-                    eprintln!(" RENDER ERROR: {}", e);
-                    total_errors += 1;
-                    continue;
-                }
-            };
-
-            let ascii_struct = ascii_checks::parse_ascii_sequence(&ascii_output);
-            let issues = ascii_checks::check_ascii_sequence_structure(&ascii_struct, db);
-            let similarity = ascii_checks::calculate_ascii_sequence_similarity(&ascii_struct, db);
-            total_similarity += similarity;
-
-            let error_count = issues
-                .iter()
-                .filter(|i| i.level == eval::Level::Error)
-                .count();
-            let warning_count = issues
-                .iter()
-                .filter(|i| i.level == eval::Level::Warning)
-                .count();
-            total_issues += issues.len();
-            total_errors += error_count;
-
-            if args.verbose && !issues.is_empty() {
-                eprintln!();
-                eprintln!(
-                    "  {} ({} errors, {} warnings, similarity: {:.1}%):",
-                    input.name,
-                    error_count,
-                    warning_count,
-                    similarity * 100.0
-                );
-                for issue in &issues {
-                    let level = match issue.level {
-                        eval::Level::Error => "ERROR",
-                        eval::Level::Warning => "WARN",
-                        eval::Level::Info => "INFO",
-                    };
-                    eprintln!("    [{}] {}: {}", level, issue.check, issue.message);
-                }
-            }
-            continue;
-        }
-
-        // Gantt charts don't use LayoutGraph — handle with dedicated eval path
-        if let selkie::diagrams::Diagram::Gantt(ref db) = parsed {
-            let mut db_clone = db.clone();
-            let ascii_output = match ascii_render::gantt::render_gantt_ascii(&mut db_clone) {
-                Ok(output) => output,
-                Err(e) => {
-                    eprintln!(" RENDER ERROR: {}", e);
-                    total_errors += 1;
-                    continue;
-                }
-            };
-
-            let issues = ascii_checks::check_ascii_gantt_structure(&ascii_output, &mut db_clone);
-            let similarity =
-                ascii_checks::calculate_ascii_gantt_similarity(&ascii_output, &mut db_clone);
-            total_similarity += similarity;
-
-            let error_count = issues
-                .iter()
-                .filter(|i| i.level == eval::Level::Error)
-                .count();
-            let warning_count = issues
-                .iter()
-                .filter(|i| i.level == eval::Level::Warning)
-                .count();
-            total_issues += issues.len();
-            total_errors += error_count;
-
-            if args.verbose && !issues.is_empty() {
-                eprintln!();
-                eprintln!(
-                    "  {} ({} errors, {} warnings, similarity: {:.1}%):",
-                    input.name,
-                    error_count,
-                    warning_count,
-                    similarity * 100.0
-                );
-                for issue in &issues {
-                    let level = match issue.level {
-                        eval::Level::Error => "ERROR",
-                        eval::Level::Warning => "WARN",
-                        eval::Level::Info => "INFO",
-                    };
-                    eprintln!("    [{}] {}: {}", level, issue.check, issue.message);
-                }
-            }
-            continue;
-        }
-
-        // Mindmap doesn't use LayoutGraph — handle with dedicated eval path
-        if let selkie::diagrams::Diagram::Mindmap(ref db) = parsed {
-            let ascii_output = match ascii_render::mindmap::render_mindmap_ascii(db) {
-                Ok(output) => output,
-                Err(e) => {
-                    eprintln!(" RENDER ERROR: {}", e);
-                    total_errors += 1;
-                    continue;
-                }
-            };
-
-            let issues = ascii_checks::check_ascii_mindmap_structure(&ascii_output, db);
-            let similarity = ascii_checks::calculate_ascii_mindmap_similarity(&ascii_output, db);
-            total_similarity += similarity;
-
-            let error_count = issues
-                .iter()
-                .filter(|i| i.level == eval::Level::Error)
-                .count();
-            let warning_count = issues
-                .iter()
-                .filter(|i| i.level == eval::Level::Warning)
-                .count();
-            total_issues += issues.len();
-            total_errors += error_count;
-
-            if args.verbose && !issues.is_empty() {
-                eprintln!();
-                eprintln!(
-                    "  {} ({} errors, {} warnings, similarity: {:.1}%):",
-                    input.name,
-                    error_count,
-                    warning_count,
-                    similarity * 100.0
-                );
-                for issue in &issues {
-                    let level = match issue.level {
-                        eval::Level::Error => "ERROR",
-                        eval::Level::Warning => "WARN",
-                        eval::Level::Info => "INFO",
-                    };
-                    eprintln!("    [{}] {}: {}", level, issue.check, issue.message);
-                }
-            }
-            continue;
-        }
-
-        // Non-graph diagram types: render and compute simple text-based similarity
-        let simple_eval_result = match &parsed {
-            selkie::diagrams::Diagram::Journey(db) => {
-                let output = ascii_render::journey::render_journey_ascii(db).ok();
-                output.map(|o| {
-                    let issues = ascii_checks::check_ascii_text_output(&o, "journey");
-                    let similarity = ascii_checks::calculate_ascii_text_similarity(&o);
-                    (issues, similarity)
-                })
-            }
-            selkie::diagrams::Diagram::Timeline(db) => {
-                let output = ascii_render::timeline::render_timeline_ascii(db).ok();
-                output.map(|o| {
-                    let issues = ascii_checks::check_ascii_text_output(&o, "timeline");
-                    let similarity = ascii_checks::calculate_ascii_text_similarity(&o);
-                    (issues, similarity)
-                })
-            }
-            selkie::diagrams::Diagram::Kanban(db) => {
-                let output = ascii_render::kanban::render_kanban_ascii(db).ok();
-                output.map(|o| {
-                    let issues = ascii_checks::check_ascii_text_output(&o, "kanban");
-                    let similarity = ascii_checks::calculate_ascii_text_similarity(&o);
-                    (issues, similarity)
-                })
-            }
-            selkie::diagrams::Diagram::Packet(db) => {
-                let output = ascii_render::packet::render_packet_ascii(db).ok();
-                output.map(|o| {
-                    let issues = ascii_checks::check_ascii_text_output(&o, "packet");
-                    let similarity = ascii_checks::calculate_ascii_text_similarity(&o);
-                    (issues, similarity)
-                })
-            }
-            selkie::diagrams::Diagram::XyChart(db) => {
-                let output = ascii_render::xychart::render_xychart_ascii(db).ok();
-                output.map(|o| {
-                    let issues = ascii_checks::check_ascii_text_output(&o, "xychart");
-                    let similarity = ascii_checks::calculate_ascii_text_similarity(&o);
-                    (issues, similarity)
-                })
-            }
-            selkie::diagrams::Diagram::Quadrant(db) => {
-                let output = ascii_render::quadrant::render_quadrant_ascii(db).ok();
-                output.map(|o| {
-                    let issues = ascii_checks::check_ascii_text_output(&o, "quadrant");
-                    let similarity = ascii_checks::calculate_ascii_text_similarity(&o);
-                    (issues, similarity)
-                })
-            }
-            selkie::diagrams::Diagram::Radar(db) => {
-                let output = ascii_render::radar::render_radar_ascii(db).ok();
-                output.map(|o| {
-                    let issues = ascii_checks::check_ascii_text_output(&o, "radar");
-                    let similarity = ascii_checks::calculate_ascii_text_similarity(&o);
-                    (issues, similarity)
-                })
-            }
-            selkie::diagrams::Diagram::Git(db) => {
-                let output = ascii_render::gitgraph::render_gitgraph_ascii(db).ok();
-                output.map(|o| {
-                    let issues = ascii_checks::check_ascii_text_output(&o, "git");
-                    let similarity = ascii_checks::calculate_ascii_text_similarity(&o);
-                    (issues, similarity)
-                })
-            }
-            selkie::diagrams::Diagram::Sankey(db) => {
-                let output = ascii_render::sankey::render_sankey_ascii(db).ok();
-                output.map(|o| {
-                    let issues = ascii_checks::check_ascii_text_output(&o, "sankey");
-                    let similarity = ascii_checks::calculate_ascii_text_similarity(&o);
-                    (issues, similarity)
-                })
-            }
-            selkie::diagrams::Diagram::Block(db) => {
-                let output = ascii_render::block::render_block_ascii(db).ok();
-                output.map(|o| {
-                    let issues = ascii_checks::check_ascii_text_output(&o, "block");
-                    let similarity = ascii_checks::calculate_ascii_text_similarity(&o);
-                    (issues, similarity)
-                })
-            }
-            selkie::diagrams::Diagram::C4(db) => {
-                let output = ascii_render::c4::render_c4_ascii(db).ok();
-                output.map(|o| {
-                    let issues = ascii_checks::check_ascii_text_output(&o, "c4");
-                    let similarity = ascii_checks::calculate_ascii_text_similarity(&o);
-                    (issues, similarity)
-                })
-            }
-            selkie::diagrams::Diagram::Treemap(db) => {
-                let output = ascii_render::treemap::render_treemap_ascii(db).ok();
-                output.map(|o| {
-                    let issues = ascii_checks::check_ascii_text_output(&o, "treemap");
-                    let similarity = ascii_checks::calculate_ascii_text_similarity(&o);
-                    (issues, similarity)
-                })
-            }
-            _ => None,
-        };
-
-        if let Some((issues, similarity)) = simple_eval_result {
-            total_similarity += similarity;
-            let error_count = issues
-                .iter()
-                .filter(|i| i.level == eval::Level::Error)
-                .count();
-            let warning_count = issues
-                .iter()
-                .filter(|i| i.level == eval::Level::Warning)
-                .count();
-            total_issues += issues.len();
-            total_errors += error_count;
-
-            if args.verbose && !issues.is_empty() {
-                eprintln!();
-                eprintln!(
-                    "  {} ({} errors, {} warnings, similarity: {:.1}%):",
-                    input.name,
-                    error_count,
-                    warning_count,
-                    similarity * 100.0
-                );
-                for issue in &issues {
-                    let level = match issue.level {
-                        eval::Level::Error => "ERROR",
-                        eval::Level::Warning => "WARN",
-                        eval::Level::Info => "INFO",
-                    };
-                    eprintln!("    [{}] {}: {}", level, issue.check, issue.message);
-                }
-            }
-            continue;
-        }
-
-        // All other diagram types use ToLayoutGraph + generic ASCII renderer
-        let graph = match layout_diagram(&parsed, &estimator) {
-            Ok(g) => match selkie::layout::layout(g) {
-                Ok(g) => g,
-                Err(e) => {
-                    eprintln!(" LAYOUT ERROR: {}", e);
-                    total_errors += 1;
-                    continue;
-                }
-            },
-            Err(e) => {
-                eprintln!(" LAYOUT ERROR: {}", e);
-                total_errors += 1;
-                continue;
-            }
-        };
-
-        let ascii_output = match selkie::render_ascii(&parsed) {
-            Ok(output) => output,
-            Err(e) => {
-                eprintln!(" RENDER ERROR: {}", e);
-                total_errors += 1;
-                continue;
-            }
-        };
-
-        let ascii_struct = ascii_checks::parse_ascii(&ascii_output);
-
-        // Run checks (generic + diagram-type-specific)
-        let mut issues = ascii_checks::check_ascii_structure(&ascii_struct, &graph);
-        // ER-specific checks: verify attributes and table structure
-        if let selkie::diagrams::Diagram::Er(ref db) = parsed {
-            issues.extend(ascii_checks::check_er_ascii_structure(&ascii_struct, db));
-        }
-        // State-specific checks: verify fork/join bars and composite containers
-        if matches!(parsed, selkie::diagrams::Diagram::State(_)) {
-            issues.extend(ascii_checks::check_ascii_state_structure(
-                &ascii_struct,
-                &graph,
-            ));
-        }
-        let similarity = ascii_checks::calculate_ascii_similarity(&ascii_struct, &graph);
-        total_similarity += similarity;
-
-        let error_count = issues
-            .iter()
-            .filter(|i| i.level == eval::Level::Error)
-            .count();
-        let warning_count = issues
-            .iter()
-            .filter(|i| i.level == eval::Level::Warning)
-            .count();
-        total_issues += issues.len();
-        total_errors += error_count;
-
-        if args.verbose && !issues.is_empty() {
-            eprintln!();
-            eprintln!(
-                "  {} ({} errors, {} warnings, similarity: {:.1}%):",
-                input.name,
-                error_count,
-                warning_count,
-                similarity * 100.0
-            );
-            for issue in &issues {
-                let level = match issue.level {
-                    eval::Level::Error => "ERROR",
-                    eval::Level::Warning => "WARN",
-                    eval::Level::Info => "INFO",
-                };
-                eprintln!("    [{}] {}: {}", level, issue.check, issue.message);
-            }
-        }
+        totals.merge(evaluate_ascii_input(input, &estimator, args.verbose)?);
     }
     eprintln!();
-
-    // Summary
-    let avg_similarity = if total_diagrams > 0 {
-        total_similarity / total_diagrams as f64
-    } else {
-        0.0
-    };
-
-    eprintln!("ASCII Evaluation Summary");
-    eprintln!("======================");
-    eprintln!("Diagrams:   {}", total_diagrams);
-    eprintln!("Issues:     {} ({} errors)", total_issues, total_errors);
-    eprintln!("Similarity: {:.1}% avg", avg_similarity * 100.0);
-
-    if total_errors > 0 {
+    print_ascii_eval_summary(&totals);
+    if totals.errors > 0 {
         process::exit(1);
     }
 
     Ok(())
+}
+
+#[cfg(feature = "eval")]
+const ASCII_SUPPORTED_TYPES: &[&str] = &[
+    "flowchart",
+    "sequence",
+    "state",
+    "class",
+    "er",
+    "architecture",
+    "requirement",
+    "mindmap",
+    "pie",
+    "gantt",
+    "journey",
+    "timeline",
+    "kanban",
+    "packet",
+    "xychart",
+    "quadrant",
+    "radar",
+    "git",
+    "sankey",
+    "block",
+    "c4",
+    "treemap",
+];
+
+#[cfg(feature = "eval")]
+#[derive(Default)]
+struct AsciiEvalTotals {
+    issues: usize,
+    errors: usize,
+    diagrams: usize,
+    similarity: f64,
+}
+
+#[cfg(feature = "eval")]
+impl AsciiEvalTotals {
+    fn merge(&mut self, other: Self) {
+        self.issues += other.issues;
+        self.errors += other.errors;
+        self.diagrams += other.diagrams;
+        self.similarity += other.similarity;
+    }
+
+    fn average_similarity(&self) -> f64 {
+        if self.diagrams > 0 {
+            self.similarity / self.diagrams as f64
+        } else {
+            0.0
+        }
+    }
+}
+
+#[cfg(feature = "eval")]
+fn is_ascii_eval_candidate(input: &DiagramInput, filter: Option<&str>) -> bool {
+    if let Some(filter) = filter {
+        input.diagram_type.as_deref() == Some(filter)
+            || detect_diagram_type(&input.text) == Some(filter)
+    } else if let Some(ref diagram_type) = input.diagram_type {
+        ASCII_SUPPORTED_TYPES.contains(&diagram_type.as_str())
+    } else {
+        detect_diagram_type(&input.text).is_some_and(|t| ASCII_SUPPORTED_TYPES.contains(&t))
+    }
+}
+
+#[cfg(feature = "eval")]
+fn evaluate_ascii_input(
+    input: &DiagramInput,
+    estimator: &selkie::layout::CharacterSizeEstimator,
+    verbose: bool,
+) -> Result<AsciiEvalTotals, Box<dyn std::error::Error>> {
+    let parsed = match selkie::parse(&input.text) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            eprintln!(" PARSE ERROR: {}", e);
+            return Ok(ascii_error_total());
+        }
+    };
+
+    match evaluate_special_ascii_diagram(input, &parsed, verbose) {
+        Ok(Some(result)) => return Ok(result),
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!(" RENDER ERROR: {}", e);
+            return Ok(ascii_error_total());
+        }
+    }
+    match evaluate_simple_ascii_diagram(input, &parsed, verbose) {
+        Ok(Some(result)) => return Ok(result),
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!(" RENDER ERROR: {}", e);
+            return Ok(ascii_error_total());
+        }
+    }
+    evaluate_graph_ascii_diagram(input, &parsed, estimator, verbose)
+}
+
+#[cfg(feature = "eval")]
+fn ascii_error_total() -> AsciiEvalTotals {
+    AsciiEvalTotals {
+        diagrams: 1,
+        errors: 1,
+        ..Default::default()
+    }
+}
+
+#[cfg(feature = "eval")]
+fn evaluate_special_ascii_diagram(
+    input: &DiagramInput,
+    parsed: &selkie::diagrams::Diagram,
+    verbose: bool,
+) -> Result<Option<AsciiEvalTotals>, Box<dyn std::error::Error>> {
+    use selkie::eval::ascii_checks;
+
+    match parsed {
+        selkie::diagrams::Diagram::Pie(db) => {
+            let ascii_output = ascii_render::pie::render_pie_ascii(db)?;
+            let issues = ascii_checks::check_ascii_pie_structure(&ascii_output, db);
+            let similarity = ascii_checks::calculate_ascii_pie_similarity(&ascii_output, db);
+            Ok(Some(ascii_issue_total(input, issues, similarity, verbose)))
+        }
+        selkie::diagrams::Diagram::Sequence(db) => {
+            let ascii_output = ascii_render::render_sequence_ascii(db)?;
+            let ascii_struct = ascii_checks::parse_ascii_sequence(&ascii_output);
+            let issues = ascii_checks::check_ascii_sequence_structure(&ascii_struct, db);
+            let similarity = ascii_checks::calculate_ascii_sequence_similarity(&ascii_struct, db);
+            Ok(Some(ascii_issue_total(input, issues, similarity, verbose)))
+        }
+        selkie::diagrams::Diagram::Gantt(db) => {
+            let mut db_clone = db.clone();
+            let ascii_output = ascii_render::gantt::render_gantt_ascii(&mut db_clone)?;
+            let issues = ascii_checks::check_ascii_gantt_structure(&ascii_output, &mut db_clone);
+            let similarity =
+                ascii_checks::calculate_ascii_gantt_similarity(&ascii_output, &mut db_clone);
+            Ok(Some(ascii_issue_total(input, issues, similarity, verbose)))
+        }
+        selkie::diagrams::Diagram::Mindmap(db) => {
+            let ascii_output = ascii_render::mindmap::render_mindmap_ascii(db)?;
+            let issues = ascii_checks::check_ascii_mindmap_structure(&ascii_output, db);
+            let similarity = ascii_checks::calculate_ascii_mindmap_similarity(&ascii_output, db);
+            Ok(Some(ascii_issue_total(input, issues, similarity, verbose)))
+        }
+        _ => Ok(None),
+    }
+}
+
+#[cfg(feature = "eval")]
+fn evaluate_simple_ascii_diagram(
+    input: &DiagramInput,
+    parsed: &selkie::diagrams::Diagram,
+    verbose: bool,
+) -> Result<Option<AsciiEvalTotals>, Box<dyn std::error::Error>> {
+    use selkie::eval::ascii_checks;
+
+    let rendered = simple_ascii_output(parsed)?;
+    let Some((diagram_type, output)) = rendered else {
+        return Ok(None);
+    };
+    let issues = ascii_checks::check_ascii_text_output(&output, diagram_type);
+    let similarity = ascii_checks::calculate_ascii_text_similarity(&output);
+    Ok(Some(ascii_issue_total(input, issues, similarity, verbose)))
+}
+
+#[cfg(feature = "eval")]
+fn simple_ascii_output(
+    parsed: &selkie::diagrams::Diagram,
+) -> Result<Option<(&'static str, String)>, Box<dyn std::error::Error>> {
+    if let Some(result) = simple_ascii_output_primary(parsed)? {
+        return Ok(Some(result));
+    }
+    simple_ascii_output_secondary(parsed)
+}
+
+#[cfg(feature = "eval")]
+fn simple_ascii_output_primary(
+    parsed: &selkie::diagrams::Diagram,
+) -> Result<Option<(&'static str, String)>, Box<dyn std::error::Error>> {
+    Ok(match parsed {
+        selkie::diagrams::Diagram::Journey(db) => {
+            Some(("journey", ascii_render::journey::render_journey_ascii(db)?))
+        }
+        selkie::diagrams::Diagram::Timeline(db) => Some((
+            "timeline",
+            ascii_render::timeline::render_timeline_ascii(db)?,
+        )),
+        selkie::diagrams::Diagram::Kanban(db) => {
+            Some(("kanban", ascii_render::kanban::render_kanban_ascii(db)?))
+        }
+        selkie::diagrams::Diagram::Packet(db) => {
+            Some(("packet", ascii_render::packet::render_packet_ascii(db)?))
+        }
+        selkie::diagrams::Diagram::XyChart(db) => {
+            Some(("xychart", ascii_render::xychart::render_xychart_ascii(db)?))
+        }
+        selkie::diagrams::Diagram::Quadrant(db) => Some((
+            "quadrant",
+            ascii_render::quadrant::render_quadrant_ascii(db)?,
+        )),
+        _ => None,
+    })
+}
+
+#[cfg(feature = "eval")]
+fn simple_ascii_output_secondary(
+    parsed: &selkie::diagrams::Diagram,
+) -> Result<Option<(&'static str, String)>, Box<dyn std::error::Error>> {
+    Ok(match parsed {
+        selkie::diagrams::Diagram::Radar(db) => {
+            Some(("radar", ascii_render::radar::render_radar_ascii(db)?))
+        }
+        selkie::diagrams::Diagram::Git(db) => {
+            Some(("git", ascii_render::gitgraph::render_gitgraph_ascii(db)?))
+        }
+        selkie::diagrams::Diagram::Sankey(db) => {
+            Some(("sankey", ascii_render::sankey::render_sankey_ascii(db)?))
+        }
+        selkie::diagrams::Diagram::Block(db) => {
+            Some(("block", ascii_render::block::render_block_ascii(db)?))
+        }
+        selkie::diagrams::Diagram::C4(db) => Some(("c4", ascii_render::c4::render_c4_ascii(db)?)),
+        selkie::diagrams::Diagram::Treemap(db) => {
+            Some(("treemap", ascii_render::treemap::render_treemap_ascii(db)?))
+        }
+        _ => None,
+    })
+}
+
+#[cfg(feature = "eval")]
+fn evaluate_graph_ascii_diagram(
+    input: &DiagramInput,
+    parsed: &selkie::diagrams::Diagram,
+    estimator: &selkie::layout::CharacterSizeEstimator,
+    verbose: bool,
+) -> Result<AsciiEvalTotals, Box<dyn std::error::Error>> {
+    use selkie::eval::ascii_checks;
+
+    let graph = match layout_diagram(parsed, estimator).and_then(selkie::layout::layout) {
+        Ok(graph) => graph,
+        Err(e) => {
+            eprintln!(" LAYOUT ERROR: {}", e);
+            return Ok(ascii_error_total());
+        }
+    };
+    let ascii_output = match selkie::render_ascii(parsed) {
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!(" RENDER ERROR: {}", e);
+            return Ok(ascii_error_total());
+        }
+    };
+
+    let ascii_struct = ascii_checks::parse_ascii(&ascii_output);
+    let mut issues = ascii_checks::check_ascii_structure(&ascii_struct, &graph);
+    if let selkie::diagrams::Diagram::Er(db) = parsed {
+        issues.extend(ascii_checks::check_er_ascii_structure(&ascii_struct, db));
+    }
+    if matches!(parsed, selkie::diagrams::Diagram::State(_)) {
+        issues.extend(ascii_checks::check_ascii_state_structure(
+            &ascii_struct,
+            &graph,
+        ));
+    }
+    let similarity = ascii_checks::calculate_ascii_similarity(&ascii_struct, &graph);
+    Ok(ascii_issue_total(input, issues, similarity, verbose))
+}
+
+#[cfg(feature = "eval")]
+fn ascii_issue_total(
+    input: &DiagramInput,
+    issues: Vec<eval::Issue>,
+    similarity: f64,
+    verbose: bool,
+) -> AsciiEvalTotals {
+    let error_count = issues
+        .iter()
+        .filter(|issue| issue.level == eval::Level::Error)
+        .count();
+    let warning_count = issues
+        .iter()
+        .filter(|issue| issue.level == eval::Level::Warning)
+        .count();
+    if verbose && !issues.is_empty() {
+        print_ascii_issues(input, &issues, error_count, warning_count, similarity);
+    }
+    AsciiEvalTotals {
+        issues: issues.len(),
+        errors: error_count,
+        diagrams: 1,
+        similarity,
+    }
+}
+
+#[cfg(feature = "eval")]
+fn print_ascii_issues(
+    input: &DiagramInput,
+    issues: &[eval::Issue],
+    error_count: usize,
+    warning_count: usize,
+    similarity: f64,
+) {
+    eprintln!();
+    eprintln!(
+        "  {} ({} errors, {} warnings, similarity: {:.1}%):",
+        input.name,
+        error_count,
+        warning_count,
+        similarity * 100.0
+    );
+    for issue in issues {
+        eprintln!(
+            "    [{}] {}: {}",
+            issue_level_name(issue.level),
+            issue.check,
+            issue.message
+        );
+    }
+}
+
+#[cfg(feature = "eval")]
+fn issue_level_name(level: eval::Level) -> &'static str {
+    match level {
+        eval::Level::Error => "ERROR",
+        eval::Level::Warning => "WARN",
+        eval::Level::Info => "INFO",
+    }
+}
+
+#[cfg(feature = "eval")]
+fn print_ascii_eval_summary(totals: &AsciiEvalTotals) {
+    eprintln!("ASCII Evaluation Summary");
+    eprintln!("======================");
+    eprintln!("Diagrams:   {}", totals.diagrams);
+    eprintln!("Issues:     {} ({} errors)", totals.issues, totals.errors);
+    eprintln!(
+        "Similarity: {:.1}% avg",
+        totals.average_similarity() * 100.0
+    );
 }
 
 /// Load diagrams from a directory of .mmd files

@@ -435,6 +435,30 @@ fn format_cell(text: &str, width: usize) -> String {
     }
 }
 
+struct SubgraphLabel {
+    row: usize,
+    label_col_start: usize,
+    label: String,
+    box_col_start: usize,
+    box_w: usize,
+}
+
+struct NodePlacement {
+    col_start: usize,
+    row_start: usize,
+    rendered: shapes::RenderedShape,
+    label_row: usize,
+}
+
+struct AsciiRenderContext<'a> {
+    graph: &'a LayoutGraph,
+    container_ids: &'a HashSet<&'a str>,
+    label_fn: &'a dyn Fn(&crate::layout::LayoutNode) -> String,
+    scale: &'a CellScale,
+    offset_x: f64,
+    offset_y: f64,
+}
+
 /// Core ASCII renderer implementation, parameterized by a label lookup function.
 fn render_ascii_impl(
     graph: &LayoutGraph,
@@ -474,142 +498,93 @@ fn render_ascii_impl(
     // Track which cells are occupied by nodes (for edge compositing)
     let mut occupied: Vec<Vec<bool>> = vec![vec![false; canvas_cols]; canvas_rows];
 
-    // Collect container node IDs — these are compound nodes whose bounding box
-    // encompasses their children. We render them as just a label, not a full box.
-    // For flowcharts these are subgraphs; for other diagram types they may be
-    // composite states, packages, etc.
-    //
-    // Detection: a node is a container if it has children OR if any other node
-    // has parent_id pointing to it.
+    let container_ids = container_ids(graph);
+    let ctx = AsciiRenderContext {
+        graph,
+        container_ids: &container_ids,
+        label_fn,
+        scale: &scale,
+        offset_x,
+        offset_y,
+    };
+    let subgraph_labels = render_container_nodes(&ctx, &mut canvas, &mut occupied);
+    let placements = render_regular_nodes(&ctx, &mut canvas, &mut occupied);
+
+    restamp_node_labels(&placements, canvas_cols, canvas_rows, &mut canvas);
+    restamp_subgraph_labels(&subgraph_labels, canvas_cols, canvas_rows, &mut canvas);
+
+    edges::render_edges(
+        graph,
+        &scale,
+        canvas_cols,
+        canvas_rows,
+        offset_x,
+        offset_y,
+        &occupied,
+        &mut canvas,
+    );
+
+    Ok(canvas_to_string(&canvas, config))
+}
+
+fn container_ids(graph: &LayoutGraph) -> HashSet<&str> {
     let parent_ids: HashSet<&str> = graph
         .nodes
         .iter()
         .filter_map(|n| n.parent_id.as_deref())
         .collect();
-    let container_ids: HashSet<&str> = graph
+    graph
         .nodes
         .iter()
         .filter(|n| !n.children.is_empty() || parent_ids.contains(n.id.as_str()))
         .map(|n| n.id.as_str())
-        .collect();
+        .collect()
+}
 
-    // Render container nodes first (background layer — bordered box with title).
-    // Sort by area descending so largest containers render first (nested ones on top).
-    struct SubgraphLabel {
-        row: usize,
-        label_col_start: usize,
-        label: String,
-        box_col_start: usize,
-        box_w: usize,
-    }
-    let mut subgraph_labels: Vec<SubgraphLabel> = Vec::new();
-
-    let mut container_nodes: Vec<&crate::layout::LayoutNode> = graph
+fn render_container_nodes(
+    ctx: &AsciiRenderContext<'_>,
+    canvas: &mut [Vec<char>],
+    occupied: &mut [Vec<bool>],
+) -> Vec<SubgraphLabel> {
+    let mut subgraph_labels = Vec::new();
+    let mut container_nodes: Vec<&crate::layout::LayoutNode> = ctx
+        .graph
         .nodes
         .iter()
-        .filter(|n| !n.is_dummy && container_ids.contains(n.id.as_str()))
+        .filter(|n| !n.is_dummy && ctx.container_ids.contains(n.id.as_str()))
         .collect();
-    container_nodes.sort_by(|a, b| {
-        let area_a = a.width * a.height;
-        let area_b = b.width * b.height;
-        area_b
-            .partial_cmp(&area_a)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    sort_nodes_by_area(&mut container_nodes, false);
 
     for node in container_nodes {
         let (nx, ny) = match (node.x, node.y) {
-            (Some(x), Some(y)) => (x - offset_x, y - offset_y),
+            (Some(x), Some(y)) => (x - ctx.offset_x, y - ctx.offset_y),
             _ => continue,
         };
 
-        let label = label_fn(node);
+        let label = (ctx.label_fn)(node);
 
         // Calculate the bounding box from the node's layout dimensions
         let label_chars = label.chars().count();
-        let box_w = scale.to_cell_width(node.width).max(label_chars + 4);
-        let box_h = scale.to_cell_height(node.height).max(3);
-        let col_center = scale.to_col(nx + node.width / 2.0);
-        let row_center = scale.to_row(ny + node.height / 2.0);
+        let box_w = ctx.scale.to_cell_width(node.width).max(label_chars + 4);
+        let box_h = ctx.scale.to_cell_height(node.height).max(3);
+        let col_center = ctx.scale.to_col(nx + node.width / 2.0);
+        let row_center = ctx.scale.to_row(ny + node.height / 2.0);
         let col_start = col_center.saturating_sub(box_w / 2);
         let row_start = row_center.saturating_sub(box_h / 2);
 
         // Label goes right after "╭─" at the start of the top border
         let label_col_start = col_start + 2;
 
-        // Draw top border: ╭─Label─────────╮
-        if row_start < canvas_rows {
-            if col_start < canvas_cols {
-                canvas[row_start][col_start] = '╭';
-                occupied[row_start][col_start] = true;
-            }
-            if col_start + 1 < canvas_cols {
-                canvas[row_start][col_start + 1] = '─';
-                occupied[row_start][col_start + 1] = true;
-            }
-            // Label text
-            for (i, ch) in label.chars().enumerate() {
-                let c = label_col_start + i;
-                if c >= canvas_cols {
-                    break;
-                }
-                canvas[row_start][c] = ch;
-                occupied[row_start][c] = true;
-            }
-            // Remaining border after label
-            let after_label = label_col_start + label_chars;
-            let right_col = col_start + box_w - 1;
-            for c in after_label..right_col {
-                if c >= canvas_cols {
-                    break;
-                }
-                canvas[row_start][c] = '─';
-                occupied[row_start][c] = true;
-            }
-            if right_col < canvas_cols {
-                canvas[row_start][right_col] = '╮';
-                occupied[row_start][right_col] = true;
-            }
-        }
-
-        // Side borders
-        for r in 1..box_h.saturating_sub(1) {
-            let row = row_start + r;
-            if row >= canvas_rows {
-                break;
-            }
-            if col_start < canvas_cols {
-                canvas[row][col_start] = '│';
-                occupied[row][col_start] = true;
-            }
-            let right = col_start + box_w - 1;
-            if right < canvas_cols {
-                canvas[row][right] = '│';
-                occupied[row][right] = true;
-            }
-        }
-
-        // Bottom border: ╰─────────────────╯
-        let bot_row = row_start + box_h - 1;
-        if bot_row < canvas_rows {
-            if col_start < canvas_cols {
-                canvas[bot_row][col_start] = '╰';
-                occupied[bot_row][col_start] = true;
-            }
-            for i in 1..box_w.saturating_sub(1) {
-                let c = col_start + i;
-                if c >= canvas_cols {
-                    break;
-                }
-                canvas[bot_row][c] = '─';
-                occupied[bot_row][c] = true;
-            }
-            let br = col_start + box_w - 1;
-            if br < canvas_cols {
-                canvas[bot_row][br] = '╯';
-                occupied[bot_row][br] = true;
-            }
-        }
+        draw_container_box(
+            canvas,
+            occupied,
+            row_start,
+            col_start,
+            box_w,
+            box_h,
+            label_col_start,
+            &label,
+        );
 
         subgraph_labels.push(SubgraphLabel {
             row: row_start,
@@ -619,46 +594,137 @@ fn render_ascii_impl(
             box_w,
         });
     }
+    subgraph_labels
+}
 
-    // Render regular (non-subgraph) nodes, sorted by area ascending so
-    // smaller nodes render first and aren't occluded by large shapes (e.g., diamonds).
-    let mut regular_nodes: Vec<&crate::layout::LayoutNode> = graph
+#[allow(clippy::too_many_arguments)]
+fn draw_container_box(
+    canvas: &mut [Vec<char>],
+    occupied: &mut [Vec<bool>],
+    row_start: usize,
+    col_start: usize,
+    box_w: usize,
+    box_h: usize,
+    label_col_start: usize,
+    label: &str,
+) {
+    draw_container_top(
+        canvas,
+        occupied,
+        row_start,
+        col_start,
+        box_w,
+        label_col_start,
+        label,
+    );
+    draw_container_sides(canvas, occupied, row_start, col_start, box_w, box_h);
+    draw_container_bottom(canvas, occupied, row_start, col_start, box_w, box_h);
+}
+
+fn draw_container_top(
+    canvas: &mut [Vec<char>],
+    occupied: &mut [Vec<bool>],
+    row_start: usize,
+    col_start: usize,
+    box_w: usize,
+    label_col_start: usize,
+    label: &str,
+) {
+    let canvas_cols = canvas.first().map(|row| row.len()).unwrap_or(0);
+    if row_start >= canvas.len() {
+        return;
+    }
+    mark_cell(canvas, occupied, row_start, col_start, '╭');
+    mark_cell(canvas, occupied, row_start, col_start + 1, '─');
+    for (i, ch) in label.chars().enumerate() {
+        let col = label_col_start + i;
+        if col >= canvas_cols {
+            break;
+        }
+        mark_cell(canvas, occupied, row_start, col, ch);
+    }
+    let after_label = label_col_start + label.chars().count();
+    let right_col = col_start + box_w - 1;
+    for col in after_label..right_col.min(canvas_cols) {
+        mark_cell(canvas, occupied, row_start, col, '─');
+    }
+    mark_cell(canvas, occupied, row_start, right_col, '╮');
+}
+
+fn draw_container_sides(
+    canvas: &mut [Vec<char>],
+    occupied: &mut [Vec<bool>],
+    row_start: usize,
+    col_start: usize,
+    box_w: usize,
+    box_h: usize,
+) {
+    let right = col_start + box_w - 1;
+    for row in (row_start + 1)..(row_start + box_h.saturating_sub(1)).min(canvas.len()) {
+        mark_cell(canvas, occupied, row, col_start, '│');
+        mark_cell(canvas, occupied, row, right, '│');
+    }
+}
+
+fn draw_container_bottom(
+    canvas: &mut [Vec<char>],
+    occupied: &mut [Vec<bool>],
+    row_start: usize,
+    col_start: usize,
+    box_w: usize,
+    box_h: usize,
+) {
+    let canvas_cols = canvas.first().map(|row| row.len()).unwrap_or(0);
+    let bot_row = row_start + box_h - 1;
+    if bot_row >= canvas.len() {
+        return;
+    }
+    mark_cell(canvas, occupied, bot_row, col_start, '╰');
+    for col in (col_start + 1)..(col_start + box_w - 1).min(canvas_cols) {
+        mark_cell(canvas, occupied, bot_row, col, '─');
+    }
+    mark_cell(canvas, occupied, bot_row, col_start + box_w - 1, '╯');
+}
+
+fn mark_cell(
+    canvas: &mut [Vec<char>],
+    occupied: &mut [Vec<bool>],
+    row: usize,
+    col: usize,
+    ch: char,
+) {
+    if row < canvas.len() && col < canvas[row].len() {
+        canvas[row][col] = ch;
+        occupied[row][col] = true;
+    }
+}
+
+fn render_regular_nodes(
+    ctx: &AsciiRenderContext<'_>,
+    canvas: &mut [Vec<char>],
+    occupied: &mut [Vec<bool>],
+) -> Vec<NodePlacement> {
+    let canvas_rows = canvas.len();
+    let canvas_cols = canvas.first().map(|row| row.len()).unwrap_or(0);
+    let mut regular_nodes: Vec<&crate::layout::LayoutNode> = ctx
+        .graph
         .nodes
         .iter()
-        .filter(|n| !n.is_dummy && !container_ids.contains(n.id.as_str()))
+        .filter(|n| !n.is_dummy && !ctx.container_ids.contains(n.id.as_str()))
         .collect();
-    // Sort by area ascending so smaller nodes render first. The blit logic
-    // protects existing label text from being overwritten by border characters,
-    // ensuring all node labels remain readable even when cells overlap.
-    regular_nodes.sort_by(|a, b| {
-        let area_a = a.width * a.height;
-        let area_b = b.width * b.height;
-        area_a
-            .partial_cmp(&area_b)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    // Two-pass rendering: first blit all shapes (borders + labels), then
-    // re-stamp all labels on top so they're never occluded by overlapping borders.
-    // This handles coarse cell-grid quantization where nodes can overlap.
-    struct NodePlacement {
-        col_start: usize,
-        row_start: usize,
-        rendered: shapes::RenderedShape,
-        label_row: usize, // which row of the rendered shape contains the label
-    }
+    sort_nodes_by_area(&mut regular_nodes, true);
     let mut placements: Vec<NodePlacement> = Vec::new();
 
     for node in regular_nodes {
         let (nx, ny) = match (node.x, node.y) {
-            (Some(x), Some(y)) => (x - offset_x, y - offset_y),
+            (Some(x), Some(y)) => (x - ctx.offset_x, y - ctx.offset_y),
             _ => continue,
         };
 
-        let label = label_fn(node);
+        let label = (ctx.label_fn)(node);
 
-        let cell_w = scale.to_cell_width(node.width);
-        let cell_h = scale.to_cell_height(node.height);
+        let cell_w = ctx.scale.to_cell_width(node.width);
+        let cell_h = ctx.scale.to_cell_height(node.height);
 
         let rendered = render_shape(&node.shape, &label, cell_w, cell_h);
 
@@ -666,8 +732,8 @@ fn render_ascii_impl(
         // apply_results_recursive). Compute the true center, then center the
         // rendered shape on it — shapes can be wider/taller than the layout
         // allocation when the label is longer than the size estimate.
-        let center_col = scale.to_col(nx + node.width / 2.0);
-        let center_row = scale.to_row(ny + node.height / 2.0);
+        let center_col = ctx.scale.to_col(nx + node.width / 2.0);
+        let center_row = ctx.scale.to_row(ny + node.height / 2.0);
         let col_start = center_col.saturating_sub(rendered.width / 2);
         let row_start = center_row.saturating_sub(rendered.height / 2);
 
@@ -712,10 +778,31 @@ fn render_ascii_impl(
             label_row,
         });
     }
+    placements
+}
 
-    // Pass 2: Re-stamp all label rows so they're never occluded by borders.
-    // This covers both regular node labels and subgraph labels.
-    for p in &placements {
+fn sort_nodes_by_area(nodes: &mut [&crate::layout::LayoutNode], ascending: bool) {
+    nodes.sort_by(|a, b| {
+        let area_a = a.width * a.height;
+        let area_b = b.width * b.height;
+        let ordering = area_a
+            .partial_cmp(&area_b)
+            .unwrap_or(std::cmp::Ordering::Equal);
+        if ascending {
+            ordering
+        } else {
+            ordering.reverse()
+        }
+    });
+}
+
+fn restamp_node_labels(
+    placements: &[NodePlacement],
+    canvas_cols: usize,
+    canvas_rows: usize,
+    canvas: &mut [Vec<char>],
+) {
+    for p in placements {
         let canvas_row = p.row_start + p.label_row;
         if canvas_row >= canvas_rows {
             continue;
@@ -732,8 +819,15 @@ fn render_ascii_impl(
             }
         }
     }
-    // Re-stamp subgraph labels on top of everything (container borders + labels)
-    for sg in &subgraph_labels {
+}
+
+fn restamp_subgraph_labels(
+    subgraph_labels: &[SubgraphLabel],
+    canvas_cols: usize,
+    canvas_rows: usize,
+    canvas: &mut [Vec<char>],
+) {
+    for sg in subgraph_labels {
         if sg.row >= canvas_rows {
             continue;
         }
@@ -763,20 +857,9 @@ fn render_ascii_impl(
             canvas[sg.row][right_col] = '╮';
         }
     }
+}
 
-    // Render edges (braille lines + arrows + labels)
-    edges::render_edges(
-        graph,
-        &scale,
-        canvas_cols,
-        canvas_rows,
-        offset_x,
-        offset_y,
-        &occupied,
-        &mut canvas,
-    );
-
-    // Convert canvas to string, trimming trailing empty lines
+fn canvas_to_string(canvas: &[Vec<char>], config: &AsciiRenderConfig) -> String {
     let mut result = String::new();
     let mut last_non_empty = 0;
     for (i, row) in canvas.iter().enumerate() {
@@ -798,8 +881,7 @@ fn render_ascii_impl(
         }
         result.push('\n');
     }
-
-    Ok(result)
+    result
 }
 
 /// Get the display label for a generic layout node, cleaning HTML tags.

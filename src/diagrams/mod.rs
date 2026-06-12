@@ -63,29 +63,69 @@ pub enum Diagram {
 
 /// Parse a diagram of a specific type
 pub fn parse(diagram_type: DiagramType, input: &str) -> Result<Diagram> {
+    parse_common_diagram(diagram_type, input)
+        .unwrap_or_else(|| parse_extended_diagram(diagram_type, input))
+}
+
+fn parse_common_diagram(diagram_type: DiagramType, input: &str) -> Option<Result<Diagram>> {
     match diagram_type {
-        DiagramType::Architecture => Ok(Diagram::Architecture(architecture::parse(input)?)),
-        DiagramType::Block => Ok(Diagram::Block(block::parse(input)?)),
-        DiagramType::C4 => Ok(Diagram::C4(c4::parse(input)?)),
-        DiagramType::Class => Ok(Diagram::Class(class::parse(input)?)),
-        DiagramType::Er => Ok(Diagram::Er(er::parse(input)?)),
-        DiagramType::Flowchart => Ok(Diagram::Flowchart(flowchart::parse(input)?)),
-        DiagramType::Gantt => Ok(Diagram::Gantt(gantt::parse(input)?)),
-        DiagramType::Git => Ok(Diagram::Git(git::parse(input)?)),
-        DiagramType::Info => Ok(Diagram::Info(info::parse(input)?)),
-        DiagramType::Journey => Ok(Diagram::Journey(journey::parse(input)?)),
-        DiagramType::Kanban => Ok(Diagram::Kanban(kanban::parse(input)?)),
-        DiagramType::Mindmap => Ok(Diagram::Mindmap(mindmap::parse(input)?)),
-        DiagramType::Packet => Ok(Diagram::Packet(packet::parse(input)?)),
-        DiagramType::Pie => Ok(Diagram::Pie(pie::parse(input)?)),
-        DiagramType::Quadrant => Ok(Diagram::Quadrant(quadrant::parse(input)?)),
-        DiagramType::Radar => Ok(Diagram::Radar(radar::parse(input)?)),
-        DiagramType::Requirement => Ok(Diagram::Requirement(requirement::parse(input)?)),
-        DiagramType::Sankey => Ok(Diagram::Sankey(sankey::parse(input)?)),
-        DiagramType::Sequence => Ok(Diagram::Sequence(sequence::parse(input)?)),
-        DiagramType::State => Ok(Diagram::State(state::parse(input)?)),
-        DiagramType::Timeline => Ok(Diagram::Timeline(timeline::parse(input)?)),
-        DiagramType::Treemap => Ok(Diagram::Treemap(treemap::parse(input)?)),
-        DiagramType::XyChart => Ok(Diagram::XyChart(xychart::parse(input)?)),
+        DiagramType::Architecture => Some(
+            architecture::parse(input)
+                .map(Diagram::Architecture)
+                .map_err(Into::into),
+        ),
+        DiagramType::Block => Some(block::parse(input).map(Diagram::Block).map_err(Into::into)),
+        DiagramType::C4 => Some(c4::parse(input).map(Diagram::C4).map_err(Into::into)),
+        DiagramType::Class => Some(class::parse(input).map(Diagram::Class).map_err(Into::into)),
+        DiagramType::Er => Some(er::parse(input).map(Diagram::Er)),
+        DiagramType::Flowchart => Some(flowchart::parse(input).map(Diagram::Flowchart)),
+        DiagramType::Gantt => Some(gantt::parse(input).map(Diagram::Gantt).map_err(Into::into)),
+        DiagramType::Git => Some(git::parse(input).map(Diagram::Git).map_err(Into::into)),
+        DiagramType::Info => Some(info::parse(input).map(Diagram::Info)),
+        DiagramType::Journey => Some(
+            journey::parse(input)
+                .map(Diagram::Journey)
+                .map_err(Into::into),
+        ),
+        DiagramType::Kanban => Some(
+            kanban::parse(input)
+                .map(Diagram::Kanban)
+                .map_err(Into::into),
+        ),
+        _ => None,
+    }
+}
+
+fn parse_extended_diagram(diagram_type: DiagramType, input: &str) -> Result<Diagram> {
+    match diagram_type {
+        DiagramType::Mindmap => mindmap::parse(input).map(Diagram::Mindmap),
+        DiagramType::Packet => packet::parse(input)
+            .map(Diagram::Packet)
+            .map_err(Into::into),
+        DiagramType::Pie => pie::parse(input).map(Diagram::Pie),
+        DiagramType::Quadrant => quadrant::parse(input)
+            .map(Diagram::Quadrant)
+            .map_err(Into::into),
+        DiagramType::Radar => radar::parse(input).map(Diagram::Radar).map_err(Into::into),
+        DiagramType::Requirement => requirement::parse(input)
+            .map(Diagram::Requirement)
+            .map_err(Into::into),
+        DiagramType::Sankey => sankey::parse(input)
+            .map(Diagram::Sankey)
+            .map_err(Into::into),
+        DiagramType::Sequence => sequence::parse(input)
+            .map(Diagram::Sequence)
+            .map_err(Into::into),
+        DiagramType::State => state::parse(input).map(Diagram::State).map_err(Into::into),
+        DiagramType::Timeline => timeline::parse(input)
+            .map(Diagram::Timeline)
+            .map_err(Into::into),
+        DiagramType::Treemap => treemap::parse(input)
+            .map(Diagram::Treemap)
+            .map_err(Into::into),
+        DiagramType::XyChart => xychart::parse(input)
+            .map(Diagram::XyChart)
+            .map_err(Into::into),
+        _ => unreachable!("common diagram types are handled before extended parsing"),
     }
 }

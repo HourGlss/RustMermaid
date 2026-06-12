@@ -143,8 +143,53 @@ fn render_column_pair(
     links: &[(&str, &str, f64)],
     node_values: &HashMap<String, f64>,
 ) -> Vec<String> {
-    // Group links by source, maintaining order
-    let mut flows_by_source: Vec<(String, Vec<(&str, f64)>)> = Vec::new();
+    let layout = ColumnPairLayout::new(left_nodes, links, node_values);
+    let mut lines = Vec::new();
+    for row in 0..layout.total_rows {
+        lines.push(render_column_pair_row(row, &layout));
+    }
+    lines
+}
+
+struct ColumnPairLayout {
+    bands: Vec<FlowBand>,
+    left_node_ranges: HashMap<String, (usize, usize)>,
+    left_labels: HashMap<usize, String>,
+    right_labels: HashMap<usize, (String, String)>,
+    left_label_width: usize,
+    total_rows: usize,
+}
+
+impl ColumnPairLayout {
+    fn new(
+        left_nodes: &[String],
+        links: &[(&str, &str, f64)],
+        node_values: &HashMap<String, f64>,
+    ) -> Self {
+        let flows_by_source = group_flows_by_source(links);
+        let bands = compute_flow_bands(links);
+        let total_rows = bands.last().map(|band| band.row_end).unwrap_or(0);
+        let left_node_ranges = compute_left_node_ranges(&flows_by_source, &bands, links);
+        let left_label_width = left_label_width(left_nodes);
+        let left_labels =
+            compute_left_labels(left_nodes, &left_node_ranges, node_values, total_rows);
+        let right_labels = compute_right_labels(&bands, node_values);
+
+        Self {
+            bands,
+            left_node_ranges,
+            left_labels,
+            right_labels,
+            left_label_width,
+            total_rows,
+        }
+    }
+}
+
+fn group_flows_by_source<'a>(
+    links: &[(&'a str, &'a str, f64)],
+) -> Vec<(String, Vec<(&'a str, f64)>)> {
+    let mut flows_by_source: Vec<(String, Vec<(&'a str, f64)>)> = Vec::new();
     let mut source_order: Vec<String> = Vec::new();
     for (src, _, _) in links {
         if !source_order.contains(&src.to_string()) {
@@ -152,28 +197,21 @@ fn render_column_pair(
         }
     }
     for src in &source_order {
-        let src_links: Vec<_> = links
+        let src_links = links
             .iter()
             .filter(|(s, _, _)| *s == src.as_str())
             .map(|(_, t, v)| (*t, *v))
             .collect();
         flows_by_source.push((src.clone(), src_links));
     }
+    flows_by_source
+}
 
-    // Compute flow bands with row allocations
+fn compute_flow_bands(links: &[(&str, &str, f64)]) -> Vec<FlowBand> {
     let max_flow_value = links.iter().map(|(_, _, v)| *v).fold(0.0f64, f64::max);
     let total_flow: f64 = links.iter().map(|(_, _, v)| *v).sum();
-
-    // Scale total rows based on number of flows.
-    // Single-flow pairs get fewer rows; many-flow pairs get the full allocation.
     let num_flows = links.len();
-    let scaled_total = if num_flows <= 1 {
-        6 // compact for single-flow pairs
-    } else if num_flows <= 2 {
-        12
-    } else {
-        TOTAL_ROWS
-    };
+    let scaled_total = scaled_total_rows(num_flows);
     let gap_rows = num_flows.saturating_sub(1);
     let available_rows = scaled_total.saturating_sub(gap_rows);
 
@@ -181,41 +219,58 @@ fn render_column_pair(
     let mut current_row = 0;
 
     for (i, (_src, tgt, val)) in links.iter().enumerate() {
-        let flow_rows = if total_flow > 0.0 {
-            ((val / total_flow) * available_rows as f64).round() as usize
-        } else {
-            1
-        };
-        let flow_rows = flow_rows.max(1);
-
-        let bar_width = if max_flow_value > 0.0 {
-            ((val / max_flow_value) * FLOW_WIDTH as f64).round() as usize
-        } else {
-            1
-        };
-        let bar_width = bar_width.clamp(1, FLOW_WIDTH);
-
         bands.push(FlowBand {
             target_id: tgt.to_string(),
             value: *val,
             row_start: current_row,
-            row_end: current_row + flow_rows,
-            bar_width,
+            row_end: current_row + flow_rows(*val, total_flow, available_rows),
+            bar_width: flow_bar_width(*val, max_flow_value),
         });
 
-        current_row += flow_rows;
-        // Add gap between flows (not after last)
+        current_row = bands.last().map(|band| band.row_end).unwrap_or(current_row);
         if i < num_flows - 1 {
             current_row += 1;
         }
     }
 
-    let total_render_rows = current_row;
+    bands
+}
 
-    // Compute left label info
-    // For each left node, find its row range (spans all its outgoing flows)
+fn scaled_total_rows(num_flows: usize) -> usize {
+    if num_flows <= 1 {
+        6
+    } else if num_flows <= 2 {
+        12
+    } else {
+        TOTAL_ROWS
+    }
+}
+
+fn flow_rows(value: f64, total_flow: f64, available_rows: usize) -> usize {
+    if total_flow > 0.0 {
+        ((value / total_flow) * available_rows as f64).round() as usize
+    } else {
+        1
+    }
+    .max(1)
+}
+
+fn flow_bar_width(value: f64, max_flow_value: f64) -> usize {
+    if max_flow_value > 0.0 {
+        ((value / max_flow_value) * FLOW_WIDTH as f64).round() as usize
+    } else {
+        1
+    }
+    .clamp(1, FLOW_WIDTH)
+}
+
+fn compute_left_node_ranges(
+    flows_by_source: &[(String, Vec<(&str, f64)>)],
+    bands: &[FlowBand],
+    links: &[(&str, &str, f64)],
+) -> HashMap<String, (usize, usize)> {
     let mut left_node_ranges: HashMap<String, (usize, usize)> = HashMap::new();
-    for (src, _src_links) in &flows_by_source {
+    for (src, _src_links) in flows_by_source {
         let src_bands: Vec<_> = bands
             .iter()
             .enumerate()
@@ -230,80 +285,71 @@ fn render_column_pair(
             left_node_ranges.insert(src.clone(), (first.1.row_start, last.1.row_end));
         }
     }
+    left_node_ranges
+}
 
-    // Label widths
-    let left_label_width = left_nodes
+fn left_label_width(left_nodes: &[String]) -> usize {
+    left_nodes
         .iter()
         .map(|id| id.chars().count())
         .max()
         .unwrap_or(3)
-        .max(3);
+        .max(3)
+}
 
-    // Compute which rows get left/right labels
-    let left_labels = compute_left_labels(
-        left_nodes,
-        &left_node_ranges,
-        node_values,
-        total_render_rows,
-    );
-    let right_labels = compute_right_labels(&bands, node_values);
-
-    // Render each row
-    let mut lines = Vec::new();
-    for row in 0..total_render_rows {
-        let mut line = String::new();
-
-        // Left label area
-        if let Some(label_text) = left_labels.get(&row) {
-            line.push_str(&format!(
-                "{:>width$} ",
-                label_text,
-                width = left_label_width
-            ));
-        } else {
-            line.push_str(&format!("{:>width$} ", "", width = left_label_width));
-        }
-
-        // Left border: always show │ while within source node range
-        let in_left_node = left_node_ranges
-            .values()
-            .any(|(start, end)| row >= *start && row < *end);
-        line.push(if in_left_node { '│' } else { ' ' });
-
-        // Flow area
-        let active_band = bands.iter().find(|b| row >= b.row_start && row < b.row_end);
-        let is_gap_row = active_band.is_none() && row > 0 && row < total_render_rows;
-        if let Some(band) = active_band {
-            // Draw block characters for this flow band
-            let mut flow_chars: Vec<char> = vec![' '; FLOW_WIDTH];
-            for ch in flow_chars.iter_mut().take(band.bar_width) {
-                *ch = FULL_BLOCK;
-            }
-            let flow_str: String = flow_chars.into_iter().collect();
-            line.push_str(&flow_str);
-        } else if is_gap_row {
-            // Gap row: thin separator line
-            line.push_str(&"─".repeat(FLOW_WIDTH));
-        } else {
-            line.push_str(&" ".repeat(FLOW_WIDTH));
-        }
-
-        // Right border: show │ for flow rows and gap rows (consistent frame)
-        line.push(if active_band.is_some() || is_gap_row {
-            '│'
-        } else {
-            ' '
-        });
-
-        // Right label
-        if let Some((name, val_str)) = right_labels.get(&row) {
-            line.push_str(&format!(" {} {}", name, val_str));
-        }
-
-        lines.push(line);
+fn render_column_pair_row(row: usize, layout: &ColumnPairLayout) -> String {
+    let mut line = String::new();
+    push_left_label(&mut line, row, layout);
+    push_left_border(&mut line, row, layout);
+    let active_band = layout
+        .bands
+        .iter()
+        .find(|b| row >= b.row_start && row < b.row_end);
+    let is_gap_row = active_band.is_none() && row > 0 && row < layout.total_rows;
+    push_flow_area(&mut line, active_band, is_gap_row);
+    line.push(if active_band.is_some() || is_gap_row {
+        '│'
+    } else {
+        ' '
+    });
+    if let Some((name, val_str)) = layout.right_labels.get(&row) {
+        line.push_str(&format!(" {} {}", name, val_str));
     }
+    line
+}
 
-    lines
+fn push_left_label(line: &mut String, row: usize, layout: &ColumnPairLayout) {
+    if let Some(label_text) = layout.left_labels.get(&row) {
+        line.push_str(&format!(
+            "{:>width$} ",
+            label_text,
+            width = layout.left_label_width
+        ));
+    } else {
+        line.push_str(&format!("{:>width$} ", "", width = layout.left_label_width));
+    }
+}
+
+fn push_left_border(line: &mut String, row: usize, layout: &ColumnPairLayout) {
+    let in_left_node = layout
+        .left_node_ranges
+        .values()
+        .any(|(start, end)| row >= *start && row < *end);
+    line.push(if in_left_node { '│' } else { ' ' });
+}
+
+fn push_flow_area(line: &mut String, active_band: Option<&FlowBand>, is_gap_row: bool) {
+    if let Some(band) = active_band {
+        let mut flow_chars: Vec<char> = vec![' '; FLOW_WIDTH];
+        for ch in flow_chars.iter_mut().take(band.bar_width) {
+            *ch = FULL_BLOCK;
+        }
+        line.push_str(&flow_chars.into_iter().collect::<String>());
+    } else if is_gap_row {
+        line.push_str(&"─".repeat(FLOW_WIDTH));
+    } else {
+        line.push_str(&" ".repeat(FLOW_WIDTH));
+    }
 }
 
 /// Compute left-side labels: node name on middle row, value on next row.

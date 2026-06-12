@@ -331,67 +331,42 @@ impl EvalRunner {
 fn detect_diagram_type(text: &str) -> String {
     let text_lower = text.to_lowercase();
 
-    // Simple substring matching for diagram type detection
-    if text_lower.contains("sequencediagram") {
-        return "sequence".to_string();
-    }
-    if text_lower.contains("classdiagram") {
-        return "class".to_string();
-    }
-    if text_lower.contains("statediagram") {
-        return "state".to_string();
-    }
-    if text_lower.contains("erdiagram") {
-        return "er".to_string();
-    }
-    if text_lower.contains("gitgraph") {
-        return "git".to_string();
-    }
-    if text_lower.contains("gantt") {
-        return "gantt".to_string();
-    }
-    if text_lower.contains("pie") {
-        return "pie".to_string();
-    }
-    if text_lower.contains("mindmap") {
-        return "mindmap".to_string();
-    }
-    if text_lower.contains("timeline") {
-        return "timeline".to_string();
-    }
-    if text_lower.contains("journey") {
-        return "journey".to_string();
-    }
-    if text_lower.contains("quadrantchart") {
-        return "quadrant".to_string();
-    }
-    if text_lower.contains("xychart") {
-        return "xychart".to_string();
-    }
-    if text_lower.contains("sankey") {
-        return "sankey".to_string();
-    }
-    if text_lower.contains("packet") {
-        return "packet".to_string();
-    }
-    if text_lower.contains("block") {
-        return "block".to_string();
-    }
-    if text_lower.contains("architecture") {
-        return "architecture".to_string();
-    }
-    if text_lower.contains("flowchart") {
-        return "flowchart".to_string();
-    }
-    // "graph" followed by whitespace indicates flowchart
-    if text_lower.starts_with("graph ")
-        || text_lower.starts_with("graph\t")
-        || text_lower.starts_with("graph\n")
+    const DIAGRAM_PATTERNS: &[(&str, &str)] = &[
+        ("sequencediagram", "sequence"),
+        ("classdiagram", "class"),
+        ("statediagram", "state"),
+        ("erdiagram", "er"),
+        ("gitgraph", "git"),
+        ("gantt", "gantt"),
+        ("pie", "pie"),
+        ("mindmap", "mindmap"),
+        ("timeline", "timeline"),
+        ("journey", "journey"),
+        ("quadrantchart", "quadrant"),
+        ("xychart", "xychart"),
+        ("sankey", "sankey"),
+        ("packet", "packet"),
+        ("block", "block"),
+        ("architecture", "architecture"),
+        ("flowchart", "flowchart"),
+    ];
+
+    if let Some((_, diagram_type)) = DIAGRAM_PATTERNS
+        .iter()
+        .find(|(needle, _)| text_lower.contains(needle))
     {
+        return diagram_type.to_string();
+    }
+
+    if has_graph_header(&text_lower) {
         return "flowchart".to_string();
     }
 
     "unknown".to_string()
+}
+
+fn has_graph_header(text: &str) -> bool {
+    text.starts_with("graph ") || text.starts_with("graph\t") || text.starts_with("graph\n")
 }
 
 #[cfg(test)]

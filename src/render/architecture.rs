@@ -362,82 +362,53 @@ pub fn compute_architecture_edge_route(
 ) -> Option<ArchitectureEdgeRoute> {
     let lhs_dir = lhs.dir;
     let rhs_dir = rhs.dir;
-    let lhs_group = lhs.is_group;
-    let rhs_group = rhs.is_group;
-    let source_is_junction = lhs.is_junction;
-    let target_is_junction = rhs.is_junction;
     let mut start = architecture_node_port(source_node, lhs_dir)?;
     let mut end = architecture_node_port(target_node, rhs_dir)?;
 
-    // Shift for group boundary edges
-    let group_edge_shift = ARCH_PADDING + 4.0;
-    if lhs_group {
-        if lhs_dir.is_x() {
-            start.x += if lhs_dir == ArchitectureDirection::Left {
-                -group_edge_shift
-            } else {
-                group_edge_shift
-            };
-        } else {
-            start.y += if lhs_dir == ArchitectureDirection::Top {
-                -group_edge_shift
-            } else {
-                group_edge_shift + ARCH_EDGE_GROUP_LABEL_SHIFT
-            };
-        }
-    }
-    if rhs_group {
-        if rhs_dir.is_x() {
-            end.x += if rhs_dir == ArchitectureDirection::Left {
-                -group_edge_shift
-            } else {
-                group_edge_shift
-            };
-        } else {
-            end.y += if rhs_dir == ArchitectureDirection::Top {
-                -group_edge_shift
-            } else {
-                group_edge_shift + ARCH_EDGE_GROUP_LABEL_SHIFT
-            };
-        }
-    }
-
-    // Shrink junction ports inward
-    let half_icon = ARCH_ICON_SIZE / 2.0;
-    if !lhs_group && source_is_junction {
-        if lhs_dir.is_x() {
-            start.x += if lhs_dir == ArchitectureDirection::Left {
-                half_icon
-            } else {
-                -half_icon
-            };
-        } else {
-            start.y += if lhs_dir == ArchitectureDirection::Top {
-                half_icon
-            } else {
-                -half_icon
-            };
-        }
-    }
-    if !rhs_group && target_is_junction {
-        if rhs_dir.is_x() {
-            end.x += if rhs_dir == ArchitectureDirection::Left {
-                half_icon
-            } else {
-                -half_icon
-            };
-        } else {
-            end.y += if rhs_dir == ArchitectureDirection::Top {
-                half_icon
-            } else {
-                -half_icon
-            };
-        }
-    }
+    apply_group_edge_shift(&mut start, lhs_dir, lhs.is_group);
+    apply_group_edge_shift(&mut end, rhs_dir, rhs.is_group);
+    apply_junction_shrink(&mut start, lhs_dir, lhs.is_group, lhs.is_junction);
+    apply_junction_shrink(&mut end, rhs_dir, rhs.is_group, rhs.is_junction);
 
     let points = architecture_edge_points(start, end, lhs_dir, rhs_dir);
 
     Some(ArchitectureEdgeRoute { start, end, points })
+}
+
+fn apply_group_edge_shift(point: &mut Point, dir: ArchitectureDirection, is_group: bool) {
+    if !is_group {
+        return;
+    }
+    let shift = ARCH_PADDING + 4.0;
+    if dir.is_x() {
+        point.x += directional_shift(dir, shift, -shift);
+    } else {
+        point.y += directional_shift(dir, shift + ARCH_EDGE_GROUP_LABEL_SHIFT, -shift);
+    }
+}
+
+fn apply_junction_shrink(
+    point: &mut Point,
+    dir: ArchitectureDirection,
+    is_group: bool,
+    is_junction: bool,
+) {
+    if is_group || !is_junction {
+        return;
+    }
+    let half_icon = ARCH_ICON_SIZE / 2.0;
+    if dir.is_x() {
+        point.x += directional_shift(dir, -half_icon, half_icon);
+    } else {
+        point.y += directional_shift(dir, -half_icon, half_icon);
+    }
+}
+
+fn directional_shift(dir: ArchitectureDirection, positive: f64, negative: f64) -> f64 {
+    match dir {
+        ArchitectureDirection::Left | ArchitectureDirection::Top => negative,
+        _ => positive,
+    }
 }
 
 fn apply_overlap_jitter(
@@ -468,56 +439,12 @@ fn separate_group_overlaps(
     graph: &mut LayoutGraph,
     positions: &mut HashMap<String, (f64, f64)>,
 ) {
-    let mut group_children: HashMap<String, Vec<String>> = HashMap::new();
-    for group in db.get_groups() {
-        if let Some(parent) = group.parent.as_deref() {
-            group_children
-                .entry(parent.to_string())
-                .or_default()
-                .push(group.id.clone());
-        }
-    }
-
-    let mut direct_nodes: HashMap<String, Vec<String>> = HashMap::new();
-    for service in db.get_services() {
-        if let Some(parent) = service.parent.as_deref() {
-            direct_nodes
-                .entry(parent.to_string())
-                .or_default()
-                .push(service.id.clone());
-        }
-    }
-    for junction in db.get_junctions() {
-        if let Some(parent) = junction.parent.as_deref() {
-            direct_nodes
-                .entry(parent.to_string())
-                .or_default()
-                .push(junction.id.clone());
-        }
-    }
-
-    let mut group_nodes: HashMap<String, Vec<String>> = HashMap::new();
-    for group in db.get_groups() {
-        group_nodes.insert(
-            group.id.clone(),
-            collect_group_nodes(&group.id, &group_children, &direct_nodes),
-        );
-    }
-
-    let mut parent_map: HashMap<String, Option<String>> = HashMap::new();
-    for group in db.get_groups() {
-        parent_map.insert(group.id.clone(), group.parent.clone());
-    }
-
+    let group_children = build_group_children(db);
+    let direct_nodes = build_direct_nodes(db);
+    let group_nodes = build_group_nodes(db, &group_children, &direct_nodes);
+    let parent_map = build_group_parent_map(db);
     let group_preferences = build_group_preferences(db);
-
-    let mut group_ids: Vec<String> = db
-        .get_groups()
-        .iter()
-        .filter(|g| g.parent.is_none())
-        .map(|g| g.id.clone())
-        .collect();
-    group_ids.sort();
+    let group_ids = root_group_ids(db);
     if group_ids.len() < 2 {
         return;
     }
@@ -544,48 +471,8 @@ fn separate_group_overlaps(
                     continue;
                 }
 
-                let center_ax = a.x + a.width / 2.0;
-                let center_ay = a.y + a.height / 2.0;
-                let center_bx = b.x + b.width / 2.0;
-                let center_by = b.y + b.height / 2.0;
-                let dx = center_bx - center_ax;
-                let dy = center_by - center_ay;
-
-                let (shift_x, shift_y, shift_group) = if let Some(pref) = group_preferences
-                    .get(&(gid_a.clone(), gid_b.clone()))
-                    .map(|pref| (gid_a.as_str(), gid_b.as_str(), *pref))
-                    .or_else(|| {
-                        group_preferences
-                            .get(&(gid_b.clone(), gid_a.clone()))
-                            .map(|pref| (gid_b.as_str(), gid_a.as_str(), *pref))
-                    }) {
-                    let (_lhs, rhs, pref) = pref;
-                    let shift_group = rhs;
-                    let (moving, fixed) = if shift_group == gid_a.as_str() {
-                        (a, b)
-                    } else {
-                        (b, a)
-                    };
-                    let (shift_x, shift_y) =
-                        compute_group_separation(moving, fixed, pref.axis, pref.dir);
-                    (shift_x, shift_y, shift_group)
-                } else if dx.abs() >= dy.abs() {
-                    if center_ax <= center_bx {
-                        let (shift_x, shift_y) =
-                            compute_group_separation(b, a, GroupAxis::Horizontal, 1);
-                        (shift_x, shift_y, gid_b.as_str())
-                    } else {
-                        let (shift_x, shift_y) =
-                            compute_group_separation(a, b, GroupAxis::Horizontal, 1);
-                        (shift_x, shift_y, gid_a.as_str())
-                    }
-                } else if center_ay <= center_by {
-                    let (shift_x, shift_y) = compute_group_separation(b, a, GroupAxis::Vertical, 1);
-                    (shift_x, shift_y, gid_b.as_str())
-                } else {
-                    let (shift_x, shift_y) = compute_group_separation(a, b, GroupAxis::Vertical, 1);
-                    (shift_x, shift_y, gid_a.as_str())
-                };
+                let (shift_x, shift_y, shift_group) =
+                    group_shift_for_overlap(gid_a, gid_b, a, b, &group_preferences);
 
                 if shift_x != 0.0 || shift_y != 0.0 {
                     shift_group_nodes(
@@ -604,6 +491,152 @@ fn separate_group_overlaps(
         if !shifted {
             break;
         }
+    }
+}
+
+fn build_group_children(db: &ArchitectureDb) -> HashMap<String, Vec<String>> {
+    let mut group_children: HashMap<String, Vec<String>> = HashMap::new();
+    for group in db.get_groups() {
+        if let Some(parent) = group.parent.as_deref() {
+            group_children
+                .entry(parent.to_string())
+                .or_default()
+                .push(group.id.clone());
+        }
+    }
+    group_children
+}
+
+fn build_direct_nodes(db: &ArchitectureDb) -> HashMap<String, Vec<String>> {
+    let mut direct_nodes: HashMap<String, Vec<String>> = HashMap::new();
+    for service in db.get_services() {
+        add_direct_node(&mut direct_nodes, service.parent.as_deref(), &service.id);
+    }
+    for junction in db.get_junctions() {
+        add_direct_node(&mut direct_nodes, junction.parent.as_deref(), &junction.id);
+    }
+    direct_nodes
+}
+
+fn add_direct_node(
+    direct_nodes: &mut HashMap<String, Vec<String>>,
+    parent: Option<&str>,
+    id: &str,
+) {
+    if let Some(parent) = parent {
+        direct_nodes
+            .entry(parent.to_string())
+            .or_default()
+            .push(id.to_string());
+    }
+}
+
+fn build_group_nodes(
+    db: &ArchitectureDb,
+    group_children: &HashMap<String, Vec<String>>,
+    direct_nodes: &HashMap<String, Vec<String>>,
+) -> HashMap<String, Vec<String>> {
+    let mut group_nodes = HashMap::new();
+    for group in db.get_groups() {
+        group_nodes.insert(
+            group.id.clone(),
+            collect_group_nodes(&group.id, group_children, direct_nodes),
+        );
+    }
+    group_nodes
+}
+
+fn build_group_parent_map(db: &ArchitectureDb) -> HashMap<String, Option<String>> {
+    db.get_groups()
+        .iter()
+        .map(|group| (group.id.clone(), group.parent.clone()))
+        .collect()
+}
+
+fn root_group_ids(db: &ArchitectureDb) -> Vec<String> {
+    let mut group_ids: Vec<String> = db
+        .get_groups()
+        .iter()
+        .filter(|g| g.parent.is_none())
+        .map(|g| g.id.clone())
+        .collect();
+    group_ids.sort();
+    group_ids
+}
+
+fn group_shift_for_overlap<'a>(
+    gid_a: &'a str,
+    gid_b: &'a str,
+    a: &GroupBounds,
+    b: &GroupBounds,
+    group_preferences: &HashMap<(String, String), GroupPreference>,
+) -> (f64, f64, &'a str) {
+    if let Some((shift_group, pref)) = group_preference(gid_a, gid_b, group_preferences) {
+        let (moving, fixed) = if shift_group == gid_a { (a, b) } else { (b, a) };
+        let (shift_x, shift_y) = compute_group_separation(moving, fixed, pref.axis, pref.dir);
+        return (shift_x, shift_y, shift_group);
+    }
+
+    let center_a = group_center(a);
+    let center_b = group_center(b);
+    if (center_b.0 - center_a.0).abs() >= (center_b.1 - center_a.1).abs() {
+        horizontal_group_shift(gid_a, gid_b, a, b, center_a.0 <= center_b.0)
+    } else {
+        vertical_group_shift(gid_a, gid_b, a, b, center_a.1 <= center_b.1)
+    }
+}
+
+fn group_preference<'a>(
+    gid_a: &'a str,
+    gid_b: &'a str,
+    group_preferences: &HashMap<(String, String), GroupPreference>,
+) -> Option<(&'a str, GroupPreference)> {
+    group_preferences
+        .get(&(gid_a.to_string(), gid_b.to_string()))
+        .map(|pref| (gid_b, *pref))
+        .or_else(|| {
+            group_preferences
+                .get(&(gid_b.to_string(), gid_a.to_string()))
+                .map(|pref| (gid_a, *pref))
+        })
+}
+
+fn group_center(bounds: &GroupBounds) -> (f64, f64) {
+    (
+        bounds.x + bounds.width / 2.0,
+        bounds.y + bounds.height / 2.0,
+    )
+}
+
+fn horizontal_group_shift<'a>(
+    gid_a: &'a str,
+    gid_b: &'a str,
+    a: &GroupBounds,
+    b: &GroupBounds,
+    b_is_right: bool,
+) -> (f64, f64, &'a str) {
+    if b_is_right {
+        let (shift_x, shift_y) = compute_group_separation(b, a, GroupAxis::Horizontal, 1);
+        (shift_x, shift_y, gid_b)
+    } else {
+        let (shift_x, shift_y) = compute_group_separation(a, b, GroupAxis::Horizontal, 1);
+        (shift_x, shift_y, gid_a)
+    }
+}
+
+fn vertical_group_shift<'a>(
+    gid_a: &'a str,
+    gid_b: &'a str,
+    a: &GroupBounds,
+    b: &GroupBounds,
+    b_is_below: bool,
+) -> (f64, f64, &'a str) {
+    if b_is_below {
+        let (shift_x, shift_y) = compute_group_separation(b, a, GroupAxis::Vertical, 1);
+        (shift_x, shift_y, gid_b)
+    } else {
+        let (shift_x, shift_y) = compute_group_separation(a, b, GroupAxis::Vertical, 1);
+        (shift_x, shift_y, gid_a)
     }
 }
 
@@ -945,167 +978,181 @@ impl Simulation {
 
         for _ in 0..iterations {
             let mut forces: HashMap<String, (f64, f64)> = HashMap::new();
+            self.apply_repulsion_forces(&keys, &mut forces);
+            self.apply_edge_constraint_forces(&mut forces);
+            self.apply_group_gravity_forces(&mut forces);
+            self.apply_group_exclusion_forces(&mut forces);
+            self.integrate_forces(&forces);
+        }
+    }
 
-            // 1. Repulsion (All pairs)
-            for i in 0..keys.len() {
-                for j in (i + 1)..keys.len() {
-                    let k1 = &keys[i];
-                    let k2 = &keys[j];
-                    let n1 = &self.nodes[k1];
-                    let n2 = &self.nodes[k2];
-
-                    let dx = n1.x - n2.x;
-                    let dy = n1.y - n2.y;
-                    let dist_sq = (dx * dx + dy * dy).max(1.0);
-                    let dist = dist_sq.sqrt();
-
-                    // Repulsion
-                    let f = (REPULSION_FORCE / dist_sq).min(MAX_FORCE);
-                    let fx = (dx / dist) * f;
-                    let fy = (dy / dist) * f;
-
-                    let f1 = forces.entry(k1.clone()).or_insert((0.0, 0.0));
-                    f1.0 += fx;
-                    f1.1 += fy;
-
-                    let f2 = forces.entry(k2.clone()).or_insert((0.0, 0.0));
-                    f2.0 -= fx;
-                    f2.1 -= fy;
-                }
+    fn apply_repulsion_forces(&self, keys: &[String], forces: &mut HashMap<String, (f64, f64)>) {
+        for i in 0..keys.len() {
+            for j in (i + 1)..keys.len() {
+                self.apply_pair_repulsion(&keys[i], &keys[j], forces);
             }
+        }
+    }
 
-            // 2. Edge Constraints (Springs)
-            for (src, constraints) in &self.edges {
-                let n_src = &self.nodes[src];
-                for c in constraints {
-                    if let Some(n_tgt) = self.nodes.get(&c.target) {
-                        let target_x = n_src.x + c.dx;
-                        let target_y = n_src.y + c.dy;
+    fn apply_pair_repulsion(&self, k1: &str, k2: &str, forces: &mut HashMap<String, (f64, f64)>) {
+        let n1 = &self.nodes[k1];
+        let n2 = &self.nodes[k2];
+        let dx = n1.x - n2.x;
+        let dy = n1.y - n2.y;
+        let dist_sq = (dx * dx + dy * dy).max(1.0);
+        let dist = dist_sq.sqrt();
+        let force = (REPULSION_FORCE / dist_sq).min(MAX_FORCE);
+        let fx = (dx / dist) * force;
+        let fy = (dy / dist) * force;
 
-                        let dx = n_tgt.x - target_x;
-                        let dy = n_tgt.y - target_y;
+        add_force(forces, k1, fx, fy);
+        add_force(forces, k2, -fx, -fy);
+    }
 
-                        let fx = (-SPRING_STIFFNESS * dx).clamp(-MAX_FORCE, MAX_FORCE);
-                        let fy = (-SPRING_STIFFNESS * dy).clamp(-MAX_FORCE, MAX_FORCE);
-
-                        // Apply to target
-                        let f_tgt = forces.entry(c.target.clone()).or_insert((0.0, 0.0));
-                        f_tgt.0 += fx;
-                        f_tgt.1 += fy;
-
-                        // Apply opposite to source
-                        let f_src = forces.entry(src.clone()).or_insert((0.0, 0.0));
-                        f_src.0 -= fx;
-                        f_src.1 -= fy;
-                    }
-                }
+    fn apply_edge_constraint_forces(&self, forces: &mut HashMap<String, (f64, f64)>) {
+        for (src, constraints) in &self.edges {
+            let n_src = &self.nodes[src];
+            for constraint in constraints {
+                self.apply_edge_constraint(src, n_src, constraint, forces);
             }
+        }
+    }
 
-            // 3. Group Gravity (Keep groups compact)
-            for members in self.groups.values() {
-                if members.is_empty() {
-                    continue;
-                }
-                // Calculate centroid
-                let mut sum_x = 0.0;
-                let mut sum_y = 0.0;
-                for m in members {
-                    if let Some(n) = self.nodes.get(m) {
-                        sum_x += n.x;
-                        sum_y += n.y;
-                    }
-                }
-                let cx = sum_x / members.len() as f64;
-                let cy = sum_y / members.len() as f64;
+    fn apply_edge_constraint(
+        &self,
+        src: &str,
+        n_src: &NodeState,
+        constraint: &Constraint,
+        forces: &mut HashMap<String, (f64, f64)>,
+    ) {
+        let Some(n_tgt) = self.nodes.get(&constraint.target) else {
+            return;
+        };
 
-                for m in members {
-                    if let Some(n) = self.nodes.get(m) {
-                        let dx = cx - n.x;
-                        let dy = cy - n.y;
-                        let f = forces.entry(m.clone()).or_insert((0.0, 0.0));
-                        f.0 += (dx * GROUP_GRAVITY).clamp(-MAX_FORCE, MAX_FORCE);
-                        f.1 += (dy * GROUP_GRAVITY).clamp(-MAX_FORCE, MAX_FORCE);
-                    }
-                }
+        let dx = n_tgt.x - (n_src.x + constraint.dx);
+        let dy = n_tgt.y - (n_src.y + constraint.dy);
+        let fx = (-SPRING_STIFFNESS * dx).clamp(-MAX_FORCE, MAX_FORCE);
+        let fy = (-SPRING_STIFFNESS * dy).clamp(-MAX_FORCE, MAX_FORCE);
+
+        add_force(forces, &constraint.target, fx, fy);
+        add_force(forces, src, -fx, -fy);
+    }
+
+    fn apply_group_gravity_forces(&self, forces: &mut HashMap<String, (f64, f64)>) {
+        for members in self.groups.values().filter(|members| !members.is_empty()) {
+            if let Some((cx, cy)) = self.group_centroid(members) {
+                self.pull_group_members_to_centroid(members, cx, cy, forces);
             }
+        }
+    }
 
-            // 4. Group Exclusion (Prevent overlapping groups)
-            // Calculate group bounds
-            let mut group_bounds = HashMap::new();
-            for (gid, members) in &self.groups {
-                if members.is_empty() {
-                    continue;
-                }
-                let mut min_x = f64::MAX;
-                let mut max_x = f64::MIN;
-                let mut min_y = f64::MAX;
-                let mut max_y = f64::MIN;
-                for m in members {
-                    if let Some(n) = self.nodes.get(m) {
-                        min_x = min_x.min(n.x);
-                        max_x = max_x.max(n.x);
-                        min_y = min_y.min(n.y);
-                        max_y = max_y.max(n.y);
-                    }
-                }
-                // Add padding for exclusion zone
-                let padding = ARCH_ICON_SIZE * 0.75;
-                group_bounds.insert(
-                    gid,
-                    (
-                        min_x - padding,
-                        min_y - padding,
-                        max_x + padding,
-                        max_y + padding,
-                    ),
+    fn group_centroid(&self, members: &[String]) -> Option<(f64, f64)> {
+        let mut sum_x = 0.0;
+        let mut sum_y = 0.0;
+        let mut count = 0usize;
+
+        for member in members {
+            if let Some(node) = self.nodes.get(member) {
+                sum_x += node.x;
+                sum_y += node.y;
+                count += 1;
+            }
+        }
+
+        (count > 0).then_some((sum_x / count as f64, sum_y / count as f64))
+    }
+
+    fn pull_group_members_to_centroid(
+        &self,
+        members: &[String],
+        cx: f64,
+        cy: f64,
+        forces: &mut HashMap<String, (f64, f64)>,
+    ) {
+        for member in members {
+            if let Some(node) = self.nodes.get(member) {
+                let fx = ((cx - node.x) * GROUP_GRAVITY).clamp(-MAX_FORCE, MAX_FORCE);
+                let fy = ((cy - node.y) * GROUP_GRAVITY).clamp(-MAX_FORCE, MAX_FORCE);
+                add_force(forces, member, fx, fy);
+            }
+        }
+    }
+
+    fn apply_group_exclusion_forces(&self, forces: &mut HashMap<String, (f64, f64)>) {
+        let group_bounds = self.group_exclusion_bounds();
+
+        for (node_id, node) in &self.nodes {
+            let my_group = self.node_to_group.get(node_id).map(|group| group.as_str());
+            for (group_id, bounds) in &group_bounds {
+                self.apply_group_exclusion_force(
+                    node_id, node, my_group, group_id, *bounds, forces,
                 );
             }
+        }
+    }
 
-            for (nid, node) in &self.nodes {
-                let my_group = self.node_to_group.get(nid).map(|s| s.as_str());
+    fn group_exclusion_bounds(&self) -> HashMap<String, (f64, f64, f64, f64)> {
+        self.groups
+            .iter()
+            .filter_map(|(group_id, members)| {
+                self.group_bounds(members)
+                    .map(|bounds| (group_id.clone(), bounds))
+            })
+            .collect()
+    }
 
-                for (gid, (min_x, min_y, max_x, max_y)) in &group_bounds {
-                    // Skip if related (same group or ancestry)
-                    if self.are_groups_related(my_group, Some(gid)) {
-                        continue;
-                    }
+    fn group_bounds(&self, members: &[String]) -> Option<(f64, f64, f64, f64)> {
+        let mut min_x = f64::MAX;
+        let mut max_x = f64::MIN;
+        let mut min_y = f64::MAX;
+        let mut max_y = f64::MIN;
+        let mut found = false;
 
-                    // Check if node is inside foreign group bounds
-                    if node.x > *min_x && node.x < *max_x && node.y > *min_y && node.y < *max_y {
-                        // Push out
-                        let cx = (min_x + max_x) / 2.0;
-                        let cy = (min_y + max_y) / 2.0;
-                        let mut dx = node.x - cx;
-                        let mut dy = node.y - cy;
-
-                        // Avoid zero vector
-                        if dx.abs() < 0.1 {
-                            dx = 1.0;
-                        }
-                        if dy.abs() < 0.1 {
-                            dy = 1.0;
-                        }
-
-                        let dist = (dx * dx + dy * dy).sqrt();
-                        let f = GROUP_EXCLUSION_FORCE.min(MAX_FORCE);
-                        let fx = (dx / dist) * f;
-                        let fy = (dy / dist) * f;
-
-                        let f_node = forces.entry(nid.clone()).or_insert((0.0, 0.0));
-                        f_node.0 += fx;
-                        f_node.1 += fy;
-                    }
-                }
+        for member in members {
+            if let Some(node) = self.nodes.get(member) {
+                min_x = min_x.min(node.x);
+                max_x = max_x.max(node.x);
+                min_y = min_y.min(node.y);
+                max_y = max_y.max(node.y);
+                found = true;
             }
+        }
 
-            // Update positions
-            for (id, node) in self.nodes.iter_mut() {
-                if let Some((fx, fy)) = forces.get(id) {
-                    node.vx = (node.vx + fx * DT) * DAMPING;
-                    node.vy = (node.vy + fy * DT) * DAMPING;
-                    node.x += node.vx * DT;
-                    node.y += node.vy * DT;
-                }
+        found.then(|| {
+            let padding = ARCH_ICON_SIZE * 0.75;
+            (
+                min_x - padding,
+                min_y - padding,
+                max_x + padding,
+                max_y + padding,
+            )
+        })
+    }
+
+    fn apply_group_exclusion_force(
+        &self,
+        node_id: &str,
+        node: &NodeState,
+        my_group: Option<&str>,
+        group_id: &str,
+        bounds: (f64, f64, f64, f64),
+        forces: &mut HashMap<String, (f64, f64)>,
+    ) {
+        if self.are_groups_related(my_group, Some(group_id)) || !node_inside_bounds(node, bounds) {
+            return;
+        }
+
+        let (fx, fy) = group_exclusion_force(node, bounds);
+        add_force(forces, node_id, fx, fy);
+    }
+
+    fn integrate_forces(&mut self, forces: &HashMap<String, (f64, f64)>) {
+        for (id, node) in self.nodes.iter_mut() {
+            if let Some((fx, fy)) = forces.get(id) {
+                node.vx = (node.vx + fx * DT) * DAMPING;
+                node.vy = (node.vy + fy * DT) * DAMPING;
+                node.x += node.vx * DT;
+                node.y += node.vy * DT;
             }
         }
     }
@@ -1145,6 +1192,40 @@ impl Simulation {
             .map(|(k, v)| (k.clone(), (v.x, v.y)))
             .collect()
     }
+}
+
+fn add_force(forces: &mut HashMap<String, (f64, f64)>, node_id: &str, fx: f64, fy: f64) {
+    let force = forces.entry(node_id.to_string()).or_insert((0.0, 0.0));
+    force.0 += fx;
+    force.1 += fy;
+}
+
+fn node_inside_bounds(
+    node: &NodeState,
+    (min_x, min_y, max_x, max_y): (f64, f64, f64, f64),
+) -> bool {
+    node.x > min_x && node.x < max_x && node.y > min_y && node.y < max_y
+}
+
+fn group_exclusion_force(
+    node: &NodeState,
+    (min_x, min_y, max_x, max_y): (f64, f64, f64, f64),
+) -> (f64, f64) {
+    let cx = (min_x + max_x) / 2.0;
+    let cy = (min_y + max_y) / 2.0;
+    let mut dx = node.x - cx;
+    let mut dy = node.y - cy;
+
+    if dx.abs() < 0.1 {
+        dx = 1.0;
+    }
+    if dy.abs() < 0.1 {
+        dy = 1.0;
+    }
+
+    let dist = (dx * dx + dy * dy).sqrt();
+    let force = GROUP_EXCLUSION_FORCE.min(MAX_FORCE);
+    ((dx / dist) * force, (dy / dist) * force)
 }
 
 fn build_adjacency(

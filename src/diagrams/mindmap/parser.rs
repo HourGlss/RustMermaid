@@ -48,21 +48,7 @@ pub fn parse_into(input: &str, db: &mut MindmapDb) -> Result<()> {
     db.clear();
 
     let lines: Vec<&str> = input.lines().collect();
-    let mut i = 0;
-
-    // Skip to mindmap header
-    while i < lines.len() {
-        let line = lines[i].trim();
-        if line.is_empty() || COMMENT_RE.is_match(line) {
-            i += 1;
-            continue;
-        }
-        if MINDMAP_HEADER_RE.is_match(line) {
-            i += 1;
-            break;
-        }
-        i += 1;
-    }
+    let mut i = find_mindmap_body_start(&lines);
 
     // Parse nodes with indentation-based hierarchy
     let mut stack: Vec<(usize, MindmapNode)> = Vec::new(); // (indent, node)
@@ -84,30 +70,7 @@ pub fn parse_into(input: &str, db: &mut MindmapDb) -> Result<()> {
         let indent = line.len() - line.trim_start().len();
         let content = line.trim();
 
-        // Check for icon decoration
-        if let Some(caps) = ICON_RE.captures(content) {
-            let icon = caps.get(1).unwrap().as_str();
-            if let Some(target_idx) =
-                pending_decorations.or_else(|| stack.last().map(|_| stack.len() - 1))
-            {
-                if let Some((_, node)) = stack.get_mut(target_idx) {
-                    node.set_icon(icon);
-                }
-            }
-            i += 1;
-            continue;
-        }
-
-        // Check for class decoration
-        if let Some(caps) = CLASS_RE.captures(content) {
-            let class = caps.get(1).unwrap().as_str();
-            if let Some(target_idx) =
-                pending_decorations.or_else(|| stack.last().map(|_| stack.len() - 1))
-            {
-                if let Some((_, node)) = stack.get_mut(target_idx) {
-                    node.set_class(class);
-                }
-            }
+        if apply_decoration(content, &mut stack, pending_decorations) {
             i += 1;
             continue;
         }
@@ -116,24 +79,7 @@ pub fn parse_into(input: &str, db: &mut MindmapDb) -> Result<()> {
         let node = parse_node(content)?;
 
         // Find parent based on indentation
-        while let Some((parent_indent, _)) = stack.last() {
-            if *parent_indent >= indent {
-                // Pop and attach to its parent
-                let (_, child) = stack.pop().unwrap();
-                if let Some((_, parent)) = stack.last_mut() {
-                    parent.add_child(child);
-                } else if db.get_mindmap().is_some() {
-                    return Err(MermaidError::ParseError(format!(
-                        "There can be only one root. No parent could be found for (\"{}\")",
-                        child.descr
-                    )));
-                } else {
-                    db.set_root(child);
-                }
-            } else {
-                break;
-            }
-        }
+        attach_popped_nodes(indent, &mut stack, db)?;
 
         // Check for multiple roots
         if stack.is_empty() && db.get_mindmap().is_some() {
@@ -148,7 +94,94 @@ pub fn parse_into(input: &str, db: &mut MindmapDb) -> Result<()> {
         i += 1;
     }
 
-    // Collapse remaining stack
+    collapse_stack(&mut stack, db);
+
+    Ok(())
+}
+
+fn find_mindmap_body_start(lines: &[&str]) -> usize {
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i].trim();
+        if line.is_empty() || COMMENT_RE.is_match(line) {
+            i += 1;
+            continue;
+        }
+        if MINDMAP_HEADER_RE.is_match(line) {
+            return i + 1;
+        }
+        i += 1;
+    }
+    i
+}
+
+fn apply_decoration(
+    content: &str,
+    stack: &mut [(usize, MindmapNode)],
+    pending_decorations: Option<usize>,
+) -> bool {
+    if let Some(caps) = ICON_RE.captures(content) {
+        apply_to_decoration_target(stack, pending_decorations, |node| {
+            node.set_icon(caps.get(1).unwrap().as_str());
+        });
+        return true;
+    }
+
+    if let Some(caps) = CLASS_RE.captures(content) {
+        apply_to_decoration_target(stack, pending_decorations, |node| {
+            node.set_class(caps.get(1).unwrap().as_str());
+        });
+        return true;
+    }
+
+    false
+}
+
+fn apply_to_decoration_target<F>(
+    stack: &mut [(usize, MindmapNode)],
+    pending_decorations: Option<usize>,
+    mut apply: F,
+) where
+    F: FnMut(&mut MindmapNode),
+{
+    let target_idx = pending_decorations.or_else(|| stack.last().map(|_| stack.len() - 1));
+    if let Some(target_idx) = target_idx {
+        if let Some((_, node)) = stack.get_mut(target_idx) {
+            apply(node);
+        }
+    }
+}
+
+fn attach_popped_nodes(
+    indent: usize,
+    stack: &mut Vec<(usize, MindmapNode)>,
+    db: &mut MindmapDb,
+) -> Result<()> {
+    while let Some((parent_indent, _)) = stack.last() {
+        if *parent_indent < indent {
+            break;
+        }
+        attach_stack_child(stack, db)?;
+    }
+    Ok(())
+}
+
+fn attach_stack_child(stack: &mut Vec<(usize, MindmapNode)>, db: &mut MindmapDb) -> Result<()> {
+    let (_, child) = stack.pop().unwrap();
+    if let Some((_, parent)) = stack.last_mut() {
+        parent.add_child(child);
+    } else if db.get_mindmap().is_some() {
+        return Err(MermaidError::ParseError(format!(
+            "There can be only one root. No parent could be found for (\"{}\")",
+            child.descr
+        )));
+    } else {
+        db.set_root(child);
+    }
+    Ok(())
+}
+
+fn collapse_stack(stack: &mut Vec<(usize, MindmapNode)>, db: &mut MindmapDb) {
     while let Some((_, child)) = stack.pop() {
         if let Some((_, parent)) = stack.last_mut() {
             parent.add_child(child);
@@ -156,8 +189,6 @@ pub fn parse_into(input: &str, db: &mut MindmapDb) -> Result<()> {
             db.set_root(child);
         }
     }
-
-    Ok(())
 }
 
 /// Parse a single node from content
