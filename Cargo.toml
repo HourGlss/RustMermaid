@@ -36,6 +36,7 @@ thiserror = "1.0"
 
 # Logging
 log = "0.4"
+tracing = { version = "0.1", features = ["attributes"] }
 
 # Font metrics for accurate text measurement
 fontdue = "0.9"
@@ -69,7 +70,7 @@ required-features = ["cli"]
 
 [features]
 default = ["cli", "png"]
-cli = ["clap", "glob", "dirs", "tempfile"]
+cli = ["clap", "glob", "dirs", "tempfile", "tracing-subscriber"]
 png = ["resvg", "image"]
 pdf = ["svg2pdf", "resvg"]
 kitty = ["resvg", "base64", "libc", "atty", "image"]
@@ -80,6 +81,11 @@ eval = ["cli", "png", "simplecss"]  # Everything needed for `selkie eval`
 [dependencies.clap]
 version = "4.4"
 features = ["derive"]
+optional = true
+
+[dependencies.tracing-subscriber]
+version = "0.3"
+features = ["env-filter", "fmt", "json"]
 optional = true
 
 [dependencies.resvg]

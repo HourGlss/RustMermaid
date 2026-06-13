@@ -9,15 +9,17 @@
 //!   selkie eval                                # evaluate with gallery samples
 //!   selkie eval -o ./reports                   # custom output directory
 
-use std::fs;
 use std::io::{self, Read, Write};
 #[cfg(feature = "eval")]
 use std::path::Path;
 use std::path::PathBuf;
 use std::process;
+use std::{env, fs};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Deserialize;
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::EnvFilter;
 #[cfg(feature = "eval")]
 use uuid::Uuid;
 
@@ -62,6 +64,19 @@ struct ThemeVariables {
 #[command(name = "selkie")]
 #[command(version, about = "A fast mermaid diagram renderer")]
 struct Args {
+    /// Emit structured tracing span timings as JSON lines on stderr.
+    ///
+    /// Can also be enabled with SELKIE_TRACE=1. Traces are intentionally
+    /// written to stderr so SVG/PNG/PDF/stdout output remains pipeline-safe.
+    #[arg(long, global = true)]
+    trace: bool,
+
+    /// Override the tracing filter used by --trace or SELKIE_TRACE=1.
+    ///
+    /// Defaults to "selkie=trace". SELKIE_TRACE_FILTER can also be used.
+    #[arg(long, global = true, value_name = "FILTER")]
+    trace_filter: Option<String>,
+
     #[command(subcommand)]
     command: Option<Commands>,
 
@@ -241,10 +256,52 @@ impl OutputFormat {
 fn main() {
     let args = Args::parse();
 
+    if let Err(e) = init_tracing(&args) {
+        eprintln!("Error: {}", e);
+        process::exit(1);
+    }
+
     if let Err(e) = run(args) {
         eprintln!("Error: {}", e);
         process::exit(1);
     }
+}
+
+fn init_tracing(args: &Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if !trace_enabled(args) {
+        return Ok(());
+    }
+
+    let filter = args
+        .trace_filter
+        .clone()
+        .or_else(|| env::var("SELKIE_TRACE_FILTER").ok())
+        .unwrap_or_else(|| "selkie=trace".to_string());
+
+    tracing_subscriber::fmt()
+        .json()
+        .with_env_filter(EnvFilter::try_new(filter)?)
+        .with_span_events(FmtSpan::CLOSE)
+        .with_current_span(true)
+        .with_span_list(true)
+        .with_writer(io::stderr)
+        .try_init()?;
+    Ok(())
+}
+
+fn trace_enabled(args: &Args) -> bool {
+    args.trace || env_truthy("SELKIE_TRACE")
+}
+
+fn env_truthy(name: &str) -> bool {
+    env::var(name)
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
 }
 
 fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {

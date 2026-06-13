@@ -258,10 +258,19 @@ pub fn apply_graph_patch_result_json(graph_json: &str, patch_json: &str) -> Resu
 }
 
 fn apply_graph_patch_result(graph_json: &str, patch_json: &str) -> Result<EditablePatchResult> {
+    let span = tracing::trace_span!(
+        "selkie.editable.apply_graph_patch",
+        graph_json_bytes = graph_json.len() as u64,
+        patch_json_bytes = patch_json.len() as u64,
+        affected_ids = tracing::field::Empty,
+    );
+    let _enter = span.enter();
+
     let mut graph = graph_from_json(graph_json)?;
     let patch: EditablePatch = serde_json::from_str(patch_json).map_err(json_error)?;
     let affected_ids = affected_render_ids(&graph, &patch);
     apply_graph_patch(&mut graph, patch);
+    span.record("affected_ids", affected_ids.len() as u64);
     Ok(EditablePatchResult {
         graph,
         affected_ids,
@@ -269,6 +278,14 @@ fn apply_graph_patch_result(graph_json: &str, patch_json: &str) -> Result<Editab
 }
 
 pub fn parse_to_graph(text: &str) -> Result<EditableDiagram> {
+    let span = tracing::trace_span!(
+        "selkie.editable.parse_to_graph",
+        input_bytes = text.len() as u64,
+        nodes = tracing::field::Empty,
+        edges = tracing::field::Empty,
+    );
+    let _enter = span.enter();
+
     let (metadata, cleaned_text) = extract_selkie_metadata(text);
     let clean_text = remove_directives(&cleaned_text);
     let diagram_type = detect_type(&clean_text)?;
@@ -283,10 +300,21 @@ pub fn parse_to_graph(text: &str) -> Result<EditableDiagram> {
     if let Some(metadata) = metadata {
         graph.apply_metadata(metadata);
     }
+    span.record("nodes", graph.nodes.len() as u64);
+    span.record("edges", graph.edges.len() as u64);
     Ok(graph)
 }
 
 pub fn graph_to_mermaid_text(graph: &EditableDiagram) -> Result<String> {
+    let span = tracing::trace_span!(
+        "selkie.editable.graph_to_mermaid_text",
+        diagram_type = graph.diagram_type.as_str(),
+        nodes = graph.nodes.len() as u64,
+        edges = graph.edges.len() as u64,
+        output_bytes = tracing::field::Empty,
+    );
+    let _enter = span.enter();
+
     if graph.diagram_type != "flowchart" {
         return Err(MermaidError::InvalidValue {
             message: format!("unsupported editable diagram type '{}'", graph.diagram_type),
@@ -338,7 +366,9 @@ pub fn graph_to_mermaid_text(graph: &EditableDiagram) -> Result<String> {
         }
     }
 
-    Ok(lines.join("\n"))
+    let text = lines.join("\n");
+    span.record("output_bytes", text.len() as u64);
+    Ok(text)
 }
 
 pub fn graph_from_json(graph_json: &str) -> Result<EditableDiagram> {
@@ -346,6 +376,13 @@ pub fn graph_from_json(graph_json: &str) -> Result<EditableDiagram> {
 }
 
 pub fn layout_editable_graph(graph: &EditableDiagram) -> Result<EditableDiagram> {
+    let span = tracing::trace_span!(
+        "selkie.editable.layout_graph",
+        nodes = graph.nodes.len() as u64,
+        edges = graph.edges.len() as u64,
+    );
+    let _enter = span.enter();
+
     let mut graph = graph.clone();
     let layout_graph = layout_graph_for_editable(&graph)?;
     for node in &mut graph.nodes {
@@ -372,10 +409,19 @@ pub fn layout_editable_graph(graph: &EditableDiagram) -> Result<EditableDiagram>
 }
 
 pub fn render_graph_parts(graph: &EditableDiagram) -> Result<EditableRenderParts> {
+    let span = tracing::trace_span!(
+        "selkie.editable.render_graph_parts",
+        nodes = graph.nodes.len() as u64,
+        edges = graph.edges.len() as u64,
+        labels = tracing::field::Empty,
+    );
+    let _enter = span.enter();
+
     let layout_graph = layout_graph_for_editable(graph)?;
     let nodes = node_render_parts(graph, &layout_graph);
     let edges = edge_render_parts(graph, &layout_graph, None);
     let labels = label_render_parts(graph, &layout_graph);
+    span.record("labels", labels.len() as u64);
     Ok(EditableRenderParts {
         nodes,
         edges,
@@ -385,8 +431,18 @@ pub fn render_graph_parts(graph: &EditableDiagram) -> Result<EditableRenderParts
 }
 
 pub fn route_edges_for_node(graph: &EditableDiagram, node_id: &str) -> Result<EditableEdgeRoutes> {
+    let span = tracing::trace_span!(
+        "selkie.editable.route_edges_for_node",
+        node_id,
+        nodes = graph.nodes.len() as u64,
+        edges = graph.edges.len() as u64,
+        routed_edges = tracing::field::Empty,
+    );
+    let _enter = span.enter();
+
     let layout_graph = layout_graph_for_editable(graph)?;
     let edges = edge_render_parts(graph, &layout_graph, Some(node_id));
+    span.record("routed_edges", edges.len() as u64);
     Ok(EditableEdgeRoutes {
         node_id: node_id.to_string(),
         edges,

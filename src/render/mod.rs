@@ -60,6 +60,14 @@ pub fn render(diagram: &Diagram) -> Result<String> {
 /// assert!(svg.contains("<svg"));
 /// ```
 pub fn render_text(text: &str) -> Result<String> {
+    let span = tracing::trace_span!(
+        "selkie.render_text",
+        input_bytes = text.len() as u64,
+        diagram_type = tracing::field::Empty,
+        output_bytes = tracing::field::Empty,
+    );
+    let _enter = span.enter();
+
     // Extract directive configuration
     let directive_config = detect_init(text);
 
@@ -79,15 +87,25 @@ pub fn render_text(text: &str) -> Result<String> {
 
     // Detect diagram type and parse
     let diagram_type = detect_type(&clean_text)?;
+    span.record("diagram_type", tracing::field::debug(&diagram_type));
     let diagram = parse(diagram_type, &clean_text)?;
 
     // Render with config
-    render_with_config(&diagram, &config)
+    let svg = render_with_config(&diagram, &config)?;
+    span.record("output_bytes", svg.len() as u64);
+    Ok(svg)
 }
 
 /// Render a diagram to SVG with custom configuration
 pub fn render_with_config(diagram: &Diagram, config: &RenderConfig) -> Result<String> {
-    render_primary_diagram(diagram, config)
+    let span = tracing::trace_span!(
+        "selkie.render_with_config",
+        diagram_type = diagram_type_name(diagram),
+        output_bytes = tracing::field::Empty,
+    );
+    let _enter = span.enter();
+
+    let svg = render_primary_diagram(diagram, config)
         .or_else(|| render_secondary_diagram(diagram, config))
         .or_else(|| render_tertiary_diagram(diagram, config))
         .unwrap_or_else(|| {
@@ -95,7 +113,9 @@ pub fn render_with_config(diagram: &Diagram, config: &RenderConfig) -> Result<St
                 "Diagram type {:?} not yet supported for rendering",
                 diagram_type_name(diagram)
             )))
-        })
+        })?;
+    span.record("output_bytes", svg.len() as u64);
+    Ok(svg)
 }
 
 fn render_primary_diagram(diagram: &Diagram, config: &RenderConfig) -> Option<Result<String>> {
@@ -194,17 +214,43 @@ fn render_flowchart(
     db: &crate::diagrams::flowchart::FlowchartDb,
     config: &RenderConfig,
 ) -> Result<String> {
+    let span = tracing::trace_span!(
+        "selkie.render.flowchart",
+        nodes = db.vertices().len() as u64,
+        edges = db.edges().len() as u64,
+        direction = db.get_direction(),
+        output_bytes = tracing::field::Empty,
+    );
+    let _enter = span.enter();
     let size_estimator = CharacterSizeEstimator::default();
 
     // Convert to layout graph
-    let graph = db.to_layout_graph(&size_estimator)?;
+    let graph = {
+        let span = tracing::trace_span!("selkie.render.flowchart.to_layout_graph");
+        let _enter = span.enter();
+        db.to_layout_graph(&size_estimator)?
+    };
 
     // Run layout algorithm
-    let graph = layout::layout(graph)?;
+    let graph = {
+        let span = tracing::trace_span!(
+            "selkie.render.flowchart.layout",
+            nodes = graph.all_node_ids().len() as u64,
+            edges = graph.edges.len() as u64,
+        );
+        let _enter = span.enter();
+        layout::layout(graph)?
+    };
 
     // Render to SVG
     let renderer = SvgRenderer::new(config.clone());
-    renderer.render_flowchart(db, &graph)
+    let svg = {
+        let span = tracing::trace_span!("selkie.render.flowchart.svg");
+        let _enter = span.enter();
+        renderer.render_flowchart(db, &graph)?
+    };
+    span.record("output_bytes", svg.len() as u64);
+    Ok(svg)
 }
 
 /// Render a diagram to ASCII character art.

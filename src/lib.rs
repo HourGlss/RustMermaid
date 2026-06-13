@@ -28,6 +28,14 @@ pub use render::{
 
 /// Parse a mermaid diagram and return a diagram representation
 pub fn parse(input: &str) -> Result<diagrams::Diagram> {
+    let span = tracing::trace_span!(
+        "selkie.parse",
+        input_bytes = input.len() as u64,
+        diagram_type = tracing::field::Empty,
+    );
+    let _enter = span.enter();
+
     let diagram_type = diagrams::detect_type(input)?;
+    span.record("diagram_type", tracing::field::debug(&diagram_type));
     diagrams::parse(diagram_type, input)
 }

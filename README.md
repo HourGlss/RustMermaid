@@ -130,6 +130,27 @@ selkie -i diagram.mmd -o output.svg --theme dark
 selkie -i diagram.mmd -o output.png
 ```
 
+### Structured Tracing
+
+Selkie can emit JSON tracing events for parse, layout, render, and editable graph operations. Trace output is written to stderr, so stdout remains safe for SVG output:
+
+```bash
+# Emit JSON span-close timing events while rendering
+selkie --trace -i diagram.mmd -o output.svg
+
+# Pipe SVG on stdout and trace JSON on stderr
+cat diagram.mmd | selkie --trace -i - -o - > output.svg 2> trace.jsonl
+
+# Narrow or broaden the trace targets
+selkie --trace --trace-filter 'selkie=trace' -i diagram.mmd -o output.svg
+```
+
+Tracing can also be enabled with environment variables:
+
+```bash
+SELKIE_TRACE=1 SELKIE_TRACE_FILTER='selkie=trace' selkie -i diagram.mmd -o output.svg
+```
+
 ### Evaluation System
 
 Selkie includes a built-in evaluation system that compares output against Mermaid.js. See [EVAL.md](EVAL.md) for detailed documentation.

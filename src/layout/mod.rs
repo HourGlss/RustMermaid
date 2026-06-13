@@ -36,8 +36,23 @@ struct SubgraphLayoutResult {
 
 /// Perform layout on a graph using dagre algorithm
 pub fn layout(mut graph: LayoutGraph) -> Result<LayoutGraph> {
+    let span = tracing::trace_span!(
+        "selkie.layout.dagre",
+        graph_id = graph.id.as_str(),
+        nodes = graph.all_node_ids().len() as u64,
+        edges = graph.edges.len() as u64,
+        direction = tracing::field::debug(&graph.options.direction),
+        output_width = tracing::field::Empty,
+        output_height = tracing::field::Empty,
+    );
+    let _enter = span.enter();
+
     // Phase 1: Identify subgraphs with their own directions and lay them out first
-    let subgraph_layouts = layout_subgraphs_with_directions(&graph)?;
+    let subgraph_layouts = {
+        let span = tracing::trace_span!("selkie.layout.dagre.subgraphs");
+        let _enter = span.enter();
+        layout_subgraphs_with_directions(&graph)?
+    };
 
     // Phase 2: Update subgraph node dimensions based on their internal layouts
     for (subgraph_id, layout_result) in &subgraph_layouts {
@@ -52,16 +67,30 @@ pub fn layout(mut graph: LayoutGraph) -> Result<LayoutGraph> {
     // Phase 3: Run main layout on the parent graph
     let mut dagre_graph = to_dagre_graph(&graph);
     let config = to_dagre_config(&graph.options);
-    dagre::layout(&mut dagre_graph, &config);
+    {
+        let span = tracing::trace_span!("selkie.layout.dagre.solve");
+        let _enter = span.enter();
+        dagre::layout(&mut dagre_graph, &config);
+    }
 
     // Phase 4: Copy results back to LayoutGraph
-    apply_dagre_results(&mut graph, &dagre_graph);
+    {
+        let span = tracing::trace_span!("selkie.layout.dagre.apply_results");
+        let _enter = span.enter();
+        apply_dagre_results(&mut graph, &dagre_graph);
+    }
 
     // Phase 5: Apply pre-computed child positions for subgraphs with custom directions
     apply_subgraph_child_positions(&mut graph, &subgraph_layouts);
 
     // Compute graph bounds
     graph.compute_bounds();
+    if let Some(width) = graph.width {
+        span.record("output_width", width);
+    }
+    if let Some(height) = graph.height {
+        span.record("output_height", height);
+    }
 
     Ok(graph)
 }
