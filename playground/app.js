@@ -1,5 +1,16 @@
 // Selkie Playground - Main Application
 
+import {
+    applyViewportTransform,
+    closestNodeElement,
+    createViewportState,
+    fitViewportToSvg,
+    installNodeDrag,
+    installViewportPan,
+    resetViewport,
+    zoomViewportBy,
+} from './editor-interactions.mjs';
+
 // Generate million data point examples
 function generateMillionPointXYChart() {
     const count = 1_000_000;
@@ -952,10 +963,14 @@ classDef sales fill:#c3a66b,stroke:#333;`,
 
 // State
 let selkie = null;
-let currentZoom = 1;
+const viewportState = createViewportState();
 let currentTheme = 'default';
 let renderTimeout = null;
 let lastSvg = '';
+let currentGraphJson = null;
+let currentRenderParts = null;
+let disposeNodeDrag = null;
+let disposeViewportPan = null;
 
 // Theme backgrounds (must match Rust theme definitions)
 const themeBackgrounds = {
@@ -993,13 +1008,31 @@ async function init() {
 
 // Load Selkie WASM module
 async function loadSelkie() {
-    const { default: initWasm, initialize, parse, render, render_text } =
+    const {
+        default: initWasm,
+        initialize,
+        parse,
+        render,
+        render_text,
+        parse_to_graph_json,
+        graph_to_mermaid_text,
+        render_graph_parts_json,
+        apply_graph_patch_result_json,
+    } =
         await import('./pkg/selkie.js');
 
     await initWasm();
     initialize({ startOnLoad: false });
 
-    selkie = { parse, render, render_text };
+    selkie = {
+        parse,
+        render,
+        render_text,
+        parse_to_graph_json,
+        graph_to_mermaid_text,
+        render_graph_parts_json,
+        apply_graph_patch_result_json,
+    };
 }
 
 // Set up event listeners
@@ -1054,19 +1087,44 @@ function setupEventListeners() {
 
     // Zoom controls
     document.getElementById('zoom-in').addEventListener('click', () => {
-        currentZoom = Math.min(currentZoom + 0.25, 3);
+        zoomViewportBy(viewportState, 1.25, previewCenterPoint());
         applyZoom();
     });
 
     document.getElementById('zoom-out').addEventListener('click', () => {
-        currentZoom = Math.max(currentZoom - 0.25, 0.25);
+        zoomViewportBy(viewportState, 0.8, previewCenterPoint());
         applyZoom();
     });
 
     document.getElementById('zoom-reset').addEventListener('click', () => {
-        currentZoom = 1;
+        resetViewport(viewportState);
         applyZoom();
     });
+
+    document.getElementById('zoom-fit').addEventListener('click', () => {
+        fitPreviewToScreen();
+        applyZoom();
+    });
+
+    previewContainer.addEventListener('wheel', (event) => {
+        if (!preview.querySelector('svg')) return;
+
+        const rect = previewContainer.getBoundingClientRect();
+        const origin = {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+        };
+        zoomViewportBy(viewportState, event.deltaY < 0 ? 1.1 : 0.9, origin);
+        applyZoom();
+        event.preventDefault();
+    }, { passive: false });
+
+    disposeViewportPan = installViewportPan(
+        previewContainer,
+        viewportState,
+        applyZoom,
+        closestNodeElement,
+    );
 
     // Download SVG
     document.getElementById('download-svg').addEventListener('click', downloadSvg);
@@ -1103,6 +1161,8 @@ function renderDiagram() {
 
         lastSvg = result.svg;
         preview.innerHTML = result.svg;
+        refreshEditableGraph(input);
+        installPreviewInteractions();
         errorDisplay.classList.add('hidden');
 
         const renderTime = (endTime - startTime).toFixed(2);
@@ -1118,8 +1178,96 @@ function renderDiagram() {
 
 // Apply zoom to preview
 function applyZoom() {
-    preview.style.transform = `scale(${currentZoom})`;
-    document.getElementById('zoom-reset').textContent = `${Math.round(currentZoom * 100)}%`;
+    applyViewportTransform(preview, viewportState, document.getElementById('zoom-reset'));
+}
+
+function fitPreviewToScreen() {
+    const svg = preview.querySelector('svg');
+    if (!svg) return;
+
+    fitViewportToSvg(
+        viewportState,
+        previewContainer.getBoundingClientRect(),
+        svgSize(svg),
+    );
+}
+
+function previewCenterPoint() {
+    const rect = previewContainer.getBoundingClientRect();
+    return {
+        x: rect.width / 2,
+        y: rect.height / 2,
+    };
+}
+
+function svgSize(svg) {
+    const viewBox = svg.getAttribute('viewBox')?.trim().split(/\s+/).map(Number);
+    if (viewBox?.length === 4 && viewBox.every(Number.isFinite)) {
+        return {
+            width: viewBox[2],
+            height: viewBox[3],
+        };
+    }
+
+    return {
+        width: Number.parseFloat(svg.getAttribute('width')) || svg.getBoundingClientRect().width,
+        height: Number.parseFloat(svg.getAttribute('height')) || svg.getBoundingClientRect().height,
+    };
+}
+
+function refreshEditableGraph(input) {
+    currentGraphJson = null;
+    currentRenderParts = null;
+
+    try {
+        currentGraphJson = selkie.parse_to_graph_json(input);
+        currentRenderParts = JSON.parse(selkie.render_graph_parts_json(currentGraphJson));
+    } catch {
+        // Editable graph APIs currently target flowcharts; other diagram types still render normally.
+    }
+}
+
+function installPreviewInteractions() {
+    disposeNodeDrag?.();
+    disposeNodeDrag = installNodeDrag(preview, {
+        getScale: () => viewportState.scale,
+        onCommit: commitNodeMove,
+    });
+}
+
+function commitNodeMove(move) {
+    if (!currentGraphJson || !currentRenderParts || (!move.dx && !move.dy)) {
+        return;
+    }
+
+    const graph = JSON.parse(currentGraphJson);
+    const node = graph.nodes.find((candidate) => candidate.id === move.id);
+    const part = currentRenderParts.nodes.find((candidate) => candidate.node_id === move.id);
+    if (!node || !part) return;
+
+    const start = node.position ?? {
+        x: part.bounds.x + part.bounds.width / 2,
+        y: part.bounds.y + part.bounds.height / 2,
+    };
+    const patch = {
+        op: 'move_node',
+        id: move.id,
+        x: start.x + move.dx,
+        y: start.y + move.dy,
+        locked: true,
+    };
+
+    try {
+        const result = JSON.parse(
+            selkie.apply_graph_patch_result_json(currentGraphJson, JSON.stringify(patch)),
+        );
+        currentGraphJson = JSON.stringify(result.graph);
+        editor.value = selkie.graph_to_mermaid_text(currentGraphJson);
+        renderDiagram();
+        updateUrl();
+    } catch (error) {
+        console.warn('Failed to commit node move:', error);
+    }
 }
 
 // Update preview background to match theme
@@ -1228,4 +1376,6 @@ function loadFromUrl() {
 }
 
 // Start the application
-init();
+if (!window.__SELKIE_PLAYGROUND_TEST__) {
+    init();
+}

@@ -114,12 +114,12 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
 
 ## Phase 4: Browser Large-Graph Editor
 
-- [ ] Replace full `innerHTML` replacement during drag.
+- [x] Replace full `innerHTML` replacement during drag.
   - Input: drag event for one node in the 800-node fixture.
   - Output: existing visual elements are updated in place.
   - Test: a browser test asserts the root preview element is not replaced during drag.
 
-- [ ] Add pan and zoom viewport controls.
+- [x] Add pan and zoom viewport controls.
   - Input: wheel, drag-pan, fit-to-screen, and reset commands.
   - Output: visible viewport transform changes without rerendering the graph.
   - Test: Playwright test verifies zoom and pan change the viewport transform.

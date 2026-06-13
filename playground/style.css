@@ -199,20 +199,35 @@ main {
     flex: 1;
     overflow: auto;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: flex-start;
     padding: 20px;
+    cursor: grab;
+    user-select: none;
+}
+
+#preview-container.is-panning {
+    cursor: grabbing;
 }
 
 #preview {
-    transform-origin: center center;
+    transform-origin: 0 0;
     transition: transform 0.1s ease-out;
+    will-change: transform;
 }
 
 #preview svg {
-    max-width: 100%;
+    max-width: none;
     height: auto;
     display: block;
+}
+
+#preview [id^="node-"] {
+    cursor: move;
+}
+
+#preview [id^="node-"].is-dragging {
+    cursor: grabbing;
 }
 
 .preview-actions {

@@ -4,7 +4,8 @@
   "type": "module",
   "description": "Performance benchmark for Selkie vs Mermaid.js",
   "scripts": {
-    "benchmark": "node benchmark.mjs"
+    "benchmark": "node benchmark.mjs",
+    "test:editor": "node editor-interaction.test.mjs"
   },
   "dependencies": {
     "jsdom": "^24.0.0",
