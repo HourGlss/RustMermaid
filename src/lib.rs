@@ -7,6 +7,7 @@
 pub mod common;
 pub mod config;
 pub mod diagrams;
+pub mod editable;
 pub mod error;
 #[cfg(feature = "eval")]
 pub mod eval;

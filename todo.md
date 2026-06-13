@@ -6,39 +6,39 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
 
 ## Success Targets
 
-- [ ] A flowchart with 800 nodes and 1000 edges can be parsed into structured graph JSON.
-- [ ] The graph JSON can be rendered back to SVG.
-- [ ] The graph JSON can be serialized back to Mermaid text.
+- [x] A flowchart with 800 nodes and 1000 edges can be parsed into structured graph JSON.
+- [x] The graph JSON can be rendered back to SVG.
+- [x] The graph JSON can be serialized back to Mermaid text.
 - [ ] Moving one node updates that node and its incident edges without reparsing the full Mermaid source.
-- [ ] Creating a node, creating an edge, changing a label, and changing colors all round-trip through graph JSON and Mermaid text.
-- [ ] Manual node positions survive export and re-import.
+- [x] Creating a node, creating an edge, changing a label, and changing colors all round-trip through graph JSON and Mermaid text.
+- [x] Manual node positions survive export and re-import.
 - [ ] Browser interaction remains usable on the 800-node / 1000-edge fixture.
 
 ## Phase 0: Baseline And Test Fixtures
 
-- [ ] Add generated large-flowchart fixtures.
+- [x] Add generated large-flowchart fixtures.
   - Input: fixture generator parameters for `100/200`, `400/600`, `800/1000`, and `1200/1600` node/edge counts.
   - Output: deterministic `.mmd` fixtures under a benchmark or test fixture directory.
   - Test: running the generator twice produces byte-identical files.
 
-- [ ] Add a benchmark that separates parse, layout, render, and serialization timing.
+- [x] Add a benchmark that separates parse, layout, render, and serialization timing.
   - Input: each generated `.mmd` fixture.
   - Output: JSON report with `parse_ms`, `layout_ms`, `render_ms`, `serialize_ms`, `total_ms`, `node_count`, and `edge_count`.
   - Test: benchmark exits non-zero if any fixture fails to parse or render.
 
-- [ ] Add an 800-node / 1000-edge acceptance benchmark.
+- [x] Add an 800-node / 1000-edge acceptance benchmark.
   - Input: the `800/1000` flowchart fixture.
   - Output: a valid SVG and timing JSON.
   - Test: SVG contains all 800 node IDs and at least 1000 edge path/group markers.
 
 ## Phase 1: Editable Flowchart Graph IR
 
-- [ ] Define `EditableDiagram` data structures for flowcharts.
+- [x] Define `EditableDiagram` data structures for flowcharts.
   - Input: parsed flowchart diagram database.
   - Output: graph model containing nodes, edges, classes, styles, layout direction, and optional source metadata.
   - Test: unit test converts a simple flowchart into graph JSON with stable node and edge IDs.
 
-- [ ] Add `parse_to_graph_json(text)` to Rust and WASM.
+- [x] Add `parse_to_graph_json(text)` to Rust and WASM.
   - Input:
     ```mermaid
     flowchart TD
@@ -48,29 +48,29 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
   - Output: JSON with three nodes, two edges, node shapes, labels, and the `TD` direction.
   - Test: WASM test asserts exact node count, edge count, labels, shapes, and edge label.
 
-- [ ] Add `graph_to_mermaid_text(graph)`.
+- [x] Add `graph_to_mermaid_text(graph)`.
   - Input: graph JSON with nodes `A`, `B`, `C` and edges `A -> B`, `B -> C`.
   - Output: Mermaid text that parses back to an equivalent graph.
   - Test: graph -> text -> graph preserves node IDs, labels, shapes, edges, classes, and styles.
 
-- [ ] Add `render_graph_json(graph)`.
+- [x] Add `render_graph_json(graph)`.
   - Input: graph JSON produced by `parse_to_graph_json`.
   - Output: valid SVG string.
   - Test: SVG contains expected node labels and edge elements.
 
-- [ ] Add graph mutation helpers.
+- [x] Add graph mutation helpers.
   - Input: graph JSON plus operations: add node, remove node, add edge, remove edge, set label, set node color, set edge color.
   - Output: updated graph JSON.
   - Test: each mutation has a unit test and a round-trip Mermaid serialization test.
 
 ## Phase 2: Position And Metadata Round-Trip
 
-- [ ] Define Selkie metadata format for manual layout.
+- [x] Define Selkie metadata format for manual layout.
   - Input: graph with node positions and locked flags.
   - Output: Mermaid-compatible comment/directive block containing Selkie layout metadata.
   - Test: normal Mermaid parsers can ignore the metadata without breaking the diagram text.
 
-- [ ] Parse Selkie metadata from Mermaid text.
+- [x] Parse Selkie metadata from Mermaid text.
   - Input:
     ```mermaid
     %%{selkie: {"layout":{"nodes":{"A":{"x":120,"y":80,"locked":true}}}}}%%
@@ -80,7 +80,7 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
   - Output: graph JSON where node `A` has `x=120`, `y=80`, and `locked=true`.
   - Test: metadata values are present after `parse_to_graph_json`.
 
-- [ ] Emit Selkie metadata from graph JSON.
+- [x] Emit Selkie metadata from graph JSON.
   - Input: graph JSON with manual node positions.
   - Output: Mermaid text with a Selkie metadata block and normal flowchart syntax.
   - Test: graph -> Mermaid -> graph preserves all manual positions and locked flags.
@@ -171,7 +171,7 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
 - [ ] `cargo fmt` passes.
 - [ ] `cargo clippy --features all-formats -- -D warnings` passes.
 - [ ] `cargo test --features all-formats` passes.
-- [ ] WASM tests cover `parse_to_graph_json`, `graph_to_mermaid_text`, and `render_graph_json`.
+- [x] WASM tests cover `parse_to_graph_json`, `graph_to_mermaid_text`, and `render_graph_json`.
 - [ ] Browser tests cover load, pan, zoom, select, move, create node, create edge, edit label, edit color, export, and re-import.
 - [ ] The 800-node / 1000-edge fixture passes CLI and browser acceptance tests.
 - [ ] The implementation keeps static Mermaid rendering compatibility for existing docs/sources files.

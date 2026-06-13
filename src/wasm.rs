@@ -35,3 +35,30 @@ pub fn render(id: &str, input: &str) -> Result<JsValue, JsValue> {
 pub fn render_text(input: &str) -> Result<String, JsValue> {
     crate::render::render_text(input).map_err(|err| JsValue::from_str(&err.to_string()))
 }
+
+/// Parse Mermaid flowchart text to editable graph JSON.
+#[wasm_bindgen]
+pub fn parse_to_graph_json(input: &str) -> Result<String, JsValue> {
+    crate::editable::parse_to_graph_json(input).map_err(|err| JsValue::from_str(&err.to_string()))
+}
+
+/// Serialize editable graph JSON back to Mermaid text.
+#[wasm_bindgen]
+pub fn graph_to_mermaid_text(graph_json: &str) -> Result<String, JsValue> {
+    crate::editable::graph_to_mermaid_text_json(graph_json)
+        .map_err(|err| JsValue::from_str(&err.to_string()))
+}
+
+/// Render editable graph JSON to SVG.
+#[wasm_bindgen]
+pub fn render_graph_json(graph_json: &str) -> Result<String, JsValue> {
+    crate::editable::render_graph_json(graph_json)
+        .map_err(|err| JsValue::from_str(&err.to_string()))
+}
+
+/// Apply a JSON patch operation to editable graph JSON.
+#[wasm_bindgen]
+pub fn apply_graph_patch_json(graph_json: &str, patch_json: &str) -> Result<String, JsValue> {
+    crate::editable::apply_graph_patch_json(graph_json, patch_json)
+        .map_err(|err| JsValue::from_str(&err.to_string()))
+}
