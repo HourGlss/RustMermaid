@@ -169,9 +169,9 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
 ## Phase 6: Trace-Driven Hotspot Discovery
 
 - [ ] Capture structured traces for large graph workflows.
-  - Input: CLI render, editable graph parse, graph-parts render, node move, node creation, edge creation, and export using the 800-node / 1000-edge fixture.
-  - Output: JSONL trace files under a benchmark or reports directory, with span-close timings for parse, layout, render, serialization, graph patch, and editable render-part APIs.
-  - Test: trace capture command exits non-zero if any expected span name is missing from the JSONL output.
+  - Input: CLI render for every `.mmd` file under `docs/sources`, plus editable graph parse, graph-parts render, node move, node creation, edge creation, and export using the 800-node / 1000-edge fixture.
+  - Output: JSONL trace files under a benchmark or reports directory, with span-close timings for parse, layout, render, serialization, graph patch, and editable render-part APIs, plus a manifest listing every traced `docs/sources` file.
+  - Test: trace capture command exits non-zero if any expected span name is missing from the JSONL output or any `docs/sources/*.mmd` file is absent from the trace manifest.
 
 - [ ] Add a trace summarizer for hotspot ranking.
   - Input: one or more Selkie JSONL trace files.
@@ -179,12 +179,12 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
   - Test: fixture trace input produces deterministic hotspot ordering and numeric totals.
 
 - [ ] Identify the most optimization-worthy functions and phases.
-  - Input: trace summaries for 100/200, 400/600, 800/1000, and 1200/1600 flowchart fixtures.
+  - Input: trace summaries for every `.mmd` file under `docs/sources`, plus 100/200, 400/600, 800/1000, and 1200/1600 generated flowchart fixtures.
   - Output: ranked `optimization-candidates` report naming the top bottlenecks, why they matter, and whether they are CPU, allocation, DOM/update, layout, or serialization dominated.
-  - Test: report includes at least the top 10 spans/functions and each entry links to a source file or browser module.
+  - Test: report includes at least the top 10 spans/functions, each entry links to a source file or browser module, and the report states the counted `docs/sources` corpus size.
 
 - [ ] Define optimization budgets from observed data.
-  - Input: baseline p50/p95 timings for initial load, render graph parts, move node, create node, create edge, export, and re-import.
+  - Input: baseline p50/p95 timings across all `docs/sources` diagrams and the generated large-flowchart fixtures for initial load, render graph parts, move node, create node, create edge, export, and re-import.
   - Output: explicit target budgets for Phase 7, including acceptable regression thresholds.
   - Test: benchmark tooling can compare current results against the saved baseline and fail on regressions beyond the threshold.
 
