@@ -3,6 +3,8 @@
 use super::elements::{Attrs, SvgElement};
 use std::fmt;
 
+const MAX_INTRINSIC_DIMENSION: f64 = 16000.0;
+
 /// SVG document builder
 #[derive(Debug, Clone)]
 pub struct SvgDocument {
@@ -46,16 +48,18 @@ impl SvgDocument {
 
     /// Set the document size
     pub fn set_size(&mut self, width: f64, height: f64) {
-        self.width = width;
-        self.height = height;
+        let (display_width, display_height) = capped_intrinsic_size(width, height);
+        self.width = display_width;
+        self.height = display_height;
         self.view_box = Some((0.0, 0.0, width, height));
     }
 
     /// Set the document size with custom viewBox origin
     /// Use this when content has negative coordinates
     pub fn set_size_with_origin(&mut self, min_x: f64, min_y: f64, width: f64, height: f64) {
-        self.width = width;
-        self.height = height;
+        let (display_width, display_height) = capped_intrinsic_size(width, height);
+        self.width = display_width;
+        self.height = display_height;
         self.view_box = Some((min_x, min_y, width, height));
     }
 
@@ -93,6 +97,20 @@ impl SvgDocument {
     pub fn add_node(&mut self, element: SvgElement) {
         self.nodes.push(element);
     }
+}
+
+fn capped_intrinsic_size(width: f64, height: f64) -> (f64, f64) {
+    if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+        return (width, height);
+    }
+
+    let max_dimension = width.max(height);
+    if max_dimension <= MAX_INTRINSIC_DIMENSION {
+        return (width, height);
+    }
+
+    let scale = MAX_INTRINSIC_DIMENSION / max_dimension;
+    ((width * scale).max(1.0), (height * scale).max(1.0))
 }
 
 impl Default for SvgDocument {
@@ -158,5 +176,32 @@ impl fmt::Display for SvgDocument {
 
         writeln!(f, "  </g>")?;
         writeln!(f, "</svg>")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normal_document_size_is_unchanged() {
+        let mut doc = SvgDocument::new();
+        doc.set_size(800.0, 600.0);
+        let svg = doc.to_string();
+
+        assert!(svg.contains("width=\"800\""));
+        assert!(svg.contains("height=\"600\""));
+        assert!(svg.contains("viewBox=\"0 0 800 600\""));
+    }
+
+    #[test]
+    fn huge_intrinsic_size_is_capped_but_viewbox_is_preserved() {
+        let mut doc = SvgDocument::new();
+        doc.set_size_with_origin(-8.0, -8.0, 4077.6, 41881.8);
+        let svg = doc.to_string();
+
+        assert!(svg.contains("height=\"16000\""));
+        assert!(svg.contains("viewBox=\"-8 -8 4077.6 41881.8\""));
+        assert!(!svg.contains("width=\"4077.6\""));
     }
 }
