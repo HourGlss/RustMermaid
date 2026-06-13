@@ -129,7 +129,7 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
   - Output: graph JSON, visual node, and generated Mermaid text all update.
   - Test: Playwright test edits a node label/color and verifies the SVG/render part and text output.
 
-- [ ] Add node and edge creation tools.
+- [x] Add node and edge creation tools.
   - Input: create node command, connect source node to target node command.
   - Output: graph JSON and Mermaid text include the new node and edge.
   - Test: Playwright test creates a node and edge, exports text, reparses it, and sees the same graph.

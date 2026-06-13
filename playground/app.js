@@ -976,6 +976,7 @@ let disposeNodeDrag = null;
 let disposeNodeSelection = null;
 let disposeViewportPan = null;
 let selectedNodeId = null;
+let pendingEdgeSourceId = null;
 let isSyncingInspector = false;
 
 // Theme backgrounds (must match Rust theme definitions)
@@ -997,6 +998,8 @@ const exampleSelect = document.getElementById('example-select');
 const loadingOverlay = document.getElementById('loading-overlay');
 const divider = document.getElementById('divider');
 const previewContainer = document.getElementById('preview-container');
+const createNodeButton = document.getElementById('create-node');
+const connectEdgeButton = document.getElementById('connect-edge');
 const nodeInspector = document.getElementById('node-inspector');
 const inspectorNodeId = document.getElementById('inspector-node-id');
 const inspectorLabel = document.getElementById('inspector-label');
@@ -1146,6 +1149,9 @@ function setupEventListeners() {
         updateSelectedNode({ color: inspectorColor.value });
     });
 
+    createNodeButton.addEventListener('click', createNode);
+    connectEdgeButton.addEventListener('click', startEdgeConnection);
+
     // Download SVG
     document.getElementById('download-svg').addEventListener('click', downloadSvg);
 
@@ -1162,7 +1168,9 @@ function renderDiagram() {
         currentGraphJson = null;
         currentRenderParts = null;
         selectedNodeId = null;
+        pendingEdgeSourceId = null;
         syncInspector();
+        syncEditorTools();
         errorDisplay.classList.add('hidden');
         renderTimeDisplay.textContent = '';
         return;
@@ -1188,6 +1196,7 @@ function renderDiagram() {
         refreshEditableGraph(input);
         installPreviewInteractions();
         syncInspector();
+        syncEditorTools();
         errorDisplay.classList.add('hidden');
 
         const renderTime = (endTime - startTime).toFixed(2);
@@ -1243,6 +1252,7 @@ function svgSize(svg) {
 function refreshEditableGraph(input) {
     currentGraphJson = null;
     currentRenderParts = null;
+    pendingEdgeSourceId = null;
 
     try {
         currentGraphJson = selkie.parse_to_graph_json(input);
@@ -1300,12 +1310,28 @@ function commitNodeMove(move) {
 }
 
 function selectNode(nodeId) {
+    if (pendingEdgeSourceId === nodeId) {
+        pendingEdgeSourceId = null;
+        selectedNodeId = nodeId;
+        syncInspector();
+        syncEditorTools();
+        return;
+    }
+
+    if (pendingEdgeSourceId && pendingEdgeSourceId !== nodeId) {
+        const sourceId = pendingEdgeSourceId;
+        pendingEdgeSourceId = null;
+        createEdge(sourceId, nodeId);
+        return;
+    }
+
     if (!findGraphNode(nodeId)) {
         return;
     }
 
     selectedNodeId = nodeId;
     syncInspector();
+    syncEditorTools();
 }
 
 function syncInspector() {
@@ -1314,6 +1340,7 @@ function syncInspector() {
     const node = findGraphNode(selectedNodeId);
     if (!node) {
         nodeInspector.classList.add('hidden');
+        syncEditorTools();
         return;
     }
 
@@ -1323,6 +1350,7 @@ function syncInspector() {
     inspectorColor.value = nodeFillColor(node);
     nodeInspector.classList.remove('hidden');
     isSyncingInspector = false;
+    syncEditorTools();
 }
 
 function updateSelectedNode(edit) {
@@ -1363,6 +1391,127 @@ function applyGraphPatch(patch) {
     return result;
 }
 
+function createNode() {
+    const graph = graphFromState();
+    if (!graph) return;
+
+    const id = nextNodeId(graph);
+    const label = id.replace(/([a-z])([A-Z])/g, '$1 $2');
+    const position = nextNodePosition(graph);
+    selectedNodeId = id;
+    pendingEdgeSourceId = null;
+
+    applyGraphPatch({
+        op: 'add_node',
+        node: {
+            id,
+            label,
+            shape: 'square',
+            classes: [],
+            styles: [],
+            position: {
+                ...position,
+                locked: true,
+            },
+        },
+    });
+
+    renderDiagram();
+}
+
+function startEdgeConnection() {
+    if (!findGraphNode(selectedNodeId)) {
+        return;
+    }
+
+    pendingEdgeSourceId = selectedNodeId;
+    syncEditorTools();
+}
+
+function createEdge(sourceId, targetId) {
+    const graph = graphFromState();
+    if (!graph || !findGraphNode(sourceId) || !findGraphNode(targetId)) return;
+
+    selectedNodeId = targetId;
+    applyGraphPatch({
+        op: 'add_edge',
+        edge: {
+            id: nextEdgeId(graph, sourceId, targetId),
+            source: sourceId,
+            target: targetId,
+            label: '',
+            edge_type: '-->',
+            stroke: 'normal',
+            classes: [],
+            styles: [],
+        },
+    });
+
+    renderDiagram();
+}
+
+function syncEditorTools() {
+    const hasGraph = Boolean(currentGraphJson);
+    const hasSelection = Boolean(findGraphNode(selectedNodeId));
+
+    createNodeButton.disabled = !hasGraph;
+    connectEdgeButton.disabled = !hasGraph || !hasSelection;
+    connectEdgeButton.classList.toggle('active', Boolean(pendingEdgeSourceId));
+}
+
+function graphFromState() {
+    if (!currentGraphJson) return null;
+
+    try {
+        return JSON.parse(currentGraphJson);
+    } catch {
+        return null;
+    }
+}
+
+function nextNodeId(graph) {
+    let idx = graph.nodes.length + 1;
+    while (graph.nodes.some((node) => node.id === `Node${idx}`)) {
+        idx += 1;
+    }
+    return `Node${idx}`;
+}
+
+function nextNodePosition(graph) {
+    const selectedPart = currentRenderParts?.nodes
+        ?.find((part) => part.node_id === selectedNodeId);
+    if (selectedPart) {
+        return {
+            x: selectedPart.bounds.x + selectedPart.bounds.width + 120,
+            y: selectedPart.bounds.y + selectedPart.bounds.height / 2,
+        };
+    }
+
+    const bounds = currentRenderParts?.bounds;
+    if (bounds) {
+        return {
+            x: bounds.x + bounds.width / 2,
+            y: bounds.y + bounds.height / 2,
+        };
+    }
+
+    return {
+        x: graph.nodes.length * 40,
+        y: graph.nodes.length * 30,
+    };
+}
+
+function nextEdgeId(graph, sourceId, targetId) {
+    const base = `edge_${sourceId}_${targetId}`;
+    let id = base;
+    let idx = 1;
+    while (graph.edges.some((edge) => edge.id === id)) {
+        idx += 1;
+        id = `${base}_${idx}`;
+    }
+    return id;
+}
+
 function updateRenderPartForNode(nodeId, edit) {
     if (!currentRenderParts) return;
 
@@ -1379,14 +1528,7 @@ function updateRenderPartForNode(nodeId, edit) {
 }
 
 function findGraphNode(nodeId) {
-    if (!nodeId || !currentGraphJson) return null;
-
-    try {
-        const graph = JSON.parse(currentGraphJson);
-        return graph.nodes.find((node) => node.id === nodeId) ?? null;
-    } catch {
-        return null;
-    }
+    return graphFromState()?.nodes.find((node) => node.id === nodeId) ?? null;
 }
 
 function nodeFillColor(node) {

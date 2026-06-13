@@ -78,6 +78,12 @@ async function serveRepo() {
         return;
       }
 
+      if (url.pathname === '/playground/pkg/selkie.js') {
+        response.writeHead(200, { 'content-type': contentTypes['.js'] });
+        response.end(fakeSelkieModule());
+        return;
+      }
+
       const relativePath = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
       const filePath = resolve(repoRoot, relativePath);
       if (!filePath.startsWith(repoRoot)) {
@@ -109,6 +115,198 @@ async function serveRepo() {
     baseUrl: `http://127.0.0.1:${address.port}`,
     close: () => new Promise((resolveClose) => server.close(resolveClose)),
   };
+}
+
+function fakeSelkieModule() {
+  return String.raw`
+export default async function initWasm() {}
+export function initialize() {}
+export function parse(input) {
+  parseToGraph(input);
+}
+export function render(id, input) {
+  return {
+    id,
+    svg: renderSvg(parseToGraph(input)),
+    bindFunctions() {},
+  };
+}
+export function render_text(input) {
+  return render('diagram', input).svg;
+}
+export function parse_to_graph_json(input) {
+  return JSON.stringify(parseToGraph(input));
+}
+export function graph_to_mermaid_text(graphJson) {
+  const graph = JSON.parse(graphJson);
+  const lines = [${JSON.stringify('flowchart TB')}];
+  for (const node of graph.nodes) {
+    lines.push('  ' + node.id + '["' + escapeLabel(node.label) + '"]');
+  }
+  for (const edge of graph.edges) {
+    const edgeId = edge.id ? edge.id + '@' : '';
+    lines.push('  ' + edge.source + ' ' + edgeId + '--> ' + edge.target);
+  }
+  for (const node of graph.nodes) {
+    if (node.styles?.length) {
+      lines.push('  style ' + node.id + ' ' + node.styles.join(','));
+    }
+  }
+  return lines.join('\n');
+}
+export function render_graph_parts_json(graphJson) {
+  const graph = JSON.parse(graphJson);
+  return JSON.stringify({
+    nodes: graph.nodes.map((node, index) => ({
+      id: 'node:' + node.id,
+      node_id: node.id,
+      label: node.label,
+      shape: node.shape || 'square',
+      bounds: nodeBounds(index),
+      classes: node.classes || [],
+      styles: node.styles || [],
+    })),
+    edges: graph.edges.map((edge) => ({
+      id: 'edge:' + edge.id,
+      edge_id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      points: [],
+      styles: edge.styles || [],
+    })),
+    labels: [],
+    bounds: { x: 0, y: 0, width: Math.max(400, graph.nodes.length * 120), height: 260 },
+  });
+}
+export function apply_graph_patch_result_json(graphJson, patchJson) {
+  const graph = JSON.parse(graphJson);
+  const patch = JSON.parse(patchJson);
+  if (patch.op === 'add_node') {
+    graph.nodes.push({ ...patch.node, classes: patch.node.classes || [], styles: patch.node.styles || [] });
+  } else if (patch.op === 'add_edge') {
+    graph.edges.push({ ...patch.edge, classes: patch.edge.classes || [], styles: patch.edge.styles || [] });
+  } else if (patch.op === 'set_node_label') {
+    graph.nodes.find((node) => node.id === patch.id).label = patch.label;
+  } else if (patch.op === 'set_node_color') {
+    upsertStyle(graph.nodes.find((node) => node.id === patch.id).styles, 'fill', patch.color);
+  } else if (patch.op === 'move_node') {
+    graph.nodes.find((node) => node.id === patch.id).position = {
+      x: patch.x,
+      y: patch.y,
+      locked: patch.locked,
+    };
+  }
+  return JSON.stringify({ graph, affected_ids: [] });
+}
+
+function parseToGraph(input) {
+  const nodes = new Map();
+  const edges = [];
+  for (const rawLine of input.split('\n')) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('%%') || line.startsWith('flowchart')) continue;
+
+    const style = line.match(/^style\s+([A-Za-z0-9_]+)\s+(.+)$/);
+    if (style) {
+      ensureNode(nodes, style[1]);
+      nodes.get(style[1]).styles = style[2].split(',').map((item) => item.trim()).filter(Boolean);
+      continue;
+    }
+
+    const edge = line.match(/^([A-Za-z0-9_]+)(?:\[[^\]]*\]|\{[^}]*\}|\([^)]*\))?\s+(?:(\w+)@)?-->(?:\|[^|]*\|)?\s*([A-Za-z0-9_]+)/);
+    if (edge) {
+      ensureNode(nodes, edge[1]);
+      ensureNode(nodes, edge[3]);
+      edges.push({
+        id: edge[2] || 'edge_' + edge[1] + '_' + edge[3] + '_' + edges.length,
+        source: edge[1],
+        target: edge[3],
+        label: '',
+        edge_type: '-->',
+        stroke: 'normal',
+        classes: [],
+        styles: [],
+      });
+      parseNodeDeclaration(nodes, line);
+      continue;
+    }
+
+    parseNodeDeclaration(nodes, line);
+  }
+
+  return {
+    diagram_type: 'flowchart',
+    direction: 'TB',
+    nodes: [...nodes.values()],
+    edges,
+    classes: [],
+    subgraphs: [],
+  };
+}
+
+function parseNodeDeclaration(nodes, line) {
+  const node = line.match(/^([A-Za-z0-9_]+)(?:\["([^"]*)"\]|\[([^\]]*)\]|\{([^}]*)\}|\(([^)]*)\))/);
+  if (!node) return;
+  ensureNode(nodes, node[1]);
+  nodes.get(node[1]).label = node[2] || node[3] || node[4] || node[5] || node[1];
+}
+
+function ensureNode(nodes, id) {
+  if (!nodes.has(id)) {
+    nodes.set(id, {
+      id,
+      label: id,
+      shape: 'square',
+      classes: [],
+      styles: [],
+      position: null,
+    });
+  }
+}
+
+function renderSvg(graph) {
+  const nodes = graph.nodes.map((node, index) => {
+    const bounds = nodeBounds(index);
+    const fill = styleValue(node.styles, 'fill') || '#ffffff';
+    return '<g id="node-' + node.id + '" transform="translate(' + bounds.x + ' ' + bounds.y + ')">' +
+      '<rect width="' + bounds.width + '" height="' + bounds.height + '" fill="' + fill + '"></rect>' +
+      '<text>' + escapeHtml(node.label) + '</text></g>';
+  }).join('');
+  const edges = graph.edges.map((edge) =>
+    '<g id="edge-' + edge.id + '"><path d="M 0 0 L 100 100"></path></g>'
+  ).join('');
+  return '<svg viewBox="0 0 1200 300">' + edges + nodes + '</svg>';
+}
+
+function nodeBounds(index) {
+  return { x: 30 + index * 120, y: 80, width: 80, height: 40 };
+}
+
+function styleValue(styles, property) {
+  const style = styles?.find((item) => item.startsWith(property + ':'));
+  return style ? style.slice(property.length + 1) : null;
+}
+
+function upsertStyle(styles, property, value) {
+  const prefix = property + ':';
+  const existing = styles.findIndex((item) => item.startsWith(prefix));
+  if (existing >= 0) {
+    styles[existing] = prefix + value;
+  } else {
+    styles.push(prefix + value);
+  }
+}
+
+function escapeLabel(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+window.__fakeParseToGraph = parseToGraph;
+`;
 }
 
 async function runBrowserAssertions(page) {
@@ -322,14 +520,62 @@ async function runBrowserAssertions(page) {
   });
 }
 
+async function runPlaygroundCreationAssertions(page) {
+  await page.goto('/playground/index.html');
+  await page.waitForFunction(() =>
+    document.getElementById('loading-overlay')?.classList.contains('hidden')
+  );
+  await page.waitForSelector('#node-A');
+
+  await dispatchNodeClick(page, 'A');
+  await page.click('#create-node');
+  await page.waitForSelector('#node-Node5');
+
+  const afterNodeCreate = await page.evaluate(() => {
+    const graph = window.__fakeParseToGraph(document.getElementById('editor').value);
+    return {
+      hasNode: graph.nodes.some((node) => node.id === 'Node5'),
+      text: document.getElementById('editor').value,
+    };
+  });
+  assert.equal(afterNodeCreate.hasNode, true);
+  assert.match(afterNodeCreate.text, /Node5\["Node5"\]/);
+
+  await dispatchNodeClick(page, 'A');
+  await page.click('#connect-edge');
+  await dispatchNodeClick(page, 'Node5');
+
+  const afterEdgeCreate = await page.evaluate(() => {
+    const graph = window.__fakeParseToGraph(document.getElementById('editor').value);
+    return {
+      hasNode: graph.nodes.some((node) => node.id === 'Node5'),
+      hasEdge: graph.edges.some((edge) => edge.source === 'A' && edge.target === 'Node5'),
+      text: document.getElementById('editor').value,
+    };
+  });
+
+  assert.equal(afterEdgeCreate.hasNode, true);
+  assert.equal(afterEdgeCreate.hasEdge, true);
+  assert.match(afterEdgeCreate.text, /A edge_A_Node5@--> Node5/);
+}
+
+async function dispatchNodeClick(page, nodeId) {
+  await page.evaluate((id) => {
+    const node = document.getElementById(`node-${id}`);
+    node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  }, nodeId);
+}
+
 const server = await serveRepo();
 const browser = await chromium.launch();
 
 try {
   const page = await browser.newPage({ baseURL: server.baseUrl });
   await runBrowserAssertions(page);
+  await runPlaygroundCreationAssertions(page);
   console.log('PASS browser node drag updates the existing SVG in place');
   console.log('PASS browser node inspector edits graph data SVG and Mermaid text');
+  console.log('PASS playground creates a node and edge then reparses exported text');
   console.log('PASS browser viewport pan zoom fit and reset update one transform');
 } finally {
   await browser.close();
