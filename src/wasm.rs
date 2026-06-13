@@ -56,9 +56,40 @@ pub fn render_graph_json(graph_json: &str) -> Result<String, JsValue> {
         .map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
+/// Apply layout to editable graph JSON and return positioned graph JSON.
+#[wasm_bindgen]
+pub fn layout_graph_json(graph_json: &str) -> Result<String, JsValue> {
+    crate::editable::layout_graph_json(graph_json)
+        .map_err(|err| JsValue::from_str(&err.to_string()))
+}
+
+/// Return editable render parts with stable IDs.
+#[wasm_bindgen]
+pub fn render_graph_parts_json(graph_json: &str) -> Result<String, JsValue> {
+    crate::editable::render_graph_parts_json(graph_json)
+        .map_err(|err| JsValue::from_str(&err.to_string()))
+}
+
+/// Return edge routes incident to one node.
+#[wasm_bindgen]
+pub fn route_edges_for_node_json(graph_json: &str, node_id: &str) -> Result<String, JsValue> {
+    crate::editable::route_edges_for_node_json(graph_json, node_id)
+        .map_err(|err| JsValue::from_str(&err.to_string()))
+}
+
 /// Apply a JSON patch operation to editable graph JSON.
 #[wasm_bindgen]
 pub fn apply_graph_patch_json(graph_json: &str, patch_json: &str) -> Result<String, JsValue> {
     crate::editable::apply_graph_patch_json(graph_json, patch_json)
+        .map_err(|err| JsValue::from_str(&err.to_string()))
+}
+
+/// Apply a JSON patch and return the updated graph plus affected render IDs.
+#[wasm_bindgen]
+pub fn apply_graph_patch_result_json(
+    graph_json: &str,
+    patch_json: &str,
+) -> Result<String, JsValue> {
+    crate::editable::apply_graph_patch_result_json(graph_json, patch_json)
         .map_err(|err| JsValue::from_str(&err.to_string()))
 }

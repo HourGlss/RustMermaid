@@ -9,7 +9,7 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
 - [x] A flowchart with 800 nodes and 1000 edges can be parsed into structured graph JSON.
 - [x] The graph JSON can be rendered back to SVG.
 - [x] The graph JSON can be serialized back to Mermaid text.
-- [ ] Moving one node updates that node and its incident edges without reparsing the full Mermaid source.
+- [x] Moving one node updates that node and its incident edges without reparsing the full Mermaid source.
 - [x] Creating a node, creating an edge, changing a label, and changing colors all round-trip through graph JSON and Mermaid text.
 - [x] Manual node positions survive export and re-import.
 - [ ] Browser interaction remains usable on the 800-node / 1000-edge fixture.
@@ -85,29 +85,29 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
   - Output: Mermaid text with a Selkie metadata block and normal flowchart syntax.
   - Test: graph -> Mermaid -> graph preserves all manual positions and locked flags.
 
-- [ ] Support pinned-node layout.
+- [x] Support pinned-node layout.
   - Input: graph JSON where some nodes have positions with `locked=true`.
   - Output: layout result where locked nodes keep their positions and unlocked nodes are laid out around them.
   - Test: locked node coordinates are unchanged after layout.
 
 ## Phase 3: Incremental Rendering APIs
 
-- [ ] Add stable render element IDs.
+- [x] Add stable render element IDs.
   - Input: graph JSON with node `A` and edge `A -> B`.
   - Output: SVG elements or render-parts JSON with stable IDs for node `A` and the edge.
   - Test: rendering the same graph twice produces the same element IDs.
 
-- [ ] Add `render_graph_parts(graph)`.
+- [x] Add `render_graph_parts(graph)`.
   - Input: graph JSON.
   - Output: JSON arrays for nodes, edges, labels, bounds, and style data.
   - Test: output includes one render part per graph node and edge.
 
-- [ ] Add `route_edges_for_node(graph, node_id)`.
+- [x] Add `route_edges_for_node(graph, node_id)`.
   - Input: graph JSON plus moved node `A`.
   - Output: updated geometry for edges incident to `A`.
   - Test: only incident edges are returned; non-incident edge geometry is not included.
 
-- [ ] Add patch-based graph updates.
+- [x] Add patch-based graph updates.
   - Input: graph JSON plus a patch like `{ "op": "move_node", "id": "A", "x": 200, "y": 100 }`.
   - Output: updated graph JSON and affected render part IDs.
   - Test: moving one node reports that node plus only incident edges as affected.
@@ -168,10 +168,10 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
 
 ## Definition Of Done
 
-- [ ] `cargo fmt` passes.
-- [ ] `cargo clippy --features all-formats -- -D warnings` passes.
-- [ ] `cargo test --features all-formats` passes.
+- [x] `cargo fmt` passes.
+- [x] `cargo clippy --features all-formats -- -D warnings` passes.
+- [x] `cargo test --features all-formats` passes.
 - [x] WASM tests cover `parse_to_graph_json`, `graph_to_mermaid_text`, and `render_graph_json`.
 - [ ] Browser tests cover load, pan, zoom, select, move, create node, create edge, edit label, edit color, export, and re-import.
 - [ ] The 800-node / 1000-edge fixture passes CLI and browser acceptance tests.
-- [ ] The implementation keeps static Mermaid rendering compatibility for existing docs/sources files.
+- [x] The implementation keeps static Mermaid rendering compatibility for existing docs/sources files.

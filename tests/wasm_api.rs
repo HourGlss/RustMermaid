@@ -4,8 +4,9 @@ use js_sys::{Function, Reflect};
 use wasm_bindgen::JsValue;
 
 use selkie::wasm::{
-    graph_to_mermaid_text, initialize, parse, parse_to_graph_json, render, render_graph_json,
-    render_text,
+    apply_graph_patch_result_json, graph_to_mermaid_text, initialize, layout_graph_json, parse,
+    parse_to_graph_json, render, render_graph_json, render_graph_parts_json, render_text,
+    route_edges_for_node_json,
 };
 
 #[test]
@@ -71,4 +72,35 @@ fn graph_json_api_round_trips_flowchart() {
     let svg = render_graph_json(&graph_json).expect("render_graph_json should succeed");
     assert!(svg.contains("<svg"));
     assert!(svg.contains("Decision"));
+
+    let laid_out = layout_graph_json(&graph_json).expect("layout_graph_json should succeed");
+    let laid_out_graph: serde_json::Value =
+        serde_json::from_str(&laid_out).expect("layout graph json should parse");
+    assert!(
+        laid_out_graph["nodes"][0]["position"].is_object(),
+        "layout should add node positions"
+    );
+
+    let parts =
+        render_graph_parts_json(&graph_json).expect("render_graph_parts_json should succeed");
+    let parts_json: serde_json::Value =
+        serde_json::from_str(&parts).expect("render parts json should parse");
+    assert_eq!(parts_json["nodes"].as_array().unwrap().len(), 3);
+
+    let routes = route_edges_for_node_json(&graph_json, "B")
+        .expect("route_edges_for_node_json should succeed");
+    let routes_json: serde_json::Value =
+        serde_json::from_str(&routes).expect("routes json should parse");
+    assert_eq!(routes_json["node_id"], "B");
+
+    let patch = r#"{"op":"move_node","id":"A","x":50.0,"y":75.0,"locked":true}"#;
+    let patch_result = apply_graph_patch_result_json(&graph_json, patch)
+        .expect("apply_graph_patch_result_json should succeed");
+    let patch_json: serde_json::Value =
+        serde_json::from_str(&patch_result).expect("patch result json should parse");
+    assert!(patch_json["affected_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id == "node:A"));
 }
