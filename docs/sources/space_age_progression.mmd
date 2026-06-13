@@ -1,0 +1,1115 @@
+flowchart LR
+  subgraph stage_nauvis["nauvis"]
+    accumulator["accumulator<br/>recipe: accumulator"]
+    active_provider_chest["active provider chest<br/>recipe: active provider chest"]
+    advanced_circuit["advanced circuit<br/>recipe: advanced circuit"]
+    arithmetic_combinator["arithmetic combinator<br/>recipe: arithmetic combinator"]
+    assembling_machine_1["assembling machine 1<br/>recipe: assembling machine 1"]
+    assembling_machine_2["assembling machine 2<br/>recipe: assembling machine 2"]
+    assembling_machine_3["assembling machine 3<br/>recipe: assembling machine 3"]
+    automation_science_pack["automation science pack<br/>recipe: automation science pack"]
+    barrel["barrel<br/>recipe: barrel"]
+    battery["battery<br/>recipe: battery"]
+    battery_equipment["battery equipment<br/>recipe: battery equipment"]
+    beacon["beacon<br/>recipe: beacon"]
+    belt_immunity_equipment["belt immunity equipment<br/>recipe: belt immunity equipment"]
+    big_electric_pole["big electric pole<br/>recipe: big electric pole"]
+    biter_egg["biter egg<br/>recipe: biter egg"]
+    boiler["boiler<br/>recipe: boiler"]
+    buffer_chest["buffer chest<br/>recipe: buffer chest"]
+    bulk_inserter["bulk inserter<br/>recipe: bulk inserter"]
+    burner_inserter["burner inserter<br/>recipe: burner inserter"]
+    burner_mining_drill["burner mining drill<br/>recipe: burner mining drill"]
+    cannon_shell["cannon shell<br/>recipe: cannon shell"]
+    car["car<br/>recipe: car"]
+    cargo_wagon["cargo wagon<br/>recipe: cargo wagon"]
+    centrifuge["centrifuge<br/>recipe: centrifuge"]
+    chemical_plant["chemical plant<br/>recipe: chemical plant"]
+    chemical_science_pack["chemical science pack<br/>recipe: chemical science pack"]
+    cluster_grenade["cluster grenade<br/>recipe: cluster grenade"]
+    coal["coal<br/>raw: nauvis, vulcanus"]
+    combat_shotgun["combat shotgun<br/>recipe: combat shotgun"]
+    concrete["concrete<br/>recipe: concrete"]
+    constant_combinator["constant combinator<br/>recipe: constant combinator"]
+    copper_cable["copper cable<br/>recipe: copper cable"]
+    copper_ore["copper ore<br/>raw: nauvis"]
+    copper_plate["copper plate<br/>recipe: copper plate"]
+    crude_oil["crude oil<br/>raw: aquilo, nauvis"]
+    crude_oil_barrel["crude oil barrel<br/>recipe: crude oil barrel"]
+    decider_combinator["decider combinator<br/>recipe: decider combinator"]
+    defender_capsule["defender capsule<br/>recipe: defender capsule"]
+    display_panel["display panel<br/>recipe: display panel"]
+    distractor_capsule["distractor capsule<br/>recipe: distractor capsule"]
+    efficiency_module["efficiency module<br/>recipe: efficiency module"]
+    electric_furnace["electric furnace<br/>recipe: electric furnace"]
+    electric_mining_drill["electric mining drill<br/>recipe: electric mining drill"]
+    electronic_circuit["electronic circuit<br/>recipe: electronic circuit"]
+    energy_shield_equipment["energy shield equipment<br/>recipe: energy shield equipment"]
+    engine_unit["engine unit<br/>recipe: engine unit"]
+    explosive_cannon_shell["explosive cannon shell<br/>recipe: explosive cannon shell"]
+    explosive_rocket["explosive rocket<br/>recipe: explosive rocket"]
+    explosive_uranium_cannon_shell["explosive uranium cannon shell<br/>recipe: explosive uranium cannon shell"]
+    explosives["explosives<br/>recipe: explosives"]
+    fast_inserter["fast inserter<br/>recipe: fast inserter"]
+    fast_splitter["fast splitter<br/>recipe: fast splitter"]
+    fast_transport_belt["fast transport belt<br/>recipe: fast transport belt"]
+    fast_underground_belt["fast underground belt<br/>recipe: fast underground belt"]
+    firearm_magazine["firearm magazine<br/>recipe: firearm magazine"]
+    flamethrower["flamethrower<br/>recipe: flamethrower"]
+    flamethrower_ammo["flamethrower ammo<br/>recipe: flamethrower ammo"]
+    flamethrower_turret["flamethrower turret<br/>recipe: flamethrower turret"]
+    fluid_wagon["fluid wagon<br/>recipe: fluid wagon"]
+    gate["gate<br/>recipe: gate"]
+    grenade["grenade<br/>recipe: grenade"]
+    gun_turret["gun turret<br/>recipe: gun turret"]
+    hazard_concrete["hazard concrete<br/>recipe: hazard concrete"]
+    heat_exchanger["heat exchanger<br/>recipe: heat exchanger"]
+    heat_pipe["heat pipe<br/>recipe: heat pipe"]
+    heating_tower["heating tower<br/>recipe: heating tower"]
+    heavy_armor["heavy armor<br/>recipe: heavy armor"]
+    inserter["inserter<br/>recipe: inserter"]
+    iron_chest["iron chest<br/>recipe: iron chest"]
+    iron_gear_wheel["iron gear wheel<br/>recipe: iron gear wheel"]
+    iron_ore["iron ore<br/>raw: nauvis"]
+    iron_plate["iron plate<br/>recipe: iron plate"]
+    iron_stick["iron stick<br/>recipe: iron stick"]
+    lab["lab<br/>recipe: lab"]
+    land_mine["land mine<br/>recipe: land mine"]
+    landfill["landfill<br/>recipe: landfill"]
+    laser_turret["laser turret<br/>recipe: laser turret"]
+    light_armor["light armor<br/>recipe: light armor"]
+    light_oil["light oil<br/>recipe: advanced oil processing"]
+    light_oil_barrel["light oil barrel<br/>recipe: light oil barrel"]
+    locomotive["locomotive<br/>recipe: locomotive"]
+    logistic_science_pack["logistic science pack<br/>recipe: logistic science pack"]
+    long_handed_inserter["long handed inserter<br/>recipe: long handed inserter"]
+    low_density_structure["low density structure<br/>recipe: low density structure"]
+    medium_electric_pole["medium electric pole<br/>recipe: medium electric pole"]
+    military_science_pack["military science pack<br/>recipe: military science pack"]
+    modular_armor["modular armor<br/>recipe: modular armor"]
+    night_vision_equipment["night vision equipment<br/>recipe: night vision equipment"]
+    nuclear_fuel["nuclear fuel<br/>recipe: nuclear fuel"]
+    nuclear_reactor["nuclear reactor<br/>recipe: nuclear reactor"]
+    nutrients["nutrients<br/>recipe: nutrients from biter egg"]
+    offshore_pump["offshore pump<br/>recipe: offshore pump"]
+    oil_refinery["oil refinery<br/>recipe: oil refinery"]
+    passive_provider_chest["passive provider chest<br/>recipe: passive provider chest"]
+    personal_roboport_equipment["personal roboport equipment<br/>recipe: personal roboport equipment"]
+    petroleum_gas["petroleum gas<br/>recipe: basic oil processing"]
+    petroleum_gas_barrel["petroleum gas barrel<br/>recipe: petroleum gas barrel"]
+    piercing_rounds_magazine["piercing rounds magazine<br/>recipe: piercing rounds magazine"]
+    piercing_shotgun_shell["piercing shotgun shell<br/>recipe: piercing shotgun shell"]
+    pipe["pipe<br/>recipe: pipe"]
+    pipe_to_ground["pipe to ground<br/>recipe: pipe to ground"]
+    plastic_bar["plastic bar<br/>recipe: plastic bar"]
+    poison_capsule["poison capsule<br/>recipe: poison capsule"]
+    power_switch["power switch<br/>recipe: power switch"]
+    production_science_pack["production science pack<br/>recipe: production science pack"]
+    productivity_module["productivity module<br/>recipe: productivity module"]
+    programmable_speaker["programmable speaker<br/>recipe: programmable speaker"]
+    pump["pump<br/>recipe: pump"]
+    pumpjack["pumpjack<br/>recipe: pumpjack"]
+    quality_module["quality module<br/>recipe: quality module"]
+    radar["radar<br/>recipe: radar"]
+    rail["rail<br/>recipe: rail"]
+    rail_chain_signal["rail chain signal<br/>recipe: rail chain signal"]
+    rail_ramp["rail ramp<br/>recipe: rail ramp"]
+    rail_signal["rail signal<br/>recipe: rail signal"]
+    rail_support["rail support<br/>recipe: rail support"]
+    railgun_ammo["railgun ammo<br/>recipe: railgun ammo"]
+    raw_fish["raw fish<br/>raw: nauvis"]
+    refined_concrete["refined concrete<br/>recipe: refined concrete"]
+    refined_hazard_concrete["refined hazard concrete<br/>recipe: refined hazard concrete"]
+    repair_pack["repair pack<br/>recipe: repair pack"]
+    requester_chest["requester chest<br/>recipe: requester chest"]
+    roboport["roboport<br/>recipe: roboport"]
+    rocket["rocket<br/>recipe: rocket"]
+    rocket_fuel["rocket fuel<br/>recipe: rocket fuel"]
+    rocket_launcher["rocket launcher<br/>recipe: rocket launcher"]
+    selector_combinator["selector combinator<br/>recipe: selector combinator"]
+    shotgun["shotgun<br/>recipe: shotgun"]
+    shotgun_shell["shotgun shell<br/>recipe: shotgun shell"]
+    slowdown_capsule["slowdown capsule<br/>recipe: slowdown capsule"]
+    small_electric_pole["small electric pole<br/>recipe: small electric pole"]
+    small_lamp["small lamp<br/>recipe: small lamp"]
+    solar_panel["solar panel<br/>recipe: solar panel"]
+    solar_panel_equipment["solar panel equipment<br/>recipe: solar panel equipment"]
+    solid_fuel["solid fuel<br/>recipe: solid fuel from petroleum gas"]
+    space_platform_foundation["space platform foundation<br/>recipe: space platform foundation"]
+    speed_module["speed module<br/>recipe: speed module"]
+    splitter["splitter<br/>recipe: splitter"]
+    steam_engine["steam engine<br/>recipe: steam engine"]
+    steam_turbine["steam turbine<br/>recipe: steam turbine"]
+    steel_chest["steel chest<br/>recipe: steel chest"]
+    steel_furnace["steel furnace<br/>recipe: steel furnace"]
+    steel_plate["steel plate<br/>recipe: steel plate"]
+    stone["stone<br/>raw: gleba, nauvis"]
+    stone_brick["stone brick<br/>recipe: stone brick"]
+    stone_furnace["stone furnace<br/>recipe: stone furnace"]
+    stone_wall["stone wall<br/>recipe: stone wall"]
+    storage_chest["storage chest<br/>recipe: storage chest"]
+    storage_tank["storage tank<br/>recipe: storage tank"]
+    submachine_gun["submachine gun<br/>recipe: submachine gun"]
+    substation["substation<br/>recipe: substation"]
+    sulfur["sulfur<br/>recipe: sulfur"]
+    sulfuric_acid["sulfuric acid<br/>recipe: sulfuric acid"]
+    sulfuric_acid_barrel["sulfuric acid barrel<br/>recipe: sulfuric acid barrel"]
+    tank["tank<br/>recipe: tank"]
+    train_stop["train stop<br/>recipe: train stop"]
+    transport_belt["transport belt<br/>recipe: transport belt"]
+    underground_belt["underground belt<br/>recipe: underground belt"]
+    uranium_235["uranium 235<br/>recipe: uranium processing"]
+    uranium_238["uranium 238<br/>recipe: uranium processing"]
+    uranium_cannon_shell["uranium cannon shell<br/>recipe: uranium cannon shell"]
+    uranium_fuel_cell["uranium fuel cell<br/>recipe: uranium fuel cell"]
+    uranium_ore["uranium ore<br/>raw: nauvis"]
+    uranium_rounds_magazine["uranium rounds magazine<br/>recipe: uranium rounds magazine"]
+    water["water<br/>raw: gleba, nauvis"]
+    water_barrel["water barrel<br/>recipe: water barrel"]
+    wood["wood<br/>raw: nauvis"]
+    wooden_chest["wooden chest<br/>recipe: wooden chest"]
+  end
+  subgraph stage_vulcanus["vulcanus"]
+    artillery_shell["artillery shell<br/>recipe: artillery shell"]
+    calcite["calcite<br/>raw: vulcanus"]
+    carbon["carbon<br/>raw: vulcanus"]
+    carbonic_asteroid_chunk["carbonic asteroid chunk<br/>raw: aquilo->solar-system-edge, fulgora->aquilo, gleba->aquilo, gleba->fulgora, +5"]
+    cliff_explosives["cliff explosives<br/>recipe: cliff explosives"]
+    ice["ice<br/>recipe: advanced oxide asteroid crushing"]
+    metallic_asteroid_chunk["metallic asteroid chunk<br/>raw: aquilo->solar-system-edge, fulgora->aquilo, gleba->aquilo, gleba->fulgora, +5"]
+    metallurgic_science_pack["metallurgic science pack<br/>recipe: metallurgic science pack"]
+    molten_copper["molten copper<br/>recipe: molten copper"]
+    molten_iron["molten iron<br/>recipe: molten iron"]
+    oxide_asteroid_chunk["oxide asteroid chunk<br/>raw: aquilo->solar-system-edge, fulgora->aquilo, gleba->aquilo, gleba->fulgora, +5"]
+    space_science_pack["space science pack<br/>recipe: space science pack"]
+    tungsten_carbide["tungsten carbide<br/>recipe: tungsten carbide"]
+    tungsten_ore["tungsten ore<br/>raw: vulcanus"]
+    tungsten_plate["tungsten plate<br/>recipe: tungsten plate"]
+  end
+  subgraph stage_fulgora["fulgora"]
+    artillery_turret["artillery turret<br/>recipe: artillery turret"]
+    artillery_wagon["artillery wagon<br/>recipe: artillery wagon"]
+    asteroid_collector["asteroid collector<br/>recipe: asteroid collector"]
+    atomic_bomb["atomic bomb<br/>recipe: atomic bomb"]
+    battery_mk2_equipment["battery mk2 equipment<br/>recipe: battery mk2 equipment"]
+    battery_mk3_equipment["battery mk3 equipment<br/>recipe: battery mk3 equipment"]
+    big_mining_drill["big mining drill<br/>recipe: big mining drill"]
+    cargo_bay["cargo bay<br/>recipe: cargo bay"]
+    cargo_landing_pad["cargo landing pad<br/>recipe: cargo landing pad"]
+    construction_robot["construction robot<br/>recipe: construction robot"]
+    crusher["crusher<br/>recipe: crusher"]
+    destroyer_capsule["destroyer capsule<br/>recipe: destroyer capsule"]
+    discharge_defense_equipment["discharge defense equipment<br/>recipe: discharge defense equipment"]
+    efficiency_module_2["efficiency module 2<br/>recipe: efficiency module 2"]
+    electric_engine_unit["electric engine unit<br/>recipe: electric engine unit"]
+    electrolyte["electrolyte<br/>recipe: electrolyte"]
+    electromagnetic_plant["electromagnetic plant<br/>recipe: electromagnetic plant"]
+    electromagnetic_science_pack["electromagnetic science pack<br/>recipe: electromagnetic science pack"]
+    energy_shield_mk2_equipment["energy shield mk2 equipment<br/>recipe: energy shield mk2 equipment"]
+    exoskeleton_equipment["exoskeleton equipment<br/>recipe: exoskeleton equipment"]
+    express_splitter["express splitter<br/>recipe: express splitter"]
+    express_transport_belt["express transport belt<br/>recipe: express transport belt"]
+    express_underground_belt["express underground belt<br/>recipe: express underground belt"]
+    fission_reactor_equipment["fission reactor equipment<br/>recipe: fission reactor equipment"]
+    flying_robot_frame["flying robot frame<br/>recipe: flying robot frame"]
+    foundry["foundry<br/>recipe: foundry"]
+    heavy_oil["heavy oil<br/>raw: fulgora"]
+    heavy_oil_barrel["heavy oil barrel<br/>recipe: heavy oil barrel"]
+    holmium_ore["holmium ore<br/>recipe: scrap recycling"]
+    holmium_plate["holmium plate<br/>recipe: holmium plate"]
+    holmium_solution["holmium solution<br/>recipe: holmium solution"]
+    lightning_collector["lightning collector<br/>recipe: lightning collector"]
+    lightning_rod["lightning rod<br/>recipe: lightning rod"]
+    logistic_robot["logistic robot<br/>recipe: logistic robot"]
+    lubricant["lubricant<br/>recipe: lubricant"]
+    lubricant_barrel["lubricant barrel<br/>recipe: lubricant barrel"]
+    mech_armor["mech armor<br/>recipe: mech armor"]
+    personal_laser_defense_equipment["personal laser defense equipment<br/>recipe: personal laser defense equipment"]
+    personal_roboport_mk2_equipment["personal roboport mk2 equipment<br/>recipe: personal roboport mk2 equipment"]
+    power_armor["power armor<br/>recipe: power armor"]
+    power_armor_mk2["power armor mk2<br/>recipe: power armor mk2"]
+    processing_unit["processing unit<br/>recipe: scrap recycling"]
+    productivity_module_2["productivity module 2<br/>recipe: productivity module 2"]
+    productivity_module_3["productivity module 3<br/>recipe: productivity module 3"]
+    quality_module_2["quality module 2<br/>recipe: quality module 2"]
+    quality_module_3["quality module 3<br/>recipe: quality module 3"]
+    recycler["recycler<br/>recipe: recycler"]
+    rocket_part["rocket part<br/>recipe: rocket part"]
+    rocket_silo["rocket silo<br/>recipe: rocket silo"]
+    scrap["scrap<br/>raw: fulgora"]
+    space_platform_starter_pack["space platform starter pack<br/>recipe: space platform starter pack"]
+    speed_module_2["speed module 2<br/>recipe: speed module 2"]
+    speed_module_3["speed module 3<br/>recipe: speed module 3"]
+    supercapacitor["supercapacitor<br/>recipe: supercapacitor"]
+    superconductor["superconductor<br/>recipe: superconductor"]
+    tesla_ammo["tesla ammo<br/>recipe: tesla ammo"]
+    tesla_turret["tesla turret<br/>recipe: tesla turret"]
+    teslagun["teslagun<br/>recipe: teslagun"]
+    thruster["thruster<br/>recipe: thruster"]
+    turbo_splitter["turbo splitter<br/>recipe: turbo splitter"]
+    turbo_transport_belt["turbo transport belt<br/>recipe: turbo transport belt"]
+    turbo_underground_belt["turbo underground belt<br/>recipe: turbo underground belt"]
+    utility_science_pack["utility science pack<br/>recipe: utility science pack"]
+  end
+  subgraph stage_gleba["gleba"]
+    agricultural_tower["agricultural tower<br/>recipe: agricultural tower"]
+    artificial_jellynut_soil["artificial jellynut soil<br/>recipe: artificial jellynut soil"]
+    artificial_yumako_soil["artificial yumako soil<br/>recipe: artificial yumako soil"]
+    bioflux["bioflux<br/>recipe: bioflux"]
+    biolab["biolab<br/>recipe: biolab"]
+    capture_robot_rocket["capture robot rocket<br/>recipe: capture robot rocket"]
+    carbon_fiber["carbon fiber<br/>recipe: carbon fiber"]
+    copper_bacteria["copper bacteria<br/>recipe: copper bacteria"]
+    efficiency_module_3["efficiency module 3<br/>recipe: efficiency module 3"]
+    iron_bacteria["iron bacteria<br/>recipe: iron bacteria"]
+    jelly["jelly<br/>recipe: jellynut processing"]
+    jellynut["jellynut<br/>raw: gleba"]
+    jellynut_seed["jellynut seed<br/>recipe: jellynut processing"]
+    overgrowth_jellynut_soil["overgrowth jellynut soil<br/>recipe: overgrowth jellynut soil"]
+    overgrowth_yumako_soil["overgrowth yumako soil<br/>recipe: overgrowth yumako soil"]
+    rocket_turret["rocket turret<br/>recipe: rocket turret"]
+    spidertron["spidertron<br/>recipe: spidertron"]
+    spoilage["spoilage<br/>recipe: copper bacteria"]
+    stack_inserter["stack inserter<br/>recipe: stack inserter"]
+    toolbelt_equipment["toolbelt equipment<br/>recipe: toolbelt equipment"]
+    yumako["yumako<br/>raw: gleba"]
+    yumako_mash["yumako mash<br/>recipe: yumako processing"]
+    yumako_seed["yumako seed<br/>recipe: yumako processing"]
+  end
+  subgraph stage_aquilo["aquilo"]
+    ammonia["ammonia<br/>recipe: ammoniacal solution separation"]
+    ammoniacal_solution["ammoniacal solution<br/>raw: aquilo"]
+    captive_biter_spawner["captive biter spawner<br/>recipe: captive biter spawner"]
+    cryogenic_plant["cryogenic plant<br/>recipe: cryogenic plant"]
+    cryogenic_science_pack["cryogenic science pack<br/>recipe: cryogenic science pack"]
+    fluorine["fluorine<br/>raw: aquilo"]
+    fluoroketone_cold["fluoroketone cold<br/>recipe: fluoroketone cooling"]
+    fluoroketone_cold_barrel["fluoroketone cold barrel<br/>recipe: fluoroketone cold barrel"]
+    fluoroketone_hot["fluoroketone hot<br/>recipe: fluoroketone"]
+    fluoroketone_hot_barrel["fluoroketone hot barrel<br/>recipe: fluoroketone hot barrel"]
+    foundation["foundation<br/>recipe: foundation"]
+    fusion_generator["fusion generator<br/>recipe: fusion generator"]
+    fusion_power_cell["fusion power cell<br/>recipe: fusion power cell"]
+    fusion_reactor["fusion reactor<br/>recipe: fusion reactor"]
+    fusion_reactor_equipment["fusion reactor equipment<br/>recipe: fusion reactor equipment"]
+    ice_platform["ice platform<br/>recipe: ice platform"]
+    lithium["lithium<br/>recipe: lithium"]
+    lithium_brine["lithium brine<br/>raw: aquilo"]
+    lithium_plate["lithium plate<br/>recipe: lithium plate"]
+    quantum_processor["quantum processor<br/>recipe: quantum processor"]
+    railgun["railgun<br/>recipe: railgun"]
+    railgun_turret["railgun turret<br/>recipe: railgun turret"]
+  end
+  subgraph stage_unresolved["unresolved"]
+    agricultural_science_pack["agricultural science pack<br/>recipe: agricultural science pack"]
+    artillery_targeting_remote["artillery targeting remote<br/>unresolved"]
+    biochamber["biochamber<br/>recipe: biochamber"]
+    blueprint["blueprint<br/>unresolved"]
+    blueprint_book["blueprint book<br/>unresolved"]
+    bottomless_chest["bottomless chest<br/>unresolved"]
+    burner_generator["burner generator<br/>unresolved"]
+    coin["coin<br/>unresolved"]
+    copper_wire["copper wire<br/>unresolved"]
+    deconstruction_planner["deconstruction planner<br/>unresolved"]
+    depleted_uranium_fuel_cell["depleted uranium fuel cell<br/>unresolved"]
+    discharge_defense_remote["discharge defense remote<br/>unresolved"]
+    electric_energy_interface["electric energy interface<br/>unresolved"]
+    empty_module_slot["empty module slot<br/>unresolved"]
+    express_loader["express loader<br/>unresolved"]
+    fast_loader["fast loader<br/>unresolved"]
+    green_wire["green wire<br/>unresolved"]
+    heat_interface["heat interface<br/>unresolved"]
+    infinity_cargo_wagon["infinity cargo wagon<br/>unresolved"]
+    infinity_chest["infinity chest<br/>unresolved"]
+    infinity_pipe["infinity pipe<br/>unresolved"]
+    item_unknown["item unknown<br/>unresolved"]
+    lane_splitter["lane splitter<br/>unresolved"]
+    linked_belt["linked belt<br/>unresolved"]
+    linked_chest["linked chest<br/>unresolved"]
+    loader["loader<br/>unresolved"]
+    one_way_valve["one way valve<br/>unresolved"]
+    overflow_valve["overflow valve<br/>unresolved"]
+    pentapod_egg["pentapod egg<br/>recipe: pentapod egg"]
+    pistol["pistol<br/>unresolved"]
+    promethium_asteroid_chunk["promethium asteroid chunk<br/>unresolved"]
+    promethium_science_pack["promethium science pack<br/>recipe: promethium science pack"]
+    proxy_container["proxy container<br/>unresolved"]
+    red_wire["red wire<br/>unresolved"]
+    science["science<br/>unresolved"]
+    selection_tool["selection tool<br/>unresolved"]
+    simple_entity_with_force["simple entity with force<br/>unresolved"]
+    simple_entity_with_owner["simple entity with owner<br/>unresolved"]
+    space_platform_hub["space platform hub<br/>unresolved"]
+    spidertron_remote["spidertron remote<br/>unresolved"]
+    top_up_valve["top up valve<br/>unresolved"]
+    tree_seed["tree seed<br/>recipe: wood processing"]
+    turbo_loader["turbo loader<br/>unresolved"]
+    upgrade_planner["upgrade planner<br/>unresolved"]
+  end
+  accumulator -->|1| electromagnetic_science_pack
+  accumulator -->|1| lightning_collector
+  advanced_circuit -->|1| active_provider_chest
+  advanced_circuit -->|20| beacon
+  advanced_circuit -->|5| belt_immunity_equipment
+  advanced_circuit -->|10| big_mining_drill
+  advanced_circuit -->|1| buffer_chest
+  advanced_circuit -->|1| bulk_inserter
+  advanced_circuit -->|100| centrifuge
+  advanced_circuit -->|1.5| chemical_science_pack
+  advanced_circuit -->|3| distractor_capsule
+  advanced_circuit -->|5| efficiency_module
+  advanced_circuit -->|5| efficiency_module_2
+  advanced_circuit -->|5| efficiency_module_3
+  advanced_circuit -->|5| electric_furnace
+  advanced_circuit -->|5| energy_shield_equipment
+  advanced_circuit -->|10| express_splitter
+  advanced_circuit -->|2| logistic_robot
+  advanced_circuit -->|30| modular_armor
+  advanced_circuit -->|5| night_vision_equipment
+  advanced_circuit -->|500| nuclear_reactor
+  advanced_circuit -->|1| passive_provider_chest
+  advanced_circuit -->|10| personal_roboport_equipment
+  advanced_circuit -->|5| productivity_module
+  advanced_circuit -->|5| productivity_module_2
+  advanced_circuit -->|5| productivity_module_3
+  advanced_circuit -->|5| quality_module
+  advanced_circuit -->|5| quality_module_2
+  advanced_circuit -->|5| quality_module_3
+  advanced_circuit -->|1| requester_chest
+  advanced_circuit -->|45| roboport
+  advanced_circuit -->|2| selector_combinator
+  advanced_circuit -->|2| solar_panel_equipment
+  advanced_circuit -->|5| speed_module
+  advanced_circuit -->|5| speed_module_2
+  advanced_circuit -->|5| speed_module_3
+  advanced_circuit -->|1| storage_chest
+  advanced_circuit -->|5| substation
+  advanced_circuit -->|10| tank
+  advanced_circuit -->|3| toolbelt_equipment
+  ammonia -->|1| fluoroketone_hot
+  ammonia -->|100| fusion_power_cell
+  ammonia -->|400| ice_platform
+  ammonia -->|10| lithium
+  ammoniacal_solution -->|1| ammonia
+  artificial_jellynut_soil -->|2| overgrowth_jellynut_soil
+  artificial_yumako_soil -->|2| overgrowth_yumako_soil
+  assembling_machine_1 -->|1| assembling_machine_2
+  assembling_machine_2 -->|2| assembling_machine_3
+  barrel -->|1| cliff_explosives
+  barrel -->|1| crude_oil_barrel
+  barrel -->|1| fluoroketone_cold_barrel
+  barrel -->|1| fluoroketone_hot_barrel
+  barrel -->|1| heavy_oil_barrel
+  barrel -->|1| light_oil_barrel
+  barrel -->|1| lubricant_barrel
+  barrel -->|1| petroleum_gas_barrel
+  barrel -->|1| sulfuric_acid_barrel
+  barrel -->|1| water_barrel
+  battery -->|5| accumulator
+  battery -->|5| battery_equipment
+  battery -->|2| flying_robot_frame
+  battery -->|12| laser_turret
+  battery -->|45| personal_roboport_equipment
+  battery -->|1| supercapacitor
+  battery_equipment -->|10| battery_mk2_equipment
+  battery_mk2_equipment -->|5| battery_mk3_equipment
+  bioflux -->|1| agricultural_science_pack
+  bioflux -->|20| capture_robot_rocket
+  biter_egg -->|10| biolab
+  biter_egg -->|10| captive_biter_spawner
+  biter_egg -->|0.05| nutrients
+  biter_egg -->|10| overgrowth_jellynut_soil
+  biter_egg -->|10| overgrowth_yumako_soil
+  biter_egg -->|1| productivity_module_3
+  biter_egg -->|1| promethium_science_pack
+  boiler -->|2| heating_tower
+  bulk_inserter -->|1| stack_inserter
+  calcite -->|1| artillery_shell
+  calcite -->|10| cliff_explosives
+  calcite -->|0.002| molten_copper
+  calcite -->|0.002| molten_iron
+  cannon_shell -->|1| uranium_cannon_shell
+  capture_robot_rocket -->|2| biolab
+  capture_robot_rocket -->|1| captive_biter_spawner
+  carbon -->|1| carbon_fiber
+  carbon -->|0.2| space_science_pack
+  carbon -->|1| tungsten_carbide
+  carbon_fiber -->|4| foundation
+  carbon_fiber -->|100| fusion_reactor_equipment
+  carbon_fiber -->|1| quantum_processor
+  carbon_fiber -->|20| railgun_turret
+  carbon_fiber -->|20| rocket_turret
+  carbon_fiber -->|2| stack_inserter
+  carbon_fiber -->|10| toolbelt_equipment
+  coal -->|0.5| explosives
+  coal -->|10| grenade
+  coal -->|0.5| plastic_bar
+  coal -->|10| poison_capsule
+  coal -->|5| slowdown_capsule
+  concrete -->|200| cargo_landing_pad
+  concrete -->|100| centrifuge
+  concrete -->|1| hazard_concrete
+  concrete -->|20| heating_tower
+  concrete -->|500| nuclear_reactor
+  concrete -->|20| recycler
+  concrete -->|2| refined_concrete
+  concrete -->|1000| rocket_silo
+  copper_cable -->|4| advanced_circuit
+  copper_cable -->|5| arithmetic_combinator
+  copper_cable -->|10| beacon
+  copper_cable -->|4| big_electric_pole
+  copper_cable -->|5| constant_combinator
+  copper_cable -->|5| decider_combinator
+  copper_cable -->|3| electronic_circuit
+  copper_cable -->|12| lightning_rod
+  copper_cable -->|2| medium_electric_pole
+  copper_cable -->|5| power_switch
+  copper_cable -->|5| programmable_speaker
+  copper_cable -->|10| railgun_ammo
+  copper_cable -->|1| small_electric_pole
+  copper_cable -->|3| small_lamp
+  copper_cable -->|20| space_platform_foundation
+  copper_cable -->|6| substation
+  copper_ore -->|1| copper_plate
+  copper_ore -->|0.1| molten_copper
+  copper_plate -->|1| automation_science_pack
+  copper_plate -->|1| battery
+  copper_plate -->|10| combat_shotgun
+  copper_plate -->|0.5| copper_cable
+  copper_plate -->|10| gun_turret
+  copper_plate -->|100| heat_exchanger
+  copper_plate -->|20| heat_pipe
+  copper_plate -->|100| heavy_armor
+  copper_plate -->|20| low_density_structure
+  copper_plate -->|500| nuclear_reactor
+  copper_plate -->|1| piercing_rounds_magazine
+  copper_plate -->|5| piercing_shotgun_shell
+  copper_plate -->|10| shotgun
+  copper_plate -->|2| shotgun_shell
+  copper_plate -->|5| solar_panel
+  copper_plate -->|50| steam_turbine
+  copper_plate -->|5| submachine_gun
+  copper_plate -->|0.5| superconductor
+  crude_oil -->|50| crude_oil_barrel
+  crude_oil -->|100| flamethrower_ammo
+  crude_oil -->|2.22222| light_oil
+  crude_oil -->|2.22222| petroleum_gas
+  decider_combinator -->|5| selector_combinator
+  defender_capsule -->|4| distractor_capsule
+  distractor_capsule -->|4| destroyer_capsule
+  efficiency_module -->|4| efficiency_module_2
+  efficiency_module -->|100| power_armor_mk2
+  efficiency_module_2 -->|4| efficiency_module_3
+  electric_engine_unit -->|8| asteroid_collector
+  electric_engine_unit -->|10| big_mining_drill
+  electric_engine_unit -->|10| crusher
+  electric_engine_unit -->|30| exoskeleton_equipment
+  electric_engine_unit -->|1| flying_robot_frame
+  electric_engine_unit -->|20| power_armor
+  electric_engine_unit -->|40| power_armor_mk2
+  electric_engine_unit -->|200| rocket_silo
+  electric_engine_unit -->|5| thruster
+  electric_furnace -->|0.333333| production_science_pack
+  electric_mining_drill -->|1| big_mining_drill
+  electrolyte -->|25| electromagnetic_science_pack
+  electrolyte -->|80| lightning_collector
+  electrolyte -->|10| supercapacitor
+  electrolyte -->|10| tesla_ammo
+  electrolyte -->|500| tesla_turret
+  electrolyte -->|100| teslagun
+  electronic_circuit -->|3| active_provider_chest
+  electronic_circuit -->|2| advanced_circuit
+  electronic_circuit -->|3| agricultural_tower
+  electronic_circuit -->|5| arithmetic_combinator
+  electronic_circuit -->|3| assembling_machine_1
+  electronic_circuit -->|3| assembling_machine_2
+  electronic_circuit -->|20| beacon
+  electronic_circuit -->|5| biochamber
+  electronic_circuit -->|3| buffer_chest
+  electronic_circuit -->|15| bulk_inserter
+  electronic_circuit -->|5| chemical_plant
+  electronic_circuit -->|2| constant_combinator
+  electronic_circuit -->|2| construction_robot
+  electronic_circuit -->|5| decider_combinator
+  electronic_circuit -->|3| defender_capsule
+  electronic_circuit -->|1| display_panel
+  electronic_circuit -->|5| efficiency_module
+  electronic_circuit -->|2| electric_engine_unit
+  electronic_circuit -->|3| electric_mining_drill
+  electronic_circuit -->|2| fast_inserter
+  electronic_circuit -->|10| fast_splitter
+  electronic_circuit -->|3| flying_robot_frame
+  electronic_circuit -->|30| foundry
+  electronic_circuit -->|2| gate
+  electronic_circuit -->|1| inserter
+  electronic_circuit -->|10| lab
+  electronic_circuit -->|20| laser_turret
+  electronic_circuit -->|10| locomotive
+  electronic_circuit -->|10| oil_refinery
+  electronic_circuit -->|3| passive_provider_chest
+  electronic_circuit -->|3| poison_capsule
+  electronic_circuit -->|2| power_switch
+  electronic_circuit -->|5| productivity_module
+  electronic_circuit -->|4| programmable_speaker
+  electronic_circuit -->|5| pumpjack
+  electronic_circuit -->|5| quality_module
+  electronic_circuit -->|5| radar
+  electronic_circuit -->|1| rail_chain_signal
+  electronic_circuit -->|1| rail_signal
+  electronic_circuit -->|2| repair_pack
+  electronic_circuit -->|3| requester_chest
+  electronic_circuit -->|5| rocket_launcher
+  electronic_circuit -->|2| slowdown_capsule
+  electronic_circuit -->|1| small_lamp
+  electronic_circuit -->|15| solar_panel
+  electronic_circuit -->|5| speed_module
+  electronic_circuit -->|5| splitter
+  electronic_circuit -->|3| storage_chest
+  electronic_circuit -->|4| supercapacitor
+  electronic_circuit -->|5| train_stop
+  energy_shield_equipment -->|10| energy_shield_mk2_equipment
+  engine_unit -->|60| artillery_wagon
+  engine_unit -->|8| car
+  engine_unit -->|1| chemical_science_pack
+  engine_unit -->|1| electric_engine_unit
+  engine_unit -->|5| flamethrower_turret
+  engine_unit -->|20| locomotive
+  engine_unit -->|1| pump
+  engine_unit -->|32| tank
+  exoskeleton_equipment -->|4| spidertron
+  explosive_cannon_shell -->|1| explosive_uranium_cannon_shell
+  explosives -->|8| artillery_shell
+  explosives -->|10| atomic_bomb
+  explosives -->|1| cannon_shell
+  explosives -->|10| cliff_explosives
+  explosives -->|5| cluster_grenade
+  explosives -->|2| explosive_cannon_shell
+  explosives -->|2| explosive_rocket
+  explosives -->|0.5| land_mine
+  explosives -->|2| railgun_ammo
+  explosives -->|1| rocket
+  express_splitter -->|1| turbo_splitter
+  express_transport_belt -->|1| turbo_transport_belt
+  express_underground_belt -->|1| turbo_underground_belt
+  fast_inserter -->|1| bulk_inserter
+  fast_splitter -->|1| express_splitter
+  fast_transport_belt -->|1| express_transport_belt
+  fast_underground_belt -->|1| express_underground_belt
+  firearm_magazine -->|1| piercing_rounds_magazine
+  fission_reactor_equipment -->|1| fusion_reactor_equipment
+  fission_reactor_equipment -->|2| spidertron
+  fluorine -->|1| fluoroketone_hot
+  fluoroketone_cold -->|100| captive_biter_spawner
+  fluoroketone_cold -->|6| cryogenic_science_pack
+  fluoroketone_cold -->|50| fluoroketone_cold_barrel
+  fluoroketone_cold -->|20| foundation
+  fluoroketone_cold -->|10| quantum_processor
+  fluoroketone_cold -->|10| railgun
+  fluoroketone_cold -->|100| railgun_turret
+  fluoroketone_hot -->|1| fluoroketone_cold
+  fluoroketone_hot -->|50| fluoroketone_hot_barrel
+  flying_robot_frame -->|1| capture_robot_rocket
+  flying_robot_frame -->|1| construction_robot
+  flying_robot_frame -->|1| logistic_robot
+  flying_robot_frame -->|0.333333| utility_science_pack
+  fusion_power_cell -->|10| fusion_reactor_equipment
+  grenade -->|1| cliff_explosives
+  grenade -->|7| cluster_grenade
+  grenade -->|0.5| military_science_pack
+  heat_pipe -->|5| heating_tower
+  heavy_oil -->|1| electrolyte
+  heavy_oil -->|50| heavy_oil_barrel
+  heavy_oil -->|1| lubricant
+  holmium_ore -->|0.02| holmium_solution
+  holmium_plate -->|150| electromagnetic_plant
+  holmium_plate -->|1| fusion_power_cell
+  holmium_plate -->|0.2| lithium
+  holmium_plate -->|200| mech_armor
+  holmium_plate -->|2| supercapacitor
+  holmium_plate -->|0.5| superconductor
+  holmium_plate -->|10| teslagun
+  holmium_solution -->|1| electrolyte
+  holmium_solution -->|25| electromagnetic_science_pack
+  holmium_solution -->|20| holmium_plate
+  ice -->|3| cryogenic_science_pack
+  ice -->|50| ice_platform
+  ice -->|0.2| space_science_pack
+  inserter -->|1| fast_inserter
+  inserter -->|1| logistic_science_pack
+  inserter -->|1| long_handed_inserter
+  iron_gear_wheel -->|40| artillery_turret
+  iron_gear_wheel -->|40| artillery_wagon
+  iron_gear_wheel -->|5| assembling_machine_1
+  iron_gear_wheel -->|5| assembling_machine_2
+  iron_gear_wheel -->|1| automation_science_pack
+  iron_gear_wheel -->|15| bulk_inserter
+  iron_gear_wheel -->|1| burner_inserter
+  iron_gear_wheel -->|3| burner_mining_drill
+  iron_gear_wheel -->|10| cargo_wagon
+  iron_gear_wheel -->|100| centrifuge
+  iron_gear_wheel -->|5| chemical_plant
+  iron_gear_wheel -->|5| combat_shotgun
+  iron_gear_wheel -->|3| defender_capsule
+  iron_gear_wheel -->|5| electric_mining_drill
+  iron_gear_wheel -->|1| engine_unit
+  iron_gear_wheel -->|10| express_splitter
+  iron_gear_wheel -->|10| express_transport_belt
+  iron_gear_wheel -->|40| express_underground_belt
+  iron_gear_wheel -->|10| fast_splitter
+  iron_gear_wheel -->|5| fast_transport_belt
+  iron_gear_wheel -->|20| fast_underground_belt
+  iron_gear_wheel -->|10| flamethrower
+  iron_gear_wheel -->|15| flamethrower_turret
+  iron_gear_wheel -->|10| fluid_wagon
+  iron_gear_wheel -->|10| gun_turret
+  iron_gear_wheel -->|1| inserter
+  iron_gear_wheel -->|10| lab
+  iron_gear_wheel -->|1| long_handed_inserter
+  iron_gear_wheel -->|2| offshore_pump
+  iron_gear_wheel -->|10| oil_refinery
+  iron_gear_wheel -->|40| personal_roboport_equipment
+  iron_gear_wheel -->|10| pumpjack
+  iron_gear_wheel -->|5| radar
+  iron_gear_wheel -->|40| recycler
+  iron_gear_wheel -->|2| repair_pack
+  iron_gear_wheel -->|45| roboport
+  iron_gear_wheel -->|5| rocket_launcher
+  iron_gear_wheel -->|20| rocket_turret
+  iron_gear_wheel -->|5| shotgun
+  iron_gear_wheel -->|8| steam_engine
+  iron_gear_wheel -->|50| steam_turbine
+  iron_gear_wheel -->|10| submachine_gun
+  iron_gear_wheel -->|15| tank
+  iron_gear_wheel -->|0.5| transport_belt
+  iron_ore -->|0.1| concrete
+  iron_ore -->|1| iron_plate
+  iron_ore -->|0.1| molten_iron
+  iron_plate -->|2| accumulator
+  iron_plate -->|9| assembling_machine_1
+  iron_plate -->|1| battery
+  iron_plate -->|20| biochamber
+  iron_plate -->|1| burner_inserter
+  iron_plate -->|3| burner_mining_drill
+  iron_plate -->|20| car
+  iron_plate -->|20| cargo_wagon
+  iron_plate -->|1| display_panel
+  iron_plate -->|10| electric_mining_drill
+  iron_plate -->|1| electronic_circuit
+  iron_plate -->|2| fast_inserter
+  iron_plate -->|4| firearm_magazine
+  iron_plate -->|5| grenade
+  iron_plate -->|20| gun_turret
+  iron_plate -->|1| inserter
+  iron_plate -->|8| iron_chest
+  iron_plate -->|2| iron_gear_wheel
+  iron_plate -->|0.5| iron_stick
+  iron_plate -->|40| light_armor
+  iron_plate -->|1| long_handed_inserter
+  iron_plate -->|1| pipe
+  iron_plate -->|2.5| pipe_to_ground
+  iron_plate -->|5| power_switch
+  iron_plate -->|3| programmable_speaker
+  iron_plate -->|10| radar
+  iron_plate -->|5| rail_chain_signal
+  iron_plate -->|5| rail_signal
+  iron_plate -->|2| rocket
+  iron_plate -->|5| rocket_launcher
+  iron_plate -->|15| shotgun
+  iron_plate -->|2| shotgun_shell
+  iron_plate -->|1| small_lamp
+  iron_plate -->|0.4| space_science_pack
+  iron_plate -->|5| splitter
+  iron_plate -->|10| steam_engine
+  iron_plate -->|5| steel_plate
+  iron_plate -->|20| storage_tank
+  iron_plate -->|10| submachine_gun
+  iron_plate -->|0.02| sulfuric_acid
+  iron_plate -->|6| train_stop
+  iron_plate -->|0.5| transport_belt
+  iron_plate -->|5| underground_belt
+  iron_plate -->|1| uranium_fuel_cell
+  iron_stick -->|8| big_electric_pole
+  iron_stick -->|4| medium_electric_pole
+  iron_stick -->|4| programmable_speaker
+  iron_stick -->|0.5| rail
+  iron_stick -->|0.8| refined_concrete
+  iron_stick -->|6| train_stop
+  jelly -->|3| bioflux
+  jelly -->|60| iron_bacteria
+  jelly -->|10| stack_inserter
+  jellynut -->|0.25| jelly
+  jellynut -->|50| jellynut_seed
+  jellynut_seed -->|0.2| artificial_jellynut_soil
+  jellynut_seed -->|5| overgrowth_jellynut_soil
+  lab -->|1| biolab
+  landfill -->|1| agricultural_tower
+  landfill -->|0.5| artificial_jellynut_soil
+  landfill -->|0.5| artificial_yumako_soil
+  landfill -->|1| biochamber
+  laser_turret -->|10| discharge_defense_equipment
+  laser_turret -->|5| personal_laser_defense_equipment
+  light_oil -->|50| light_oil_barrel
+  light_oil -->|10| rocket_fuel
+  light_oil -->|2.5| superconductor
+  lightning_rod -->|1| lightning_collector
+  lithium -->|0.02| fluoroketone_hot
+  lithium -->|1| lithium_plate
+  lithium_brine -->|10| lithium
+  lithium_plate -->|20| cryogenic_plant
+  lithium_plate -->|1| cryogenic_science_pack
+  lithium_plate -->|4| foundation
+  lithium_plate -->|5| fusion_power_cell
+  lithium_plate -->|2| quantum_processor
+  low_density_structure -->|20| asteroid_collector
+  low_density_structure -->|5| battery_mk2_equipment
+  low_density_structure -->|20| cargo_bay
+  low_density_structure -->|20| crusher
+  low_density_structure -->|5| energy_shield_mk2_equipment
+  low_density_structure -->|50| fission_reactor_equipment
+  low_density_structure -->|5| personal_laser_defense_equipment
+  low_density_structure -->|30| power_armor_mk2
+  low_density_structure -->|1| rocket_part
+  low_density_structure -->|1| utility_science_pack
+  lubricant -->|15| electric_engine_unit
+  lubricant -->|80| express_splitter
+  lubricant -->|20| express_transport_belt
+  lubricant -->|20| express_underground_belt
+  lubricant -->|20| foundry
+  lubricant -->|50| lubricant_barrel
+  lubricant -->|80| turbo_splitter
+  lubricant -->|20| turbo_transport_belt
+  lubricant -->|20| turbo_underground_belt
+  molten_copper -->|200| metallurgic_science_pack
+  molten_iron -->|200| big_mining_drill
+  molten_iron -->|10| tungsten_plate
+  nutrients -->|5| artificial_jellynut_soil
+  nutrients -->|5| artificial_yumako_soil
+  nutrients -->|5| biochamber
+  nutrients -->|15| pentapod_egg
+  oxide_asteroid_chunk -->|0.333333| ice
+  pentapod_egg -->|1| agricultural_science_pack
+  pentapod_egg -->|1| biochamber
+  pentapod_egg -->|0.5| pentapod_egg
+  personal_roboport_equipment -->|5| personal_roboport_mk2_equipment
+  petroleum_gas -->|50| petroleum_gas_barrel
+  petroleum_gas -->|10| plastic_bar
+  petroleum_gas -->|20| solid_fuel
+  petroleum_gas -->|15| sulfur
+  piercing_rounds_magazine -->|3| defender_capsule
+  piercing_rounds_magazine -->|0.5| military_science_pack
+  piercing_rounds_magazine -->|1| uranium_rounds_magazine
+  pipe -->|4| boiler
+  pipe -->|5| chemical_plant
+  pipe -->|2| engine_unit
+  pipe -->|10| flamethrower_turret
+  pipe -->|8| fluid_wagon
+  pipe -->|10| heat_exchanger
+  pipe -->|3| offshore_pump
+  pipe -->|10| oil_refinery
+  pipe -->|5| pipe_to_ground
+  pipe -->|1| pump
+  pipe -->|10| pumpjack
+  pipe -->|100| rocket_silo
+  pipe -->|5| steam_engine
+  pipe -->|20| steam_turbine
+  plastic_bar -->|2| advanced_circuit
+  plastic_bar -->|2| cannon_shell
+  plastic_bar -->|2| explosive_cannon_shell
+  plastic_bar -->|5| low_density_structure
+  plastic_bar -->|0.5| superconductor
+  plastic_bar -->|1| tesla_ammo
+  plastic_bar -->|30| teslagun
+  power_armor_mk2 -->|1| mech_armor
+  processing_unit -->|10| artillery_turret
+  processing_unit -->|10| artillery_wagon
+  processing_unit -->|5| asteroid_collector
+  processing_unit -->|10| atomic_bomb
+  processing_unit -->|15| battery_mk2_equipment
+  processing_unit -->|2| capture_robot_rocket
+  processing_unit -->|5| cargo_bay
+  processing_unit -->|10| cargo_landing_pad
+  processing_unit -->|20| cryogenic_plant
+  processing_unit -->|1| destroyer_capsule
+  processing_unit -->|5| discharge_defense_equipment
+  processing_unit -->|5| efficiency_module_2
+  processing_unit -->|5| efficiency_module_3
+  processing_unit -->|50| electromagnetic_plant
+  processing_unit -->|5| energy_shield_mk2_equipment
+  processing_unit -->|10| exoskeleton_equipment
+  processing_unit -->|200| fission_reactor_equipment
+  processing_unit -->|100| mech_armor
+  processing_unit -->|20| personal_laser_defense_equipment
+  processing_unit -->|50| personal_roboport_mk2_equipment
+  processing_unit -->|40| power_armor
+  processing_unit -->|60| power_armor_mk2
+  processing_unit -->|5| productivity_module_2
+  processing_unit -->|5| productivity_module_3
+  processing_unit -->|5| quality_module_2
+  processing_unit -->|5| quality_module_3
+  processing_unit -->|1| quantum_processor
+  processing_unit -->|6| recycler
+  processing_unit -->|1| rocket_part
+  processing_unit -->|200| rocket_silo
+  processing_unit -->|4| rocket_turret
+  processing_unit -->|20| space_platform_starter_pack
+  processing_unit -->|5| speed_module_2
+  processing_unit -->|5| speed_module_3
+  processing_unit -->|1| stack_inserter
+  processing_unit -->|10| tesla_turret
+  processing_unit -->|10| thruster
+  processing_unit -->|2| turbo_splitter
+  processing_unit -->|0.666667| utility_science_pack
+  productivity_module -->|0.333333| production_science_pack
+  productivity_module -->|4| productivity_module_2
+  productivity_module_2 -->|4| productivity_module_3
+  promethium_asteroid_chunk -->|2.5| promethium_science_pack
+  quality_module -->|4| quality_module_2
+  quality_module_2 -->|4| quality_module_3
+  quantum_processor -->|50| fusion_generator
+  quantum_processor -->|250| fusion_reactor
+  quantum_processor -->|250| fusion_reactor_equipment
+  quantum_processor -->|0.1| promethium_science_pack
+  quantum_processor -->|20| railgun
+  quantum_processor -->|100| railgun_turret
+  radar -->|1| artillery_shell
+  radar -->|2| spidertron
+  rail -->|10| production_science_pack
+  rail -->|8| rail_ramp
+  raw_fish -->|1| spidertron
+  refined_concrete -->|60| artillery_turret
+  refined_concrete -->|60| artillery_wagon
+  refined_concrete -->|25| biolab
+  refined_concrete -->|40| cryogenic_plant
+  refined_concrete -->|50| electromagnetic_plant
+  refined_concrete -->|20| foundry
+  refined_concrete -->|100| rail_ramp
+  refined_concrete -->|20| rail_support
+  refined_concrete -->|1| refined_hazard_concrete
+  rocket -->|1| explosive_rocket
+  rocket_fuel -->|1| nuclear_fuel
+  rocket_fuel -->|1| rocket_part
+  rocket_launcher -->|4| rocket_turret
+  rocket_turret -->|1| spidertron
+  scrap -->|100| holmium_ore
+  scrap -->|50| processing_unit
+  shotgun_shell -->|2| piercing_shotgun_shell
+  solar_panel -->|1| solar_panel_equipment
+  solid_fuel -->|0.02| fluoroketone_hot
+  solid_fuel -->|10| rocket_fuel
+  space_platform_foundation -->|60| space_platform_starter_pack
+  speed_module -->|4| assembling_machine_3
+  speed_module -->|100| power_armor_mk2
+  speed_module -->|4| speed_module_2
+  speed_module_2 -->|4| speed_module_3
+  splitter -->|1| fast_splitter
+  spoilage -->|20| agricultural_tower
+  spoilage -->|5| efficiency_module_3
+  spoilage -->|50| overgrowth_jellynut_soil
+  spoilage -->|50| overgrowth_yumako_soil
+  steel_chest -->|1| active_provider_chest
+  steel_chest -->|1| buffer_chest
+  steel_chest -->|1| passive_provider_chest
+  steel_chest -->|1| requester_chest
+  steel_chest -->|1| storage_chest
+  steel_plate -->|10| agricultural_tower
+  steel_plate -->|2| assembling_machine_2
+  steel_plate -->|1| barrel
+  steel_plate -->|10| battery_equipment
+  steel_plate -->|10| beacon
+  steel_plate -->|10| belt_immunity_equipment
+  steel_plate -->|5| big_electric_pole
+  steel_plate -->|2| cannon_shell
+  steel_plate -->|2| capture_robot_rocket
+  steel_plate -->|5| car
+  steel_plate -->|20| cargo_bay
+  steel_plate -->|25| cargo_landing_pad
+  steel_plate -->|20| cargo_wagon
+  steel_plate -->|50| centrifuge
+  steel_plate -->|5| chemical_plant
+  steel_plate -->|5| cluster_grenade
+  steel_plate -->|15| combat_shotgun
+  steel_plate -->|10| crusher
+  steel_plate -->|4| destroyer_capsule
+  steel_plate -->|20| discharge_defense_equipment
+  steel_plate -->|10| electric_furnace
+  steel_plate -->|50| electromagnetic_plant
+  steel_plate -->|10| energy_shield_equipment
+  steel_plate -->|1| engine_unit
+  steel_plate -->|20| exoskeleton_equipment
+  steel_plate -->|2| explosive_cannon_shell
+  steel_plate -->|5| flamethrower
+  steel_plate -->|5| flamethrower_ammo
+  steel_plate -->|30| flamethrower_turret
+  steel_plate -->|16| fluid_wagon
+  steel_plate -->|1| flying_robot_frame
+  steel_plate -->|50| foundry
+  steel_plate -->|2| gate
+  steel_plate -->|10| heat_exchanger
+  steel_plate -->|10| heat_pipe
+  steel_plate -->|50| heavy_armor
+  steel_plate -->|0.25| land_mine
+  steel_plate -->|20| laser_turret
+  steel_plate -->|8| lightning_rod
+  steel_plate -->|30| locomotive
+  steel_plate -->|2| low_density_structure
+  steel_plate -->|2| medium_electric_pole
+  steel_plate -->|50| modular_armor
+  steel_plate -->|10| night_vision_equipment
+  steel_plate -->|500| nuclear_reactor
+  steel_plate -->|15| oil_refinery
+  steel_plate -->|20| personal_roboport_equipment
+  steel_plate -->|0.5| piercing_rounds_magazine
+  steel_plate -->|2| piercing_shotgun_shell
+  steel_plate -->|3| poison_capsule
+  steel_plate -->|40| power_armor
+  steel_plate -->|1| pump
+  steel_plate -->|5| pumpjack
+  steel_plate -->|0.5| rail
+  steel_plate -->|10| rail_ramp
+  steel_plate -->|10| rail_support
+  steel_plate -->|5| railgun_ammo
+  steel_plate -->|20| recycler
+  steel_plate -->|0.1| refined_concrete
+  steel_plate -->|45| roboport
+  steel_plate -->|1000| rocket_silo
+  steel_plate -->|20| rocket_turret
+  steel_plate -->|2| slowdown_capsule
+  steel_plate -->|5| solar_panel
+  steel_plate -->|5| solar_panel_equipment
+  steel_plate -->|20| space_platform_foundation
+  steel_plate -->|20| space_platform_starter_pack
+  steel_plate -->|8| steel_chest
+  steel_plate -->|6| steel_furnace
+  steel_plate -->|5| storage_tank
+  steel_plate -->|10| substation
+  steel_plate -->|50| tank
+  steel_plate -->|10| thruster
+  steel_plate -->|3| train_stop
+  stone -->|0.1| electrolyte
+  stone -->|20| foundation
+  stone -->|0.01| holmium_solution
+  stone -->|50| landfill
+  stone -->|0.5| rail
+  stone -->|2| stone_brick
+  stone -->|5| stone_furnace
+  stone_brick -->|0.5| concrete
+  stone_brick -->|10| electric_furnace
+  stone_brick -->|4| lightning_rod
+  stone_brick -->|10| oil_refinery
+  stone_brick -->|10| steel_furnace
+  stone_brick -->|5| stone_wall
+  stone_furnace -->|1| boiler
+  stone_furnace -->|1| burner_mining_drill
+  stone_wall -->|1| gate
+  stone_wall -->|1| military_science_pack
+  storage_tank -->|1| fluid_wagon
+  sulfur -->|0.5| chemical_science_pack
+  sulfur -->|0.5| explosives
+  sulfur -->|0.1| sulfuric_acid
+  sulfuric_acid -->|20| battery
+  sulfuric_acid -->|50| sulfuric_acid_barrel
+  sulfuric_acid -->|10| tungsten_carbide
+  supercapacitor -->|10| battery_mk3_equipment
+  supercapacitor -->|1| electromagnetic_science_pack
+  supercapacitor -->|25| fusion_reactor_equipment
+  supercapacitor -->|8| lightning_collector
+  supercapacitor -->|50| mech_armor
+  supercapacitor -->|1| tesla_ammo
+  supercapacitor -->|10| tesla_turret
+  superconductor -->|20| cryogenic_plant
+  superconductor -->|100| fusion_generator
+  superconductor -->|200| fusion_reactor
+  superconductor -->|50| mech_armor
+  superconductor -->|50| personal_roboport_mk2_equipment
+  superconductor -->|1| quality_module_3
+  superconductor -->|1| quantum_processor
+  superconductor -->|10| railgun
+  superconductor -->|50| railgun_turret
+  superconductor -->|2| supercapacitor
+  superconductor -->|50| tesla_turret
+  superconductor -->|10| teslagun
+  teslagun -->|1| tesla_turret
+  transport_belt -->|1| fast_transport_belt
+  transport_belt -->|4| lab
+  transport_belt -->|1| logistic_science_pack
+  transport_belt -->|4| splitter
+  transport_belt -->|2.5| underground_belt
+  tungsten_carbide -->|20| big_mining_drill
+  tungsten_carbide -->|50| foundry
+  tungsten_carbide -->|3| metallurgic_science_pack
+  tungsten_carbide -->|1| quantum_processor
+  tungsten_carbide -->|1| speed_module_3
+  tungsten_ore -->|2| tungsten_carbide
+  tungsten_ore -->|4| tungsten_plate
+  tungsten_plate -->|4| artillery_shell
+  tungsten_plate -->|60| artillery_turret
+  tungsten_plate -->|60| artillery_wagon
+  tungsten_plate -->|4| foundation
+  tungsten_plate -->|100| fusion_generator
+  tungsten_plate -->|200| fusion_reactor
+  tungsten_plate -->|250| fusion_reactor_equipment
+  tungsten_plate -->|2| metallurgic_science_pack
+  tungsten_plate -->|10| railgun
+  tungsten_plate -->|30| railgun_turret
+  tungsten_plate -->|15| turbo_splitter
+  tungsten_plate -->|5| turbo_transport_belt
+  tungsten_plate -->|20| turbo_underground_belt
+  underground_belt -->|1| fast_underground_belt
+  uranium_235 -->|100| atomic_bomb
+  uranium_235 -->|3| biolab
+  uranium_235 -->|15| captive_biter_spawner
+  uranium_235 -->|1| nuclear_fuel
+  uranium_235 -->|0.1| uranium_fuel_cell
+  uranium_238 -->|1| explosive_uranium_cannon_shell
+  uranium_238 -->|1| uranium_cannon_shell
+  uranium_238 -->|1.9| uranium_fuel_cell
+  uranium_238 -->|1| uranium_rounds_magazine
+  uranium_fuel_cell -->|4| fission_reactor_equipment
+  uranium_ore -->|1.43e+03| uranium_235
+  uranium_ore -->|10.0705| uranium_238
+  water -->|10| concrete
+  water -->|5| explosives
+  water -->|0.1| holmium_solution
+  water -->|1.11111| light_oil
+  water -->|100| overgrowth_jellynut_soil
+  water -->|100| overgrowth_yumako_soil
+  water -->|30| pentapod_egg
+  water -->|10| refined_concrete
+  water -->|15| sulfur
+  water -->|2| sulfuric_acid
+  water -->|50| water_barrel
+  wood -->|10| combat_shotgun
+  wood -->|5| shotgun
+  wood -->|0.5| small_electric_pole
+  wood -->|2| tree_seed
+  wood -->|2| wooden_chest
+  yumako -->|0.5| yumako_mash
+  yumako -->|50| yumako_seed
+  yumako_mash -->|3.75| bioflux
+  yumako_mash -->|10| carbon_fiber
+  yumako_mash -->|30| copper_bacteria
+  yumako_mash -->|3| spoilage
+  yumako_seed -->|0.2| artificial_yumako_soil
+  yumako_seed -->|5| overgrowth_yumako_soil
+
+  classDef nauvis fill:#d9ead3,stroke:#38761d,color:#111;
+  classDef vulcanus fill:#f4cccc,stroke:#990000,color:#111;
+  classDef fulgora fill:#d9d2e9,stroke:#674ea7,color:#111;
+  classDef gleba fill:#d0e0e3,stroke:#134f5c,color:#111;
+  classDef aquilo fill:#cfe2f3,stroke:#0b5394,color:#111;
+  classDef post_aquilo fill:#eadcf8,stroke:#6a329f,color:#111;
+  classDef unresolved fill:#eeeeee,stroke:#666666,color:#333333;
+  class accumulator,active_provider_chest,advanced_circuit,arithmetic_combinator,assembling_machine_1,assembling_machine_2,assembling_machine_3,automation_science_pack,barrel,battery,battery_equipment,beacon,belt_immunity_equipment,big_electric_pole,biter_egg,boiler,buffer_chest,bulk_inserter,burner_inserter,burner_mining_drill,cannon_shell,car,cargo_wagon,centrifuge,chemical_plant,chemical_science_pack,cluster_grenade,coal,combat_shotgun,concrete nauvis;
+  class constant_combinator,copper_cable,copper_ore,copper_plate,crude_oil,crude_oil_barrel,decider_combinator,defender_capsule,display_panel,distractor_capsule,efficiency_module,electric_furnace,electric_mining_drill,electronic_circuit,energy_shield_equipment,engine_unit,explosive_cannon_shell,explosive_rocket,explosive_uranium_cannon_shell,explosives,fast_inserter,fast_splitter,fast_transport_belt,fast_underground_belt,firearm_magazine,flamethrower,flamethrower_ammo,flamethrower_turret,fluid_wagon,gate nauvis;
+  class grenade,gun_turret,hazard_concrete,heat_exchanger,heat_pipe,heating_tower,heavy_armor,inserter,iron_chest,iron_gear_wheel,iron_ore,iron_plate,iron_stick,lab,land_mine,landfill,laser_turret,light_armor,light_oil,light_oil_barrel,locomotive,logistic_science_pack,long_handed_inserter,low_density_structure,medium_electric_pole,military_science_pack,modular_armor,night_vision_equipment,nuclear_fuel,nuclear_reactor nauvis;
+  class nutrients,offshore_pump,oil_refinery,passive_provider_chest,personal_roboport_equipment,petroleum_gas,petroleum_gas_barrel,piercing_rounds_magazine,piercing_shotgun_shell,pipe,pipe_to_ground,plastic_bar,poison_capsule,power_switch,production_science_pack,productivity_module,programmable_speaker,pump,pumpjack,quality_module,radar,rail,rail_chain_signal,rail_ramp,rail_signal,rail_support,railgun_ammo,raw_fish,refined_concrete,refined_hazard_concrete nauvis;
+  class repair_pack,requester_chest,roboport,rocket,rocket_fuel,rocket_launcher,selector_combinator,shotgun,shotgun_shell,slowdown_capsule,small_electric_pole,small_lamp,solar_panel,solar_panel_equipment,solid_fuel,space_platform_foundation,speed_module,splitter,steam_engine,steam_turbine,steel_chest,steel_furnace,steel_plate,stone,stone_brick,stone_furnace,stone_wall,storage_chest,storage_tank,submachine_gun nauvis;
+  class substation,sulfur,sulfuric_acid,sulfuric_acid_barrel,tank,train_stop,transport_belt,underground_belt,uranium_235,uranium_238,uranium_cannon_shell,uranium_fuel_cell,uranium_ore,uranium_rounds_magazine,water,water_barrel,wood,wooden_chest nauvis;
+  class artillery_shell,calcite,carbon,carbonic_asteroid_chunk,cliff_explosives,ice,metallic_asteroid_chunk,metallurgic_science_pack,molten_copper,molten_iron,oxide_asteroid_chunk,space_science_pack,tungsten_carbide,tungsten_ore,tungsten_plate vulcanus;
+  class artillery_turret,artillery_wagon,asteroid_collector,atomic_bomb,battery_mk2_equipment,battery_mk3_equipment,big_mining_drill,cargo_bay,cargo_landing_pad,construction_robot,crusher,destroyer_capsule,discharge_defense_equipment,efficiency_module_2,electric_engine_unit,electrolyte,electromagnetic_plant,electromagnetic_science_pack,energy_shield_mk2_equipment,exoskeleton_equipment,express_splitter,express_transport_belt,express_underground_belt,fission_reactor_equipment,flying_robot_frame,foundry,heavy_oil,heavy_oil_barrel,holmium_ore,holmium_plate fulgora;
+  class holmium_solution,lightning_collector,lightning_rod,logistic_robot,lubricant,lubricant_barrel,mech_armor,personal_laser_defense_equipment,personal_roboport_mk2_equipment,power_armor,power_armor_mk2,processing_unit,productivity_module_2,productivity_module_3,quality_module_2,quality_module_3,recycler,rocket_part,rocket_silo,scrap,space_platform_starter_pack,speed_module_2,speed_module_3,supercapacitor,superconductor,tesla_ammo,tesla_turret,teslagun,thruster,turbo_splitter fulgora;
+  class turbo_transport_belt,turbo_underground_belt,utility_science_pack fulgora;
+  class agricultural_tower,artificial_jellynut_soil,artificial_yumako_soil,bioflux,biolab,capture_robot_rocket,carbon_fiber,copper_bacteria,efficiency_module_3,iron_bacteria,jelly,jellynut,jellynut_seed,overgrowth_jellynut_soil,overgrowth_yumako_soil,rocket_turret,spidertron,spoilage,stack_inserter,toolbelt_equipment,yumako,yumako_mash,yumako_seed gleba;
+  class ammonia,ammoniacal_solution,captive_biter_spawner,cryogenic_plant,cryogenic_science_pack,fluorine,fluoroketone_cold,fluoroketone_cold_barrel,fluoroketone_hot,fluoroketone_hot_barrel,foundation,fusion_generator,fusion_power_cell,fusion_reactor,fusion_reactor_equipment,ice_platform,lithium,lithium_brine,lithium_plate,quantum_processor,railgun,railgun_turret aquilo;
+  class agricultural_science_pack,artillery_targeting_remote,biochamber,blueprint,blueprint_book,bottomless_chest,burner_generator,coin,copper_wire,deconstruction_planner,depleted_uranium_fuel_cell,discharge_defense_remote,electric_energy_interface,empty_module_slot,express_loader,fast_loader,green_wire,heat_interface,infinity_cargo_wagon,infinity_chest,infinity_pipe,item_unknown,lane_splitter,linked_belt,linked_chest,loader,one_way_valve,overflow_valve,pentapod_egg,pistol unresolved;
+  class promethium_asteroid_chunk,promethium_science_pack,proxy_container,red_wire,science,selection_tool,simple_entity_with_force,simple_entity_with_owner,space_platform_hub,spidertron_remote,top_up_valve,tree_seed,turbo_loader,upgrade_planner unresolved;
