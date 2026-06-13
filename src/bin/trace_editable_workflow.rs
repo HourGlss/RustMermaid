@@ -4,8 +4,8 @@ use std::io;
 use std::path::PathBuf;
 
 use selkie::editable::{
-    apply_graph_patch_result_json, graph_to_mermaid_text, parse_to_graph, render_graph_parts,
-    EditableDiagram,
+    apply_graph_patch_result_json, graph_to_mermaid_text, layout_editable_graph, parse_to_graph,
+    render_graph_parts_with_layout_mode, EditableDiagram, EditableLayoutMode,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -53,6 +53,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let nodes_before = graph.nodes.len();
     let edges_before = graph.edges.len();
 
+    let graph = {
+        let span = tracing::trace_span!(
+            target: "selkie::phase6",
+            "phase6.editable.full_layout",
+            nodes = graph.nodes.len() as u64,
+            edges = graph.edges.len() as u64
+        );
+        let _enter = span.enter();
+        layout_editable_graph(&graph)?
+    };
+
     let parts = {
         let span = tracing::trace_span!(
             target: "selkie::phase6",
@@ -61,7 +72,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             edges = graph.edges.len() as u64
         );
         let _enter = span.enter();
-        render_graph_parts(&graph)?
+        render_graph_parts_with_layout_mode(&graph, EditableLayoutMode::Edit)?
     };
 
     let first_node_id = graph

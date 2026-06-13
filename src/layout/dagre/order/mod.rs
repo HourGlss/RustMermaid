@@ -88,30 +88,16 @@ pub fn order(g: &mut DagreGraph) {
 /// subgraphs together and maintaining ordering constraints between them.
 fn sweep_down_hierarchical(g: &mut DagreGraph, max_rank: usize, bias_right: bool) {
     let mut cg = ConstraintGraph::new();
+    let layers = ordered_layers_by_rank(g, max_rank);
 
-    for rank in 1..=max_rank {
-        // Get nodes at this rank (the "movable" layer)
-        // Sort by current order to preserve init_order's edge-based ordering for tie-breaking
-        let mut layer_nodes: Vec<String> = g
-            .nodes()
-            .iter()
-            .filter(|v| {
-                g.node(v)
-                    .map(|n| n.rank == Some(rank as i32))
-                    .unwrap_or(false)
-            })
-            .map(|s| s.to_string())
-            .collect();
-        // Sort by current order to preserve edge definition order for tie-breaking
-        layer_nodes.sort_by_key(|v| g.node(v).and_then(|n| n.order).unwrap_or(i32::MAX as usize));
-
+    for layer_nodes in layers.iter().take(max_rank + 1).skip(1) {
         if layer_nodes.is_empty() {
             continue;
         }
 
         // Build a temporary view for sorting this rank
         // We need to sort nodes hierarchically based on their subgraph structure
-        let sorted = sort_layer_hierarchical(g, &layer_nodes, &cg, bias_right, true);
+        let sorted = sort_layer_hierarchical(g, layer_nodes, &cg, bias_right, true);
 
         // Assign new order
         for (i, v) in sorted.iter().enumerate() {
@@ -131,29 +117,16 @@ fn sweep_down_hierarchical(g: &mut DagreGraph, max_rank: usize, bias_right: bool
 /// subgraphs together and maintaining ordering constraints between them.
 fn sweep_up_hierarchical(g: &mut DagreGraph, max_rank: usize, bias_right: bool) {
     let mut cg = ConstraintGraph::new();
+    let layers = ordered_layers_by_rank(g, max_rank);
 
     for rank in (0..max_rank).rev() {
-        // Get nodes at this rank (the "movable" layer)
-        // Sort by current order to preserve init_order's edge-based ordering for tie-breaking
-        let mut layer_nodes: Vec<String> = g
-            .nodes()
-            .iter()
-            .filter(|v| {
-                g.node(v)
-                    .map(|n| n.rank == Some(rank as i32))
-                    .unwrap_or(false)
-            })
-            .map(|s| s.to_string())
-            .collect();
-        // Sort by current order to preserve edge definition order for tie-breaking
-        layer_nodes.sort_by_key(|v| g.node(v).and_then(|n| n.order).unwrap_or(i32::MAX as usize));
-
+        let layer_nodes = &layers[rank];
         if layer_nodes.is_empty() {
             continue;
         }
 
         // Sort hierarchically using successors (outgoing edges)
-        let sorted = sort_layer_hierarchical(g, &layer_nodes, &cg, bias_right, false);
+        let sorted = sort_layer_hierarchical(g, layer_nodes, &cg, bias_right, false);
 
         // Assign new order
         for (i, v) in sorted.iter().enumerate() {
@@ -165,6 +138,27 @@ fn sweep_up_hierarchical(g: &mut DagreGraph, max_rank: usize, bias_right: bool) 
         // Add subgraph constraints based on new ordering
         add_subgraph_constraints(g, &mut cg, &sorted);
     }
+}
+
+fn ordered_layers_by_rank(g: &DagreGraph, max_rank: usize) -> Vec<Vec<String>> {
+    let mut layers: Vec<Vec<String>> = (0..=max_rank).map(|_| Vec::new()).collect();
+    for v in g.nodes() {
+        let Some(node) = g.node(v) else {
+            continue;
+        };
+        let Some(rank) = node.rank else {
+            continue;
+        };
+        if rank < 0 || rank as usize > max_rank {
+            continue;
+        }
+        layers[rank as usize].push(v.clone());
+    }
+
+    for layer in &mut layers {
+        layer.sort_by_key(|v| g.node(v).and_then(|n| n.order).unwrap_or(usize::MAX));
+    }
+    layers
 }
 
 /// Sort a layer hierarchically, respecting subgraph structure

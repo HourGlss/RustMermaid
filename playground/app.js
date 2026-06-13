@@ -1031,6 +1031,7 @@ async function loadSelkie() {
         parse_to_graph_json,
         graph_to_mermaid_text,
         render_graph_parts_json,
+        render_graph_parts_with_layout_mode_json,
         apply_graph_patch_result_json,
     } =
         await import('./pkg/selkie.js');
@@ -1045,6 +1046,7 @@ async function loadSelkie() {
         parse_to_graph_json,
         graph_to_mermaid_text,
         render_graph_parts_json,
+        render_graph_parts_with_layout_mode_json,
         apply_graph_patch_result_json,
     };
 }
@@ -1270,10 +1272,52 @@ function refreshEditableGraph(input) {
 
     try {
         currentGraphJson = selkie.parse_to_graph_json(input);
-        currentRenderParts = JSON.parse(selkie.render_graph_parts_json(currentGraphJson));
+        currentRenderParts = renderGraphParts(currentGraphJson, 'full');
+        currentGraphJson = seedGraphPositionsFromRenderParts(
+            currentGraphJson,
+            currentRenderParts,
+        );
     } catch {
         // Editable graph APIs currently target flowcharts; other diagram types still render normally.
     }
+}
+
+function renderGraphParts(graphJson, layoutMode = 'full') {
+    const renderWithMode = selkie.render_graph_parts_with_layout_mode_json;
+    const partsJson = renderWithMode
+        ? renderWithMode(graphJson, layoutMode)
+        : selkie.render_graph_parts_json(graphJson);
+    return JSON.parse(partsJson);
+}
+
+function seedGraphPositionsFromRenderParts(graphJson, renderParts) {
+    const graph = JSON.parse(graphJson);
+    const boundsByNodeId = new Map(
+        (renderParts?.nodes ?? []).map((part) => [part.node_id, part.bounds]),
+    );
+
+    for (const node of graph.nodes ?? []) {
+        if (node.position) continue;
+        const bounds = boundsByNodeId.get(node.id);
+        if (!bounds) continue;
+        node.position = {
+            x: bounds.x,
+            y: bounds.y,
+            locked: false,
+        };
+    }
+
+    return JSON.stringify(graph);
+}
+
+function graphToMermaidTextForEditor(graphJson) {
+    const graph = JSON.parse(graphJson);
+    for (const node of graph.nodes ?? []) {
+        if (node.position && !node.position.locked) {
+            delete node.position;
+        }
+    }
+    return selkie.graph_to_mermaid_text(JSON.stringify(graph));
 }
 
 function installPreviewInteractions() {
@@ -1315,7 +1359,8 @@ function commitNodeMove(move) {
             selkie.apply_graph_patch_result_json(currentGraphJson, JSON.stringify(patch)),
         );
         currentGraphJson = JSON.stringify(result.graph);
-        editor.value = selkie.graph_to_mermaid_text(currentGraphJson);
+        currentRenderParts = renderGraphParts(currentGraphJson, 'edit');
+        editor.value = graphToMermaidTextForEditor(currentGraphJson);
         renderDiagram();
         updateUrl();
     } catch (error) {
@@ -1402,7 +1447,8 @@ function applyGraphPatch(patch) {
         selkie.apply_graph_patch_result_json(currentGraphJson, JSON.stringify(patch)),
     );
     currentGraphJson = JSON.stringify(result.graph);
-    editor.value = selkie.graph_to_mermaid_text(currentGraphJson);
+    currentRenderParts = renderGraphParts(currentGraphJson, 'edit');
+    editor.value = graphToMermaidTextForEditor(currentGraphJson);
     updateUrl();
     return result;
 }

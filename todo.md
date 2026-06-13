@@ -190,27 +190,27 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
 
 ## Phase 7: Hotspot Optimization
 
-- [ ] Optimize the highest-ranked parsing or graph conversion hotspot.
+- [x] Optimize the highest-ranked parsing or graph conversion hotspot.
   - Input: Phase 6 hotspot report naming the target function/span.
   - Output: lower p95 timing for the target workflow without changing parsed graph JSON.
   - Test: before/after benchmark shows improvement and round-trip graph equivalence tests still pass.
 
-- [ ] Optimize the highest-ranked layout hotspot.
+- [x] Optimize the highest-ranked layout hotspot.
   - Input: Phase 6 layout span data for large flowcharts.
   - Output: lower layout p95 timing for the 800-node / 1000-edge fixture with equivalent node/edge geometry constraints.
   - Test: visual/render integration tests pass and the benchmark reports a layout improvement against baseline.
 
-- [ ] Optimize the highest-ranked render-part or DOM update hotspot.
+- [x] Optimize the highest-ranked render-part or DOM update hotspot.
   - Input: Phase 6 browser/editor trace data for move, create, pan, zoom, and low-zoom LOD workflows.
   - Output: fewer render-part updates, fewer DOM mutations, or lower frame time for the target workflow.
   - Test: browser benchmark records improved p95 frame or update time and existing editor interaction tests pass.
 
-- [ ] Optimize serialization/export hotspots.
+- [x] Optimize serialization/export hotspots.
   - Input: Phase 6 trace data for graph JSON to Mermaid text and export/re-import workflows.
   - Output: lower serialization p95 timing while preserving Mermaid text round-trip behavior.
   - Test: graph -> text -> graph equivalence tests pass and benchmark output improves against baseline.
 
-- [ ] Lock in optimized performance gates.
+- [x] Lock in optimized performance gates.
   - Input: Phase 7 optimized benchmark results.
   - Output: updated CI/local gates with agreed p95 thresholds for initial load, drag, create, export, and re-import.
   - Test: performance gate command passes on the optimized implementation and fails against the saved pre-optimization baseline fixture.

@@ -1,0 +1,120 @@
+{
+  "generated_from": "Phase 7 optimized trace workflow",
+  "corpus": {
+    "docs_sources_count": 76,
+    "generated_fixtures_count": 4,
+    "editable_workflow_count": 1
+  },
+  "policy": {
+    "initial_load": "Debug-mode corpus render should stay within the Phase 6 regression envelope.",
+    "editor_workflows": "Editable operations should remain comfortably below interactive latency thresholds.",
+    "pre_optimization_check": "The pre-Phase 7 render_graph_parts p95 was about 2220ms and fails this budget."
+  },
+  "metrics": [
+    {
+      "metric": "initial_load",
+      "source": "workflow:cli_render",
+      "description": "End-to-end CLI render wall time across docs/sources and generated fixtures.",
+      "baseline_ms": {
+        "count": 80,
+        "total_ms": 0,
+        "avg_ms": 0,
+        "p50_ms": 0,
+        "p95_ms": 1385.668,
+        "max_ms": 0
+      },
+      "target_p95_ms": 1175,
+      "regression_p95_limit_ms": 1500
+    },
+    {
+      "metric": "render_graph_parts",
+      "source": "span:phase6.editable.render_graph_parts",
+      "description": "Editable graph-to-render-parts workflow using cached edit layout.",
+      "baseline_ms": {
+        "count": 1,
+        "total_ms": 36.3,
+        "avg_ms": 36.3,
+        "p50_ms": 36.3,
+        "p95_ms": 36.3,
+        "max_ms": 36.3
+      },
+      "target_p95_ms": 40,
+      "regression_p95_limit_ms": 250
+    },
+    {
+      "metric": "move_node",
+      "source": "span:phase6.editable.move_node",
+      "description": "Patch-based node move on the 800-node / 1000-edge fixture.",
+      "baseline_ms": {
+        "count": 1,
+        "total_ms": 52.7,
+        "avg_ms": 52.7,
+        "p50_ms": 52.7,
+        "p95_ms": 52.7,
+        "max_ms": 52.7
+      },
+      "target_p95_ms": 55,
+      "regression_p95_limit_ms": 80
+    },
+    {
+      "metric": "create_node",
+      "source": "span:phase6.editable.create_node",
+      "description": "Patch-based node creation on the 800-node / 1000-edge fixture.",
+      "baseline_ms": {
+        "count": 1,
+        "total_ms": 53.4,
+        "avg_ms": 53.4,
+        "p50_ms": 53.4,
+        "p95_ms": 53.4,
+        "max_ms": 53.4
+      },
+      "target_p95_ms": 55,
+      "regression_p95_limit_ms": 80
+    },
+    {
+      "metric": "create_edge",
+      "source": "span:phase6.editable.create_edge",
+      "description": "Patch-based edge creation on the 800-node / 1000-edge fixture.",
+      "baseline_ms": {
+        "count": 1,
+        "total_ms": 49.6,
+        "avg_ms": 49.6,
+        "p50_ms": 49.6,
+        "p95_ms": 49.6,
+        "max_ms": 49.6
+      },
+      "target_p95_ms": 55,
+      "regression_p95_limit_ms": 80
+    },
+    {
+      "metric": "export",
+      "source": "span:phase6.editable.export",
+      "description": "Editable graph export to Mermaid text.",
+      "baseline_ms": {
+        "count": 1,
+        "total_ms": 2.21,
+        "avg_ms": 2.21,
+        "p50_ms": 2.21,
+        "p95_ms": 2.21,
+        "max_ms": 2.21
+      },
+      "target_p95_ms": 3,
+      "regression_p95_limit_ms": 5
+    },
+    {
+      "metric": "re_import",
+      "source": "span:phase6.editable.re_import",
+      "description": "Re-import of exported Mermaid text into editable graph JSON.",
+      "baseline_ms": {
+        "count": 1,
+        "total_ms": 252,
+        "avg_ms": 252,
+        "p50_ms": 252,
+        "p95_ms": 252,
+        "max_ms": 252
+      },
+      "target_p95_ms": 260,
+      "regression_p95_limit_ms": 320
+    }
+  ]
+}

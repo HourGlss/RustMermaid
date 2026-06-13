@@ -70,10 +70,31 @@ pub fn render_graph_parts_json(graph_json: &str) -> Result<String, JsValue> {
         .map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
+/// Return editable render parts using either full layout or cached edit layout.
+#[wasm_bindgen]
+pub fn render_graph_parts_with_layout_mode_json(
+    graph_json: &str,
+    layout_mode: &str,
+) -> Result<String, JsValue> {
+    crate::editable::render_graph_parts_with_layout_mode_json(graph_json, layout_mode)
+        .map_err(|err| JsValue::from_str(&err.to_string()))
+}
+
 /// Return edge routes incident to one node.
 #[wasm_bindgen]
 pub fn route_edges_for_node_json(graph_json: &str, node_id: &str) -> Result<String, JsValue> {
     crate::editable::route_edges_for_node_json(graph_json, node_id)
+        .map_err(|err| JsValue::from_str(&err.to_string()))
+}
+
+/// Return edge routes incident to one node using full or cached edit layout.
+#[wasm_bindgen]
+pub fn route_edges_for_node_with_layout_mode_json(
+    graph_json: &str,
+    node_id: &str,
+    layout_mode: &str,
+) -> Result<String, JsValue> {
+    crate::editable::route_edges_for_node_with_layout_mode_json(graph_json, node_id, layout_mode)
         .map_err(|err| JsValue::from_str(&err.to_string()))
 }
 

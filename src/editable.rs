@@ -13,7 +13,9 @@ use crate::diagrams::flowchart::{
 };
 use crate::diagrams::{detect_type, remove_directives, DiagramType};
 use crate::error::{MermaidError, Result};
-use crate::layout::{self, CharacterSizeEstimator, LayoutGraph, LayoutNode, ToLayoutGraph};
+use crate::layout::{
+    self, CharacterSizeEstimator, LayoutEdge, LayoutGraph, LayoutNode, ToLayoutGraph,
+};
 use crate::render;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -202,6 +204,34 @@ pub struct EditableEdgeRoutes {
     pub edges: Vec<EditableEdgePart>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditableLayoutMode {
+    Full,
+    Edit,
+}
+
+impl EditableLayoutMode {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Edit => "edit",
+        }
+    }
+}
+
+fn parse_layout_mode(layout_mode: &str) -> Result<EditableLayoutMode> {
+    match layout_mode {
+        "full" | "full-layout" => Ok(EditableLayoutMode::Full),
+        "edit" | "edit-layout" => Ok(EditableLayoutMode::Edit),
+        other => Err(MermaidError::InvalidValue {
+            message: format!(
+                "unsupported editable layout mode '{}'; expected 'full' or 'edit'",
+                other
+            ),
+        }),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct SelkieMetadata {
     #[serde(default)]
@@ -216,7 +246,7 @@ struct SelkieLayoutMetadata {
 
 pub fn parse_to_graph_json(text: &str) -> Result<String> {
     let graph = parse_to_graph(text)?;
-    to_pretty_json(&graph)
+    to_json(&graph)
 }
 
 pub fn graph_to_mermaid_text_json(graph_json: &str) -> Result<String> {
@@ -232,29 +262,49 @@ pub fn render_graph_json(graph_json: &str) -> Result<String> {
 pub fn layout_graph_json(graph_json: &str) -> Result<String> {
     let graph = graph_from_json(graph_json)?;
     let graph = layout_editable_graph(&graph)?;
-    to_pretty_json(&graph)
+    to_json(&graph)
 }
 
 pub fn render_graph_parts_json(graph_json: &str) -> Result<String> {
     let graph = graph_from_json(graph_json)?;
-    let parts = render_graph_parts(&graph)?;
-    to_pretty_json(&parts)
+    let parts = render_graph_parts_with_layout_mode(&graph, EditableLayoutMode::Full)?;
+    to_json(&parts)
+}
+
+pub fn render_graph_parts_with_layout_mode_json(
+    graph_json: &str,
+    layout_mode: &str,
+) -> Result<String> {
+    let graph = graph_from_json(graph_json)?;
+    let parts = render_graph_parts_with_layout_mode(&graph, parse_layout_mode(layout_mode)?)?;
+    to_json(&parts)
 }
 
 pub fn route_edges_for_node_json(graph_json: &str, node_id: &str) -> Result<String> {
     let graph = graph_from_json(graph_json)?;
-    let routes = route_edges_for_node(&graph, node_id)?;
-    to_pretty_json(&routes)
+    let routes = route_edges_for_node_with_layout_mode(&graph, node_id, EditableLayoutMode::Full)?;
+    to_json(&routes)
+}
+
+pub fn route_edges_for_node_with_layout_mode_json(
+    graph_json: &str,
+    node_id: &str,
+    layout_mode: &str,
+) -> Result<String> {
+    let graph = graph_from_json(graph_json)?;
+    let routes =
+        route_edges_for_node_with_layout_mode(&graph, node_id, parse_layout_mode(layout_mode)?)?;
+    to_json(&routes)
 }
 
 pub fn apply_graph_patch_json(graph_json: &str, patch_json: &str) -> Result<String> {
     let result = apply_graph_patch_result(graph_json, patch_json)?;
-    to_pretty_json(&result.graph)
+    to_json(&result.graph)
 }
 
 pub fn apply_graph_patch_result_json(graph_json: &str, patch_json: &str) -> Result<String> {
     let result = apply_graph_patch_result(graph_json, patch_json)?;
-    to_pretty_json(&result)
+    to_json(&result)
 }
 
 fn apply_graph_patch_result(graph_json: &str, patch_json: &str) -> Result<EditablePatchResult> {
@@ -321,7 +371,8 @@ pub fn graph_to_mermaid_text(graph: &EditableDiagram) -> Result<String> {
         });
     }
 
-    let mut lines = Vec::new();
+    let mut lines =
+        Vec::with_capacity(1 + graph.classes.len() + graph.nodes.len() * 3 + graph.edges.len() * 2);
     if let Some(metadata) = graph.selkie_metadata() {
         lines.push(format!(
             "%%{{selkie: {}}}%%",
@@ -409,18 +460,27 @@ pub fn layout_editable_graph(graph: &EditableDiagram) -> Result<EditableDiagram>
 }
 
 pub fn render_graph_parts(graph: &EditableDiagram) -> Result<EditableRenderParts> {
+    render_graph_parts_with_layout_mode(graph, EditableLayoutMode::Full)
+}
+
+pub fn render_graph_parts_with_layout_mode(
+    graph: &EditableDiagram,
+    layout_mode: EditableLayoutMode,
+) -> Result<EditableRenderParts> {
     let span = tracing::trace_span!(
         "selkie.editable.render_graph_parts",
+        layout_mode = layout_mode.name(),
         nodes = graph.nodes.len() as u64,
         edges = graph.edges.len() as u64,
         labels = tracing::field::Empty,
     );
     let _enter = span.enter();
 
-    let layout_graph = layout_graph_for_editable(graph)?;
-    let nodes = node_render_parts(graph, &layout_graph);
-    let edges = edge_render_parts(graph, &layout_graph, None);
-    let labels = label_render_parts(graph, &layout_graph);
+    let layout_graph = layout_graph_for_editable_with_mode(graph, layout_mode)?;
+    let index = RenderPartLayoutIndex::new(&layout_graph);
+    let nodes = node_render_parts(graph, &index);
+    let edges = edge_render_parts(graph, &index, None);
+    let labels = label_render_parts(graph, &index);
     span.record("labels", labels.len() as u64);
     Ok(EditableRenderParts {
         nodes,
@@ -431,8 +491,17 @@ pub fn render_graph_parts(graph: &EditableDiagram) -> Result<EditableRenderParts
 }
 
 pub fn route_edges_for_node(graph: &EditableDiagram, node_id: &str) -> Result<EditableEdgeRoutes> {
+    route_edges_for_node_with_layout_mode(graph, node_id, EditableLayoutMode::Full)
+}
+
+pub fn route_edges_for_node_with_layout_mode(
+    graph: &EditableDiagram,
+    node_id: &str,
+    layout_mode: EditableLayoutMode,
+) -> Result<EditableEdgeRoutes> {
     let span = tracing::trace_span!(
         "selkie.editable.route_edges_for_node",
+        layout_mode = layout_mode.name(),
         node_id,
         nodes = graph.nodes.len() as u64,
         edges = graph.edges.len() as u64,
@@ -440,8 +509,9 @@ pub fn route_edges_for_node(graph: &EditableDiagram, node_id: &str) -> Result<Ed
     );
     let _enter = span.enter();
 
-    let layout_graph = layout_graph_for_editable(graph)?;
-    let edges = edge_render_parts(graph, &layout_graph, Some(node_id));
+    let layout_graph = layout_graph_for_editable_with_mode(graph, layout_mode)?;
+    let index = RenderPartLayoutIndex::new(&layout_graph);
+    let edges = edge_render_parts(graph, &index, Some(node_id));
     span.record("routed_edges", edges.len() as u64);
     Ok(EditableEdgeRoutes {
         node_id: node_id.to_string(),
@@ -497,12 +567,55 @@ pub fn flowchart_db_from_graph(graph: &EditableDiagram) -> Result<FlowchartDb> {
 }
 
 fn layout_graph_for_editable(graph: &EditableDiagram) -> Result<LayoutGraph> {
+    layout_graph_for_editable_with_mode(graph, EditableLayoutMode::Full)
+}
+
+fn layout_graph_for_editable_with_mode(
+    graph: &EditableDiagram,
+    mode: EditableLayoutMode,
+) -> Result<LayoutGraph> {
+    if mode == EditableLayoutMode::Edit {
+        if let Some(layout_graph) = positioned_layout_graph_for_editable(graph)? {
+            return Ok(layout_graph);
+        }
+    }
+
     let db = flowchart_db_from_graph(graph)?;
     let size_estimator = CharacterSizeEstimator::default();
     let layout_graph = db.to_layout_graph(&size_estimator)?;
     let mut layout_graph = layout::layout(layout_graph)?;
     apply_locked_positions(graph, &mut layout_graph);
     Ok(layout_graph)
+}
+
+fn positioned_layout_graph_for_editable(graph: &EditableDiagram) -> Result<Option<LayoutGraph>> {
+    if !graph.subgraphs.is_empty() || graph.nodes.iter().any(|node| node.position.is_none()) {
+        return Ok(None);
+    }
+
+    let positions: HashMap<&str, &EditablePosition> = graph
+        .nodes
+        .iter()
+        .filter_map(|node| {
+            node.position
+                .as_ref()
+                .map(|position| (node.id.as_str(), position))
+        })
+        .collect();
+    let db = flowchart_db_from_graph(graph)?;
+    let size_estimator = CharacterSizeEstimator::default();
+    let mut layout_graph = db.to_layout_graph(&size_estimator)?;
+
+    for node in &mut layout_graph.nodes {
+        let Some(position) = positions.get(node.id.as_str()) else {
+            return Ok(None);
+        };
+        node.x = Some(position.x);
+        node.y = Some(position.y);
+    }
+
+    layout_graph.compute_bounds();
+    Ok(Some(layout_graph))
 }
 
 fn apply_locked_positions(graph: &EditableDiagram, layout_graph: &mut LayoutGraph) {
@@ -518,12 +631,40 @@ fn apply_locked_positions(graph: &EditableDiagram, layout_graph: &mut LayoutGrap
     layout_graph.compute_bounds();
 }
 
-fn node_render_parts(graph: &EditableDiagram, layout_graph: &LayoutGraph) -> Vec<EditableNodePart> {
+struct RenderPartLayoutIndex<'a> {
+    nodes: HashMap<&'a str, &'a LayoutNode>,
+    edges: HashMap<&'a str, &'a LayoutEdge>,
+}
+
+impl<'a> RenderPartLayoutIndex<'a> {
+    fn new(layout_graph: &'a LayoutGraph) -> Self {
+        let mut nodes = HashMap::new();
+        collect_layout_nodes(&layout_graph.nodes, &mut nodes);
+        let edges = layout_graph
+            .edges
+            .iter()
+            .map(|edge| (edge.id.as_str(), edge))
+            .collect();
+        Self { nodes, edges }
+    }
+}
+
+fn collect_layout_nodes<'a>(nodes: &'a [LayoutNode], index: &mut HashMap<&'a str, &'a LayoutNode>) {
+    for node in nodes {
+        index.insert(node.id.as_str(), node);
+        collect_layout_nodes(&node.children, index);
+    }
+}
+
+fn node_render_parts(
+    graph: &EditableDiagram,
+    index: &RenderPartLayoutIndex<'_>,
+) -> Vec<EditableNodePart> {
     graph
         .nodes
         .iter()
         .filter_map(|node| {
-            let layout_node = layout_graph.get_node(&node.id)?;
+            let layout_node = index.nodes.get(node.id.as_str()).copied()?;
             Some(EditableNodePart {
                 id: node_render_id(&node.id),
                 node_id: node.id.clone(),
@@ -539,7 +680,7 @@ fn node_render_parts(graph: &EditableDiagram, layout_graph: &LayoutGraph) -> Vec
 
 fn edge_render_parts(
     graph: &EditableDiagram,
-    layout_graph: &LayoutGraph,
+    index: &RenderPartLayoutIndex<'_>,
     incident_node: Option<&str>,
 ) -> Vec<EditableEdgePart> {
     graph
@@ -555,7 +696,7 @@ fn edge_render_parts(
             edge_id: edge.id.clone(),
             source: edge.source.clone(),
             target: edge.target.clone(),
-            points: route_points(edge, layout_graph),
+            points: route_points(edge, index),
             styles: edge.styles.clone(),
         })
         .collect()
@@ -563,20 +704,23 @@ fn edge_render_parts(
 
 fn label_render_parts(
     graph: &EditableDiagram,
-    layout_graph: &LayoutGraph,
+    index: &RenderPartLayoutIndex<'_>,
 ) -> Vec<EditableLabelPart> {
     let mut labels = Vec::new();
-    labels.extend(node_label_parts(graph, layout_graph));
-    labels.extend(edge_label_parts(graph, layout_graph));
+    labels.extend(node_label_parts(graph, index));
+    labels.extend(edge_label_parts(graph, index));
     labels
 }
 
-fn node_label_parts(graph: &EditableDiagram, layout_graph: &LayoutGraph) -> Vec<EditableLabelPart> {
+fn node_label_parts(
+    graph: &EditableDiagram,
+    index: &RenderPartLayoutIndex<'_>,
+) -> Vec<EditableLabelPart> {
     graph
         .nodes
         .iter()
         .filter_map(|node| {
-            let center = node_center(layout_graph.get_node(&node.id)?)?;
+            let center = node_center(index.nodes.get(node.id.as_str()).copied()?)?;
             Some(EditableLabelPart {
                 id: node_label_render_id(&node.id),
                 owner_id: node_render_id(&node.id),
@@ -587,16 +731,19 @@ fn node_label_parts(graph: &EditableDiagram, layout_graph: &LayoutGraph) -> Vec<
         .collect()
 }
 
-fn edge_label_parts(graph: &EditableDiagram, layout_graph: &LayoutGraph) -> Vec<EditableLabelPart> {
+fn edge_label_parts(
+    graph: &EditableDiagram,
+    index: &RenderPartLayoutIndex<'_>,
+) -> Vec<EditableLabelPart> {
     graph
         .edges
         .iter()
         .filter(|edge| !edge.label.is_empty())
         .filter_map(|edge| {
-            let layout_edge = layout_graph.edges.iter().find(|item| item.id == edge.id);
+            let layout_edge = index.edges.get(edge.id.as_str()).copied();
             let position = layout_edge
                 .and_then(|item| item.label_position.map(editable_point))
-                .or_else(|| route_midpoint(edge, layout_graph))?;
+                .or_else(|| route_midpoint(edge, index))?;
             Some(EditableLabelPart {
                 id: edge_label_render_id(&edge.id),
                 owner_id: edge_render_id(&edge.id),
@@ -607,18 +754,28 @@ fn edge_label_parts(graph: &EditableDiagram, layout_graph: &LayoutGraph) -> Vec<
         .collect()
 }
 
-fn route_points(edge: &EditableEdge, layout_graph: &LayoutGraph) -> Vec<EditablePoint> {
-    let Some(source) = layout_graph.get_node(&edge.source).and_then(node_center) else {
+fn route_points(edge: &EditableEdge, index: &RenderPartLayoutIndex<'_>) -> Vec<EditablePoint> {
+    let Some(source) = index
+        .nodes
+        .get(edge.source.as_str())
+        .copied()
+        .and_then(node_center)
+    else {
         return Vec::new();
     };
-    let Some(target) = layout_graph.get_node(&edge.target).and_then(node_center) else {
+    let Some(target) = index
+        .nodes
+        .get(edge.target.as_str())
+        .copied()
+        .and_then(node_center)
+    else {
         return Vec::new();
     };
     vec![source, target]
 }
 
-fn route_midpoint(edge: &EditableEdge, layout_graph: &LayoutGraph) -> Option<EditablePoint> {
-    let points = route_points(edge, layout_graph);
+fn route_midpoint(edge: &EditableEdge, index: &RenderPartLayoutIndex<'_>) -> Option<EditablePoint> {
+    let points = route_points(edge, index);
     match points.as_slice() {
         [source, target] => Some(EditablePoint {
             x: (source.x + target.x) / 2.0,
@@ -829,6 +986,7 @@ impl EditableDiagram {
             .filter_map(|node| {
                 node.position
                     .clone()
+                    .filter(|position| position.locked)
                     .map(|position| (node.id.clone(), position))
             })
             .collect();
@@ -1079,8 +1237,8 @@ fn extract_selkie_metadata(text: &str) -> (Option<SelkieMetadata>, String) {
     (metadata, cleaned)
 }
 
-fn to_pretty_json<T: Serialize>(value: &T) -> Result<String> {
-    serde_json::to_string_pretty(value).map_err(json_error)
+fn to_json<T: Serialize>(value: &T) -> Result<String> {
+    serde_json::to_string(value).map_err(json_error)
 }
 
 fn json_error(err: serde_json::Error) -> MermaidError {
@@ -1267,6 +1425,63 @@ flowchart TD
     }
 
     #[test]
+    fn edit_layout_uses_stored_positions_without_full_layout() {
+        let graph_json = parse_to_graph_json(
+            r#"%%{selkie: {"layout":{"nodes":{"A":{"x":5000.0,"y":4000.0,"locked":false},"B":{"x":5200.0,"y":4100.0,"locked":false}}}}}%%
+flowchart TD
+  A[Start] --> B[End]
+"#,
+        )
+        .expect("graph json");
+
+        let edit_parts_json =
+            render_graph_parts_with_layout_mode_json(&graph_json, "edit").expect("edit parts");
+        let full_parts_json =
+            render_graph_parts_with_layout_mode_json(&graph_json, "full").expect("full parts");
+        let edit_parts: EditableRenderParts = serde_json::from_str(&edit_parts_json).unwrap();
+        let full_parts: EditableRenderParts = serde_json::from_str(&full_parts_json).unwrap();
+        let edit_a = edit_parts
+            .nodes
+            .iter()
+            .find(|node| node.node_id == "A")
+            .unwrap();
+        let full_a = full_parts
+            .nodes
+            .iter()
+            .find(|node| node.node_id == "A")
+            .unwrap();
+
+        assert_eq!(edit_a.bounds.x, 5000.0);
+        assert_eq!(edit_a.bounds.y, 4000.0);
+        assert_ne!(
+            full_a.bounds.x, 5000.0,
+            "full layout should ignore unlocked cached positions"
+        );
+    }
+
+    #[test]
+    fn layout_graph_json_can_feed_edit_layout() {
+        let graph_json =
+            parse_to_graph_json("flowchart TD\nA[Start] --> B[End]").expect("graph json");
+        let laid_out_json = layout_graph_json(&graph_json).expect("laid out graph");
+        let laid_out = graph_from_json(&laid_out_json).expect("laid out graph json");
+        let parts_json =
+            render_graph_parts_with_layout_mode_json(&laid_out_json, "edit").expect("edit parts");
+        let parts: EditableRenderParts = serde_json::from_str(&parts_json).unwrap();
+
+        for node in &laid_out.nodes {
+            let position = node.position.as_ref().expect("positioned node");
+            let part = parts
+                .nodes
+                .iter()
+                .find(|part| part.node_id == node.id)
+                .unwrap();
+            assert_eq!(part.bounds.x, position.x);
+            assert_eq!(part.bounds.y, position.y);
+        }
+    }
+
+    #[test]
     fn route_edges_for_node_returns_only_incident_edges() {
         let graph_json =
             parse_to_graph_json("flowchart TD\nA[Start] --> B[Middle]\nB --> C[End]\nA --> C")
@@ -1298,6 +1513,36 @@ flowchart TD
         assert!(route_ids.contains(&edge_ab.as_str()));
         assert!(!route_ids.contains(&edge_bc.as_str()));
         assert!(routes.edges.iter().all(|edge| edge.points.len() == 2));
+    }
+
+    #[test]
+    fn edit_layout_routes_edges_from_cached_positions() {
+        let graph_json = parse_to_graph_json(
+            r#"%%{selkie: {"layout":{"nodes":{"A":{"x":100.0,"y":200.0,"locked":false},"B":{"x":300.0,"y":220.0,"locked":false},"C":{"x":500.0,"y":260.0,"locked":false}}}}}%%
+flowchart TD
+  A[Start] --> B[Middle]
+  B --> C[End]
+"#,
+        )
+        .expect("graph json");
+        let routes_json =
+            route_edges_for_node_with_layout_mode_json(&graph_json, "A", "edit").expect("routes");
+        let routes: EditableEdgeRoutes = serde_json::from_str(&routes_json).unwrap();
+
+        assert_eq!(routes.edges.len(), 1);
+        assert_eq!(routes.edges[0].points.len(), 2);
+        let parts_json =
+            render_graph_parts_with_layout_mode_json(&graph_json, "edit").expect("parts");
+        let parts: EditableRenderParts = serde_json::from_str(&parts_json).unwrap();
+        let node_a = parts.nodes.iter().find(|node| node.node_id == "A").unwrap();
+        assert_eq!(
+            routes.edges[0].points[0].x,
+            node_a.bounds.x + node_a.bounds.width / 2.0
+        );
+        assert_eq!(
+            routes.edges[0].points[0].y,
+            node_a.bounds.y + node_a.bounds.height / 2.0
+        );
     }
 
     #[test]
@@ -1340,6 +1585,68 @@ flowchart TD
                 y: 100.0,
                 locked: true
             })
+        );
+    }
+
+    #[test]
+    fn export_metadata_keeps_locked_positions_only() {
+        let graph = EditableDiagram {
+            diagram_type: "flowchart".to_string(),
+            direction: "TD".to_string(),
+            nodes: vec![
+                EditableNode {
+                    id: "A".to_string(),
+                    label: "Auto".to_string(),
+                    shape: "square".to_string(),
+                    classes: Vec::new(),
+                    styles: Vec::new(),
+                    position: Some(EditablePosition {
+                        x: 10.0,
+                        y: 20.0,
+                        locked: false,
+                    }),
+                },
+                EditableNode {
+                    id: "B".to_string(),
+                    label: "Manual".to_string(),
+                    shape: "square".to_string(),
+                    classes: Vec::new(),
+                    styles: Vec::new(),
+                    position: Some(EditablePosition {
+                        x: 30.0,
+                        y: 40.0,
+                        locked: true,
+                    }),
+                },
+            ],
+            edges: Vec::new(),
+            classes: Vec::new(),
+            subgraphs: Vec::new(),
+        };
+
+        let text = graph_to_mermaid_text(&graph).expect("text");
+        assert!(!text.contains("\"A\""));
+        assert!(text.contains("\"B\""));
+        let reparsed = parse_graph(&text);
+        assert_eq!(
+            reparsed
+                .nodes
+                .iter()
+                .find(|node| node.id == "A")
+                .unwrap()
+                .position,
+            None
+        );
+        assert_eq!(
+            reparsed
+                .nodes
+                .iter()
+                .find(|node| node.id == "B")
+                .unwrap()
+                .position
+                .as_ref()
+                .map(|position| position.locked),
+            Some(true)
         );
     }
 }

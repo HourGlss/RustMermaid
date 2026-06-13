@@ -5,8 +5,9 @@ use wasm_bindgen::JsValue;
 
 use selkie::wasm::{
     apply_graph_patch_result_json, graph_to_mermaid_text, initialize, layout_graph_json, parse,
-    parse_to_graph_json, render, render_graph_json, render_graph_parts_json, render_text,
-    route_edges_for_node_json,
+    parse_to_graph_json, render, render_graph_json, render_graph_parts_json,
+    render_graph_parts_with_layout_mode_json, render_text, route_edges_for_node_json,
+    route_edges_for_node_with_layout_mode_json,
 };
 
 #[test]
@@ -87,11 +88,23 @@ fn graph_json_api_round_trips_flowchart() {
         serde_json::from_str(&parts).expect("render parts json should parse");
     assert_eq!(parts_json["nodes"].as_array().unwrap().len(), 3);
 
+    let edit_parts = render_graph_parts_with_layout_mode_json(&laid_out, "edit")
+        .expect("render_graph_parts_with_layout_mode_json should succeed");
+    let edit_parts_json: serde_json::Value =
+        serde_json::from_str(&edit_parts).expect("edit render parts json should parse");
+    assert_eq!(edit_parts_json["nodes"].as_array().unwrap().len(), 3);
+
     let routes = route_edges_for_node_json(&graph_json, "B")
         .expect("route_edges_for_node_json should succeed");
     let routes_json: serde_json::Value =
         serde_json::from_str(&routes).expect("routes json should parse");
     assert_eq!(routes_json["node_id"], "B");
+
+    let edit_routes = route_edges_for_node_with_layout_mode_json(&laid_out, "B", "edit")
+        .expect("route_edges_for_node_with_layout_mode_json should succeed");
+    let edit_routes_json: serde_json::Value =
+        serde_json::from_str(&edit_routes).expect("edit routes json should parse");
+    assert_eq!(edit_routes_json["node_id"], "B");
 
     let patch = r#"{"op":"move_node","id":"A","x":50.0,"y":75.0,"locked":true}"#;
     let patch_result = apply_graph_patch_result_json(&graph_json, patch)

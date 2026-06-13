@@ -213,6 +213,9 @@ export function render_graph_parts_json(graphJson) {
     bounds: { x: 0, y: 0, width: Math.max(400, graph.nodes.length * 120), height: 260 },
   });
 }
+export function render_graph_parts_with_layout_mode_json(graphJson) {
+  return render_graph_parts_json(graphJson);
+}
 export function apply_graph_patch_result_json(graphJson, patchJson) {
   const graph = JSON.parse(graphJson);
   const patch = JSON.parse(patchJson);
