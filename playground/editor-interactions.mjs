@@ -143,6 +143,60 @@ export function installNodeDrag(preview, options = {}) {
     };
 }
 
+export function installNodeSelection(preview, onSelect) {
+    if (!preview) return () => {};
+
+    function onClick(event) {
+        const node = closestNodeElement(event.target);
+        if (!node) return;
+
+        onSelect?.({
+            id: nodeIdFromElement(node),
+            node,
+            event,
+        });
+    }
+
+    preview.addEventListener('click', onClick);
+    return () => preview.removeEventListener('click', onClick);
+}
+
+export function markSelectedNode(preview, nodeId) {
+    if (!preview) return null;
+
+    let selected = null;
+    preview.querySelectorAll('[id^="node-"]').forEach((node) => {
+        const isSelected = nodeIdFromElement(node) === nodeId;
+        node.classList.toggle('is-selected', isSelected);
+        if (isSelected) {
+            selected = node;
+        }
+    });
+    return selected;
+}
+
+export function applyNodeVisualEdit(preview, nodeId, edit) {
+    const node = nodeElementById(preview, nodeId);
+    if (!node) return null;
+
+    if (edit.label !== undefined) {
+        const text = node.querySelector('text');
+        if (text) {
+            text.textContent = edit.label;
+        }
+    }
+
+    if (edit.color) {
+        const shape = node.querySelector('rect,path,polygon,ellipse,circle');
+        if (shape) {
+            shape.setAttribute('fill', edit.color);
+            shape.style.fill = edit.color;
+        }
+    }
+
+    return node;
+}
+
 export function installViewportPan(container, viewport, onChange, shouldIgnoreTarget) {
     if (!container) return () => {};
 
@@ -195,6 +249,13 @@ export function closestNodeElement(target) {
 
 export function nodeIdFromElement(node) {
     return node.id.replace(/^node-/, '');
+}
+
+export function nodeElementById(preview, nodeId) {
+    if (!preview) return null;
+
+    return [...preview.querySelectorAll('[id^="node-"]')]
+        .find((node) => nodeIdFromElement(node) === nodeId) ?? null;
 }
 
 function clamp(value, min, max) {

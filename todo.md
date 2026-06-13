@@ -124,7 +124,7 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
   - Output: visible viewport transform changes without rerendering the graph.
   - Test: Playwright test verifies zoom and pan change the viewport transform.
 
-- [ ] Add node selection and inspector editing.
+- [x] Add node selection and inspector editing.
   - Input: click a node, change label and fill color in inspector controls.
   - Output: graph JSON, visual node, and generated Mermaid text all update.
   - Test: Playwright test edits a node label/color and verifies the SVG/render part and text output.

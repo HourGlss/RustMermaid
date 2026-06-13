@@ -1,12 +1,15 @@
 // Selkie Playground - Main Application
 
 import {
+    applyNodeVisualEdit,
     applyViewportTransform,
     closestNodeElement,
     createViewportState,
     fitViewportToSvg,
     installNodeDrag,
+    installNodeSelection,
     installViewportPan,
+    markSelectedNode,
     resetViewport,
     zoomViewportBy,
 } from './editor-interactions.mjs';
@@ -970,7 +973,10 @@ let lastSvg = '';
 let currentGraphJson = null;
 let currentRenderParts = null;
 let disposeNodeDrag = null;
+let disposeNodeSelection = null;
 let disposeViewportPan = null;
+let selectedNodeId = null;
+let isSyncingInspector = false;
 
 // Theme backgrounds (must match Rust theme definitions)
 const themeBackgrounds = {
@@ -991,6 +997,10 @@ const exampleSelect = document.getElementById('example-select');
 const loadingOverlay = document.getElementById('loading-overlay');
 const divider = document.getElementById('divider');
 const previewContainer = document.getElementById('preview-container');
+const nodeInspector = document.getElementById('node-inspector');
+const inspectorNodeId = document.getElementById('inspector-node-id');
+const inspectorLabel = document.getElementById('inspector-label');
+const inspectorColor = document.getElementById('inspector-color');
 
 // Initialize the application
 async function init() {
@@ -1126,6 +1136,16 @@ function setupEventListeners() {
         closestNodeElement,
     );
 
+    inspectorLabel.addEventListener('input', () => {
+        if (isSyncingInspector) return;
+        updateSelectedNode({ label: inspectorLabel.value });
+    });
+
+    inspectorColor.addEventListener('input', () => {
+        if (isSyncingInspector) return;
+        updateSelectedNode({ color: inspectorColor.value });
+    });
+
     // Download SVG
     document.getElementById('download-svg').addEventListener('click', downloadSvg);
 
@@ -1139,6 +1159,10 @@ function renderDiagram() {
 
     if (!input) {
         preview.innerHTML = '<p style="color: var(--text-secondary)">Enter a diagram to preview</p>';
+        currentGraphJson = null;
+        currentRenderParts = null;
+        selectedNodeId = null;
+        syncInspector();
         errorDisplay.classList.add('hidden');
         renderTimeDisplay.textContent = '';
         return;
@@ -1163,6 +1187,7 @@ function renderDiagram() {
         preview.innerHTML = result.svg;
         refreshEditableGraph(input);
         installPreviewInteractions();
+        syncInspector();
         errorDisplay.classList.add('hidden');
 
         const renderTime = (endTime - startTime).toFixed(2);
@@ -1229,9 +1254,13 @@ function refreshEditableGraph(input) {
 
 function installPreviewInteractions() {
     disposeNodeDrag?.();
+    disposeNodeSelection?.();
     disposeNodeDrag = installNodeDrag(preview, {
         getScale: () => viewportState.scale,
         onCommit: commitNodeMove,
+    });
+    disposeNodeSelection = installNodeSelection(preview, ({ id }) => {
+        selectNode(id);
     });
 }
 
@@ -1267,6 +1296,129 @@ function commitNodeMove(move) {
         updateUrl();
     } catch (error) {
         console.warn('Failed to commit node move:', error);
+    }
+}
+
+function selectNode(nodeId) {
+    if (!findGraphNode(nodeId)) {
+        return;
+    }
+
+    selectedNodeId = nodeId;
+    syncInspector();
+}
+
+function syncInspector() {
+    markSelectedNode(preview, selectedNodeId);
+
+    const node = findGraphNode(selectedNodeId);
+    if (!node) {
+        nodeInspector.classList.add('hidden');
+        return;
+    }
+
+    isSyncingInspector = true;
+    inspectorNodeId.value = node.id;
+    inspectorLabel.value = node.label;
+    inspectorColor.value = nodeFillColor(node);
+    nodeInspector.classList.remove('hidden');
+    isSyncingInspector = false;
+}
+
+function updateSelectedNode(edit) {
+    const node = findGraphNode(selectedNodeId);
+    if (!node) return;
+
+    if (edit.label !== undefined) {
+        applyGraphPatch({
+            op: 'set_node_label',
+            id: node.id,
+            label: edit.label,
+        });
+    }
+
+    if (edit.color) {
+        applyGraphPatch({
+            op: 'set_node_color',
+            id: node.id,
+            color: edit.color,
+        });
+    }
+
+    applyNodeVisualEdit(preview, node.id, edit);
+    updateRenderPartForNode(node.id, edit);
+    lastSvg = preview.querySelector('svg')?.outerHTML ?? lastSvg;
+    markSelectedNode(preview, node.id);
+}
+
+function applyGraphPatch(patch) {
+    if (!currentGraphJson) return null;
+
+    const result = JSON.parse(
+        selkie.apply_graph_patch_result_json(currentGraphJson, JSON.stringify(patch)),
+    );
+    currentGraphJson = JSON.stringify(result.graph);
+    editor.value = selkie.graph_to_mermaid_text(currentGraphJson);
+    updateUrl();
+    return result;
+}
+
+function updateRenderPartForNode(nodeId, edit) {
+    if (!currentRenderParts) return;
+
+    const part = currentRenderParts.nodes.find((candidate) => candidate.node_id === nodeId);
+    if (!part) return;
+
+    if (edit.label !== undefined) {
+        part.label = edit.label;
+    }
+
+    if (edit.color) {
+        upsertStyleProperty(part.styles, 'fill', edit.color);
+    }
+}
+
+function findGraphNode(nodeId) {
+    if (!nodeId || !currentGraphJson) return null;
+
+    try {
+        const graph = JSON.parse(currentGraphJson);
+        return graph.nodes.find((node) => node.id === nodeId) ?? null;
+    } catch {
+        return null;
+    }
+}
+
+function nodeFillColor(node) {
+    const fill = node.styles
+        ?.find((style) => style.trim().toLowerCase().startsWith('fill:'))
+        ?.split(':')
+        .slice(1)
+        .join(':')
+        .trim();
+
+    return normalizeColorInput(fill) ?? '#ffffff';
+}
+
+function normalizeColorInput(color) {
+    if (!color) return null;
+    const trimmed = color.trim();
+    if (/^#[0-9a-f]{6}$/i.test(trimmed)) {
+        return trimmed;
+    }
+    if (/^#[0-9a-f]{3}$/i.test(trimmed)) {
+        return `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
+    }
+    return null;
+}
+
+function upsertStyleProperty(styles, property, value) {
+    const prefix = `${property}:`;
+    const existing = styles.findIndex((style) => style.trim().toLowerCase().startsWith(prefix));
+    if (existing >= 0) {
+        styles[existing] = `${property}:${value}`;
+    } else {
+        styles.push(`${property}:${value}`);
     }
 }
 

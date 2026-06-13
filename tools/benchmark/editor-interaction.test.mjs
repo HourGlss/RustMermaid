@@ -37,6 +37,9 @@ function fixtureHtml() {
         </div>
       </div>
       <button id="zoom-reset"></button>
+      <input id="inspector-label" type="text">
+      <input id="inspector-color" type="color" value="#ffffff">
+      <textarea id="editor"></textarea>
     </body>
   </html>`;
 }
@@ -56,7 +59,7 @@ function largeFlowchartSvgParts() {
       .map((id, index) => {
         const x = (index % 40) * 95;
         const y = Math.floor(index / 40) * 95;
-        return `<g id="node-${id}" transform="translate(${x} ${y})"><rect width="80" height="40"></rect></g>`;
+        return `<g id="node-${id}" transform="translate(${x} ${y})"><rect width="80" height="40" fill="#ffffff"></rect><text>${id}</text></g>`;
       })
       .join('\n'),
     edges: edgeIds
@@ -159,6 +162,109 @@ async function runBrowserAssertions(page) {
     commits: [{ id: 'N400', dx: 15, dy: 20 }],
   });
 
+  const inspectorResult = await page.evaluate(async () => {
+    const {
+      applyNodeVisualEdit,
+      installNodeSelection,
+      markSelectedNode,
+    } = await import('/playground/editor-interactions.mjs');
+
+    const preview = document.getElementById('preview');
+    const node = document.getElementById('node-N400');
+    const labelInput = document.getElementById('inspector-label');
+    const colorInput = document.getElementById('inspector-color');
+    const editor = document.getElementById('editor');
+    const graph = {
+      nodes: [{ id: 'N400', label: 'N400', styles: [] }],
+    };
+    const renderParts = {
+      nodes: [{ id: 'node:N400', node_id: 'N400', label: 'N400', styles: [] }],
+    };
+    let selectedNodeId = null;
+
+    function selectedGraphNode() {
+      return graph.nodes.find((candidate) => candidate.id === selectedNodeId);
+    }
+
+    function selectedRenderPart() {
+      return renderParts.nodes.find((candidate) => candidate.node_id === selectedNodeId);
+    }
+
+    function upsertStyle(styles, property, value) {
+      const prefix = `${property}:`;
+      const existing = styles.findIndex((style) => style.startsWith(prefix));
+      if (existing >= 0) {
+        styles[existing] = `${property}:${value}`;
+      } else {
+        styles.push(`${property}:${value}`);
+      }
+    }
+
+    function updateMermaidText() {
+      const graphNode = selectedGraphNode();
+      editor.value = [
+        'flowchart TB',
+        `  ${graphNode.id}["${graphNode.label}"]`,
+        `  style ${graphNode.id} ${graphNode.styles.join(',')}`,
+      ].join('\n');
+    }
+
+    installNodeSelection(preview, ({ id }) => {
+      selectedNodeId = id;
+      markSelectedNode(preview, id);
+      const graphNode = selectedGraphNode();
+      labelInput.value = graphNode.label;
+    });
+
+    labelInput.addEventListener('input', () => {
+      const graphNode = selectedGraphNode();
+      const part = selectedRenderPart();
+      graphNode.label = labelInput.value;
+      part.label = labelInput.value;
+      applyNodeVisualEdit(preview, graphNode.id, { label: labelInput.value });
+      updateMermaidText();
+    });
+
+    colorInput.addEventListener('input', () => {
+      const graphNode = selectedGraphNode();
+      const part = selectedRenderPart();
+      upsertStyle(graphNode.styles, 'fill', colorInput.value);
+      upsertStyle(part.styles, 'fill', colorInput.value);
+      applyNodeVisualEdit(preview, graphNode.id, { color: colorInput.value });
+      updateMermaidText();
+    });
+
+    node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    labelInput.value = 'Edited Node';
+    labelInput.dispatchEvent(new Event('input', { bubbles: true }));
+    colorInput.value = '#ff6600';
+    colorInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    return {
+      graphJson: JSON.stringify(graph),
+      renderPart: selectedRenderPart(),
+      selected: node.classList.contains('is-selected'),
+      text: node.querySelector('text').textContent,
+      fill: node.querySelector('rect').getAttribute('fill'),
+      editorText: editor.value,
+    };
+  });
+
+  assert.deepEqual(JSON.parse(inspectorResult.graphJson), {
+    nodes: [{ id: 'N400', label: 'Edited Node', styles: ['fill:#ff6600'] }],
+  });
+  assert.deepEqual(inspectorResult.renderPart, {
+    id: 'node:N400',
+    node_id: 'N400',
+    label: 'Edited Node',
+    styles: ['fill:#ff6600'],
+  });
+  assert.equal(inspectorResult.selected, true);
+  assert.equal(inspectorResult.text, 'Edited Node');
+  assert.equal(inspectorResult.fill, '#ff6600');
+  assert.match(inspectorResult.editorText, /N400\["Edited Node"\]/);
+  assert.match(inspectorResult.editorText, /style N400 fill:#ff6600/);
+
   const viewportResult = await page.evaluate(async () => {
     const {
       applyViewportTransform,
@@ -223,6 +329,7 @@ try {
   const page = await browser.newPage({ baseURL: server.baseUrl });
   await runBrowserAssertions(page);
   console.log('PASS browser node drag updates the existing SVG in place');
+  console.log('PASS browser node inspector edits graph data SVG and Mermaid text');
   console.log('PASS browser viewport pan zoom fit and reset update one transform');
 } finally {
   await browser.close();

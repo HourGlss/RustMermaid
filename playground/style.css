@@ -230,6 +230,11 @@ main {
     cursor: grabbing;
 }
 
+#preview [id^="node-"].is-selected {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
 .preview-actions {
     display: flex;
     gap: 4px;
@@ -260,6 +265,56 @@ main {
 #download-svg:hover {
     background: var(--accent-hover);
     border-color: var(--accent-hover);
+}
+
+.node-inspector {
+    display: grid;
+    grid-template-columns: auto minmax(90px, 140px) minmax(140px, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+}
+
+.node-inspector.hidden {
+    display: none;
+}
+
+.inspector-title {
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+}
+
+.node-inspector label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
+.node-inspector input[type="text"] {
+    min-width: 0;
+    width: 100%;
+    padding: 5px 7px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+}
+
+.node-inspector input[readonly] {
+    color: var(--text-secondary);
+}
+
+.node-inspector input[type="color"] {
+    width: 36px;
+    height: 28px;
+    padding: 2px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
 }
 
 /* Error display */
