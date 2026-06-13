@@ -24,7 +24,7 @@ const contentTypes = {
 };
 
 function fixtureHtml() {
-  const { nodes, edges } = largeFlowchartSvgParts();
+  const { nodes, edges, edgeLabels, renderParts } = largeFlowchartSvgParts();
   return `<!DOCTYPE html>
   <html>
     <body>
@@ -32,6 +32,7 @@ function fixtureHtml() {
         <div id="preview">
           <svg id="diagram-root" viewBox="0 0 4000 3000">
             ${edges}
+            ${edgeLabels}
             ${nodes}
           </svg>
         </div>
@@ -40,6 +41,7 @@ function fixtureHtml() {
       <input id="inspector-label" type="text">
       <input id="inspector-color" type="color" value="#ffffff">
       <textarea id="editor"></textarea>
+      <script>window.__largeRenderParts = ${JSON.stringify(renderParts)};</script>
     </body>
   </html>`;
 }
@@ -47,24 +49,57 @@ function fixtureHtml() {
 function largeFlowchartSvgParts() {
   const source = readFileSync(largeFixturePath, 'utf8');
   const nodeIds = [...source.matchAll(/^\s*(N\d+)\[/gm)].map((match) => match[1]);
-  const edgeIds = [...source.matchAll(/^\s*N\d+\s*-->\s*N\d+/gm)].map(
-    (_, index) => `edge-${index}`,
-  );
+  const edgeMatches = [...source.matchAll(/^\s*(N\d+)\s*-->\s*(N\d+)/gm)];
+  const edgeIds = edgeMatches.map((_, index) => `edge-${index}`);
 
   assert.equal(nodeIds.length, 800, 'large fixture should contain 800 nodes');
   assert.equal(edgeIds.length, 1000, 'large fixture should contain 1000 edges');
 
+  const nodeParts = nodeIds.map((id, index) => ({
+    id: `node:${id}`,
+    node_id: id,
+    label: id,
+    bounds: nodeBoundsForIndex(index),
+    classes: [],
+    styles: [],
+  }));
+  const edgeParts = edgeMatches.map((match, index) => ({
+    id: `edge:${index}`,
+    edge_id: String(index),
+    source: match[1],
+    target: match[2],
+    points: [],
+    styles: [],
+  }));
+
   return {
     nodes: nodeIds
       .map((id, index) => {
-        const x = (index % 40) * 95;
-        const y = Math.floor(index / 40) * 95;
+        const { x, y } = nodeBoundsForIndex(index);
         return `<g id="node-${id}" transform="translate(${x} ${y})"><rect width="80" height="40" fill="#ffffff"></rect><text>${id}</text></g>`;
       })
       .join('\n'),
     edges: edgeIds
       .map((id) => `<g id="${id}"><path d="M 0 0 L 100 100"></path></g>`)
       .join('\n'),
+    edgeLabels: edgeParts
+      .map((edge) => `<g id="edge-label-${edge.edge_id}"><text>${edge.edge_id}</text></g>`)
+      .join('\n'),
+    renderParts: {
+      nodes: nodeParts,
+      edges: edgeParts,
+      labels: [],
+      bounds: { x: 0, y: 0, width: 4000, height: 3000 },
+    },
+  };
+}
+
+function nodeBoundsForIndex(index) {
+  return {
+    x: (index % 40) * 95,
+    y: Math.floor(index / 40) * 95,
+    width: 80,
+    height: 40,
   };
 }
 
@@ -518,6 +553,47 @@ async function runBrowserAssertions(page) {
       label: '100%',
     },
   });
+
+  const lodResult = await page.evaluate(async () => {
+    const { applyViewportLevelOfDetail } = await import('/playground/editor-interactions.mjs');
+    const preview = document.getElementById('preview');
+    const renderParts = window.__largeRenderParts;
+    const full = applyViewportLevelOfDetail(
+      preview,
+      { scale: 1, x: 0, y: 0 },
+      renderParts,
+      { width: 1200, height: 800 },
+      { largeGraphThreshold: 1 },
+    );
+    const low = applyViewportLevelOfDetail(
+      preview,
+      { scale: 0.2, x: 0, y: 0 },
+      renderParts,
+      { width: 240, height: 180 },
+      { largeGraphThreshold: 1, overscanPx: 0 },
+    );
+
+    return {
+      full,
+      low,
+      hiddenEdgeGroups: preview.querySelectorAll(
+        'g[id^="edge-"]:not([id^="edge-label-"]).selkie-lod-hidden',
+      ).length,
+      hiddenNodeLabels: preview.querySelectorAll('[id^="node-"] text.selkie-lod-hidden').length,
+    };
+  });
+
+  assert.equal(lodResult.full.mode, 'full');
+  assert.equal(lodResult.full.visibleDetailCount, 2800);
+  assert.equal(lodResult.low.mode, 'lod');
+  assert.ok(
+    lodResult.low.renderPartUpdateCount < lodResult.full.renderPartUpdateCount,
+    `expected low zoom detail count to be lower than full detail: ${JSON.stringify(lodResult)}`,
+  );
+  assert.ok(lodResult.low.hiddenNodeLabels > 0);
+  assert.ok(lodResult.low.hiddenEdges > 0);
+  assert.equal(lodResult.hiddenEdgeGroups, lodResult.low.hiddenEdges);
+  assert.equal(lodResult.hiddenNodeLabels, lodResult.low.hiddenNodeLabels);
 }
 
 async function runPlaygroundCreationAssertions(page) {
@@ -577,6 +653,7 @@ try {
   console.log('PASS browser node inspector edits graph data SVG and Mermaid text');
   console.log('PASS playground creates a node and edge then reparses exported text');
   console.log('PASS browser viewport pan zoom fit and reset update one transform');
+  console.log('PASS browser low-zoom LOD lowers visible label and edge detail');
 } finally {
   await browser.close();
   await server.close();

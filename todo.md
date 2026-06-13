@@ -12,7 +12,7 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
 - [x] Moving one node updates that node and its incident edges without reparsing the full Mermaid source.
 - [x] Creating a node, creating an edge, changing a label, and changing colors all round-trip through graph JSON and Mermaid text.
 - [x] Manual node positions survive export and re-import.
-- [ ] Browser interaction remains usable on the 800-node / 1000-edge fixture.
+- [x] Browser interaction remains usable on the 800-node / 1000-edge fixture.
 
 ## Phase 0: Baseline And Test Fixtures
 
@@ -134,7 +134,7 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
   - Output: graph JSON and Mermaid text include the new node and edge.
   - Test: Playwright test creates a node and edge, exports text, reparses it, and sees the same graph.
 
-- [ ] Add visible-region culling or level-of-detail for labels/edges.
+- [x] Add visible-region culling or level-of-detail for labels/edges.
   - Input: 800-node fixture at low zoom.
   - Output: expensive labels or details are hidden or simplified outside the viewport.
   - Test: browser benchmark records lower DOM/render-part update count at low zoom than at full detail.
@@ -172,6 +172,6 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
 - [x] `cargo clippy --features all-formats -- -D warnings` passes.
 - [x] `cargo test --features all-formats` passes.
 - [x] WASM tests cover `parse_to_graph_json`, `graph_to_mermaid_text`, and `render_graph_json`.
-- [ ] Browser tests cover load, pan, zoom, select, move, create node, create edge, edit label, edit color, export, and re-import.
+- [x] Browser tests cover load, pan, zoom, select, move, create node, create edge, edit label, edit color, export, and re-import.
 - [ ] The 800-node / 1000-edge fixture passes CLI and browser acceptance tests.
 - [x] The implementation keeps static Mermaid rendering compatibility for existing docs/sources files.

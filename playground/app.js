@@ -2,6 +2,7 @@
 
 import {
     applyNodeVisualEdit,
+    applyViewportLevelOfDetail,
     applyViewportTransform,
     closestNodeElement,
     createViewportState,
@@ -1213,6 +1214,19 @@ function renderDiagram() {
 // Apply zoom to preview
 function applyZoom() {
     applyViewportTransform(preview, viewportState, document.getElementById('zoom-reset'));
+    applyLevelOfDetail();
+}
+
+function applyLevelOfDetail() {
+    if (!currentRenderParts) return null;
+
+    return applyViewportLevelOfDetail(
+        preview,
+        viewportState,
+        currentRenderParts,
+        previewContainer.getBoundingClientRect(),
+        { selectedNodeId },
+    );
 }
 
 function fitPreviewToScreen() {
@@ -1336,6 +1350,7 @@ function selectNode(nodeId) {
 
 function syncInspector() {
     markSelectedNode(preview, selectedNodeId);
+    applyLevelOfDetail();
 
     const node = findGraphNode(selectedNodeId);
     if (!node) {
@@ -1377,6 +1392,7 @@ function updateSelectedNode(edit) {
     updateRenderPartForNode(node.id, edit);
     lastSvg = preview.querySelector('svg')?.outerHTML ?? lastSvg;
     markSelectedNode(preview, node.id);
+    applyLevelOfDetail();
 }
 
 function applyGraphPatch(patch) {

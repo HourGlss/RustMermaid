@@ -1,6 +1,11 @@
 const MIN_VIEWPORT_SCALE = 0.1;
 const MAX_VIEWPORT_SCALE = 4;
 const DEFAULT_FIT_PADDING = 30;
+const DEFAULT_LOD_LABEL_SCALE = 0.65;
+const DEFAULT_LOD_EDGE_SCALE = 0.5;
+const DEFAULT_LOD_THRESHOLD = 250;
+const DEFAULT_LOD_OVERSCAN_PX = 160;
+const LOD_HIDDEN_CLASS = 'selkie-lod-hidden';
 
 export function createViewportState() {
     return {
@@ -19,6 +24,93 @@ export function applyViewportTransform(preview, viewport, zoomLabel = null) {
     if (zoomLabel) {
         zoomLabel.textContent = `${Math.round(viewport.scale * 100)}%`;
     }
+}
+
+export function applyViewportLevelOfDetail(
+    preview,
+    viewport,
+    renderParts,
+    containerRect,
+    options = {},
+) {
+    const stats = createLodStats();
+    if (!preview || !renderParts) return stats;
+
+    const nodes = renderParts.nodes ?? [];
+    const edges = renderParts.edges ?? [];
+    const isLargeGraph =
+        nodes.length + edges.length >= (options.largeGraphThreshold ?? DEFAULT_LOD_THRESHOLD);
+    const labelScale = options.labelDetailScale ?? DEFAULT_LOD_LABEL_SCALE;
+    const edgeScale = options.edgeDetailScale ?? DEFAULT_LOD_EDGE_SCALE;
+    const hideLabels = isLargeGraph && viewport.scale < labelScale;
+    const cullEdges = isLargeGraph && viewport.scale < edgeScale;
+    const visibleRect = cullEdges ? graphViewportRect(
+        viewport,
+        containerRect,
+        options.overscanPx ?? DEFAULT_LOD_OVERSCAN_PX,
+    ) : null;
+    const nodeBounds = new Map(nodes.map((node) => [node.node_id, node.bounds]));
+    const selectedNodeId = options.selectedNodeId ?? null;
+
+    stats.enabled = isLargeGraph;
+    stats.mode = hideLabels || cullEdges ? 'lod' : 'full';
+
+    for (const node of nodes) {
+        const nodeElement = nodeElementById(preview, node.node_id);
+        if (!nodeElement) continue;
+
+        const labelElements = nodeLabelElements(nodeElement);
+        const isSelected = selectedNodeId === node.node_id;
+        const showLabels = !hideLabels || isSelected;
+        stats.totalNodeLabels += labelElements.length;
+
+        for (const labelElement of labelElements) {
+            setLodHidden(labelElement, !showLabels, stats);
+            if (showLabels) {
+                stats.visibleNodeLabels += 1;
+            } else {
+                stats.hiddenNodeLabels += 1;
+            }
+        }
+    }
+
+    for (const edge of edges) {
+        const edgeElement = edgeElementById(preview, edge.edge_id);
+        const edgeLabelElement = edgeLabelElementById(preview, edge.edge_id);
+        const isIncidentToSelection =
+            selectedNodeId && (edge.source === selectedNodeId || edge.target === selectedNodeId);
+        const edgeIsVisible =
+            !cullEdges || !visibleRect || edgeIntersectsViewport(edge, nodeBounds, visibleRect);
+        const edgeLabelIsVisible = edgeIsVisible && (!hideLabels || isIncidentToSelection);
+
+        stats.totalEdges += edgeElement ? 1 : 0;
+        stats.totalEdgeLabels += edgeLabelElement ? 1 : 0;
+
+        if (edgeElement) {
+            setLodHidden(edgeElement, !edgeIsVisible, stats);
+            if (edgeIsVisible) {
+                stats.visibleEdges += 1;
+            } else {
+                stats.hiddenEdges += 1;
+            }
+        }
+
+        if (edgeLabelElement) {
+            setLodHidden(edgeLabelElement, !edgeLabelIsVisible, stats);
+            if (edgeLabelIsVisible) {
+                stats.visibleEdgeLabels += 1;
+            } else {
+                stats.hiddenEdgeLabels += 1;
+            }
+        }
+    }
+
+    stats.visibleDetailCount =
+        stats.visibleNodeLabels + stats.visibleEdgeLabels + stats.visibleEdges;
+    stats.renderPartUpdateCount = stats.visibleDetailCount;
+    preview.dataset.selkieLodMode = stats.mode;
+    preview.dataset.selkieVisibleDetailCount = String(stats.visibleDetailCount);
+    return stats;
 }
 
 export function zoomViewportBy(viewport, factor, origin = { x: 0, y: 0 }) {
@@ -256,6 +348,130 @@ export function nodeElementById(preview, nodeId) {
 
     return [...preview.querySelectorAll('[id^="node-"]')]
         .find((node) => nodeIdFromElement(node) === nodeId) ?? null;
+}
+
+function createLodStats() {
+    return {
+        enabled: false,
+        mode: 'full',
+        totalNodeLabels: 0,
+        visibleNodeLabels: 0,
+        hiddenNodeLabels: 0,
+        totalEdges: 0,
+        visibleEdges: 0,
+        hiddenEdges: 0,
+        totalEdgeLabels: 0,
+        visibleEdgeLabels: 0,
+        hiddenEdgeLabels: 0,
+        visibleDetailCount: 0,
+        renderPartUpdateCount: 0,
+        domUpdateCount: 0,
+    };
+}
+
+function graphViewportRect(viewport, containerRect, overscanPx) {
+    const scale = Math.max(viewport?.scale ?? 1, MIN_VIEWPORT_SCALE);
+    const width = Number(containerRect?.width) || 0;
+    const height = Number(containerRect?.height) || 0;
+    if (!width || !height) return null;
+
+    const overscan = Math.max(0, overscanPx) / scale;
+
+    return {
+        x: (0 - (viewport?.x ?? 0)) / scale - overscan,
+        y: (0 - (viewport?.y ?? 0)) / scale - overscan,
+        width: width / scale + overscan * 2,
+        height: height / scale + overscan * 2,
+    };
+}
+
+function nodeLabelElements(node) {
+    return [...node.querySelectorAll('text, foreignObject')];
+}
+
+function edgeElementById(preview, edgeId) {
+    return preview.querySelector(`#${cssEscape(`edge-${edgeId}`)}`);
+}
+
+function edgeLabelElementById(preview, edgeId) {
+    return preview.querySelector(`#${cssEscape(`edge-label-${edgeId}`)}`);
+}
+
+function edgeIntersectsViewport(edge, nodeBounds, visibleRect) {
+    const bounds = mergedBounds([
+        nodeBounds.get(edge.source),
+        nodeBounds.get(edge.target),
+        pointBounds(edge.points),
+    ]);
+    return !bounds || rectsIntersect(expandRect(bounds, 40), visibleRect);
+}
+
+function mergedBounds(boundsList) {
+    const bounds = boundsList.filter(Boolean);
+    if (!bounds.length) return null;
+
+    const minX = Math.min(...bounds.map((rect) => rect.x));
+    const minY = Math.min(...bounds.map((rect) => rect.y));
+    const maxX = Math.max(...bounds.map((rect) => rect.x + rect.width));
+    const maxY = Math.max(...bounds.map((rect) => rect.y + rect.height));
+    return {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+    };
+}
+
+function pointBounds(points) {
+    if (!points?.length) return null;
+
+    const xs = points.map((point) => point.x);
+    const ys = points.map((point) => point.y);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    return {
+        x: minX,
+        y: minY,
+        width: Math.max(...xs) - minX,
+        height: Math.max(...ys) - minY,
+    };
+}
+
+function expandRect(rect, amount) {
+    return {
+        x: rect.x - amount,
+        y: rect.y - amount,
+        width: rect.width + amount * 2,
+        height: rect.height + amount * 2,
+    };
+}
+
+function rectsIntersect(a, b) {
+    return (
+        a.x <= b.x + b.width &&
+        a.x + a.width >= b.x &&
+        a.y <= b.y + b.height &&
+        a.y + a.height >= b.y
+    );
+}
+
+function setLodHidden(element, hidden, stats) {
+    const wasHidden = element.classList.contains(LOD_HIDDEN_CLASS);
+    element.classList.toggle(LOD_HIDDEN_CLASS, hidden);
+    element.style.display = hidden ? 'none' : '';
+    element.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+
+    if (wasHidden !== hidden) {
+        stats.domUpdateCount += 1;
+    }
+}
+
+function cssEscape(value) {
+    if (globalThis.CSS?.escape) {
+        return globalThis.CSS.escape(value);
+    }
+
+    return String(value).replace(/["\\#.;:[\],>+~*^$|=(){}\s]/g, '\\$&');
 }
 
 function clamp(value, min, max) {

@@ -235,6 +235,10 @@ main {
     outline-offset: 3px;
 }
 
+#preview .selkie-lod-hidden {
+    display: none !important;
+}
+
 .preview-actions {
     display: flex;
     gap: 4px;
