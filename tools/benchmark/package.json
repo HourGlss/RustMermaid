@@ -5,6 +5,8 @@
   "description": "Performance benchmark for Selkie vs Mermaid.js",
   "scripts": {
     "benchmark": "node benchmark.mjs",
+    "phase6": "node phase6-trace.mjs",
+    "test:phase6": "node phase6-trace.test.mjs",
     "test:editor": "node editor-interaction.test.mjs"
   },
   "dependencies": {

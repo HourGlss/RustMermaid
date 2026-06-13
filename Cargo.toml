@@ -68,6 +68,11 @@ name = "selkie"
 path = "src/bin/selkie.rs"
 required-features = ["cli"]
 
+[[bin]]
+name = "trace-editable-workflow"
+path = "src/bin/trace_editable_workflow.rs"
+required-features = ["cli"]
+
 [features]
 default = ["cli", "png"]
 cli = ["clap", "glob", "dirs", "tempfile", "tracing-subscriber"]
