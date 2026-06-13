@@ -166,6 +166,55 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
   - Output: `full-layout` recalculates the whole graph; `edit-layout` preserves user positions and updates local geometry.
   - Test: mode-specific tests prove the same graph produces different expected position behavior.
 
+## Phase 6: Trace-Driven Hotspot Discovery
+
+- [ ] Capture structured traces for large graph workflows.
+  - Input: CLI render, editable graph parse, graph-parts render, node move, node creation, edge creation, and export using the 800-node / 1000-edge fixture.
+  - Output: JSONL trace files under a benchmark or reports directory, with span-close timings for parse, layout, render, serialization, graph patch, and editable render-part APIs.
+  - Test: trace capture command exits non-zero if any expected span name is missing from the JSONL output.
+
+- [ ] Add a trace summarizer for hotspot ranking.
+  - Input: one or more Selkie JSONL trace files.
+  - Output: sorted report with total time, call count, average time, max time, p95 time, and percentage of run time by span/function.
+  - Test: fixture trace input produces deterministic hotspot ordering and numeric totals.
+
+- [ ] Identify the most optimization-worthy functions and phases.
+  - Input: trace summaries for 100/200, 400/600, 800/1000, and 1200/1600 flowchart fixtures.
+  - Output: ranked `optimization-candidates` report naming the top bottlenecks, why they matter, and whether they are CPU, allocation, DOM/update, layout, or serialization dominated.
+  - Test: report includes at least the top 10 spans/functions and each entry links to a source file or browser module.
+
+- [ ] Define optimization budgets from observed data.
+  - Input: baseline p50/p95 timings for initial load, render graph parts, move node, create node, create edge, export, and re-import.
+  - Output: explicit target budgets for Phase 7, including acceptable regression thresholds.
+  - Test: benchmark tooling can compare current results against the saved baseline and fail on regressions beyond the threshold.
+
+## Phase 7: Hotspot Optimization
+
+- [ ] Optimize the highest-ranked parsing or graph conversion hotspot.
+  - Input: Phase 6 hotspot report naming the target function/span.
+  - Output: lower p95 timing for the target workflow without changing parsed graph JSON.
+  - Test: before/after benchmark shows improvement and round-trip graph equivalence tests still pass.
+
+- [ ] Optimize the highest-ranked layout hotspot.
+  - Input: Phase 6 layout span data for large flowcharts.
+  - Output: lower layout p95 timing for the 800-node / 1000-edge fixture with equivalent node/edge geometry constraints.
+  - Test: visual/render integration tests pass and the benchmark reports a layout improvement against baseline.
+
+- [ ] Optimize the highest-ranked render-part or DOM update hotspot.
+  - Input: Phase 6 browser/editor trace data for move, create, pan, zoom, and low-zoom LOD workflows.
+  - Output: fewer render-part updates, fewer DOM mutations, or lower frame time for the target workflow.
+  - Test: browser benchmark records improved p95 frame or update time and existing editor interaction tests pass.
+
+- [ ] Optimize serialization/export hotspots.
+  - Input: Phase 6 trace data for graph JSON to Mermaid text and export/re-import workflows.
+  - Output: lower serialization p95 timing while preserving Mermaid text round-trip behavior.
+  - Test: graph -> text -> graph equivalence tests pass and benchmark output improves against baseline.
+
+- [ ] Lock in optimized performance gates.
+  - Input: Phase 7 optimized benchmark results.
+  - Output: updated CI/local gates with agreed p95 thresholds for initial load, drag, create, export, and re-import.
+  - Test: performance gate command passes on the optimized implementation and fails against the saved pre-optimization baseline fixture.
+
 ## Definition Of Done
 
 - [x] `cargo fmt` passes.
