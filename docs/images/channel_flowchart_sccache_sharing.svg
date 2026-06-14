@@ -87,10 +87,10 @@ marker path {
       <path d="M 0 5 L 10 10 L 10 0 z"/>
     </marker>
     <marker id="arrow_cross" viewBox="0 0 11 11" refX="12" refY="5.2" markerWidth="11" markerHeight="11" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M 1 1 L 10 10 M 10 1 L 1 10" stroke-width="2" fill="none"/>
+      <path d="M 1 1 L 10 10 M 10 1 L 1 10" fill="none" stroke-width="2"/>
     </marker>
     <marker id="arrow_cross_start" viewBox="0 0 11 11" refX="-1" refY="5.2" markerWidth="11" markerHeight="11" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M 1 1 L 10 10 M 10 1 L 1 10" stroke-width="2" fill="none"/>
+      <path d="M 1 1 L 10 10 M 10 1 L 1 10" fill="none" stroke-width="2"/>
     </marker>
     <marker id="arrow_circle" viewBox="0 0 10 10" refX="11" refY="5" markerWidth="11" markerHeight="11" orient="auto" markerUnits="userSpaceOnUse">
       <circle cx="5" cy="5" r="5"/>
@@ -115,40 +115,40 @@ marker path {
         <path d="M 1328.90 114.60 C 1328.90 122.93, 1328.90 131.27, 1328.90 142.67 C 1328.90 154.07, 1328.90 168.53, 1328.90 183.00" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-W2-B2-0">
-        <path d="M 1679.90 254.20 C 1679.90 262.53, 1679.90 270.87, 1679.90 285.33 C 1679.90 299.80, 1679.90 320.40, 1679.90 341.00" class="edge-path" fill="none" marker-end="url(#arrow_point)" stroke-width="1"/>
+        <path d="M 1679.90 254.20 C 1679.90 262.53, 1679.90 270.87, 1679.90 285.33 C 1679.90 299.80, 1679.90 320.40, 1679.90 341.00" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="1"/>
       </g>
       <g class="edge" id="edge-L-W3-B3-0">
-        <path d="M 1899.50 412.20 C 1899.50 430.00, 1899.50 447.80, 1899.50 468.67 C 1899.50 489.53, 1899.50 513.47, 1899.50 537.40" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="1"/>
+        <path d="M 1899.50 412.20 C 1899.50 430.00, 1899.50 447.80, 1899.50 468.67 C 1899.50 489.53, 1899.50 513.47, 1899.50 537.40" class="edge-path" stroke-width="1" fill="none" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-B1-D1-0">
-        <path d="M 1277.99 235.80 L 1194.30 304.20" class="edge-path" stroke-width="1" fill="none" marker-end="url(#arrow_point)"/>
+        <path d="M 1277.99 235.80 L 1194.30 304.20" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
       </g>
       <g class="edge" id="edge-L-B1-M1-0">
-        <path d="M 1379.81 235.80 C 1407.71 250.27, 1435.60 264.73, 1449.55 282.27 C 1463.50 299.80, 1463.50 320.40, 1463.50 341.00" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
+        <path d="M 1379.81 235.80 C 1407.71 250.27, 1435.60 264.73, 1449.55 282.27 C 1463.50 299.80, 1463.50 320.40, 1463.50 341.00" class="edge-path" fill="none" marker-end="url(#arrow_point)" stroke-width="1"/>
       </g>
       <g class="edge" id="edge-L-B2-D2-0">
-        <path d="M 1625.97 393.80 C 1577.08 417.73, 1528.19 441.67, 1486.35 461.19 C 1444.50 480.72, 1409.70 495.84, 1374.90 510.96" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
+        <path d="M 1625.97 393.80 C 1577.08 417.73, 1528.19 441.67, 1486.35 461.19 C 1444.50 480.72, 1409.70 495.84, 1374.90 510.96" class="edge-path" marker-end="url(#arrow_point)" stroke-width="1" fill="none"/>
       </g>
       <g class="edge" id="edge-L-B2-M2-0">
         <path d="M 1680.76 393.80 C 1681.54 417.73, 1682.32 441.67, 1682.71 465.60 C 1683.10 489.53, 1683.10 513.47, 1683.10 537.40" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-B3-D3-0">
-        <path d="M 1834.17 590.20 L 1433.90 725.51" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
+        <path d="M 1834.17 590.20 L 1433.90 725.51" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
       </g>
       <g class="edge" id="edge-L-B3-M3-0">
-        <path d="M 1899.50 590.20 C 1899.50 614.13, 1899.50 638.07, 1899.50 662.00 C 1899.50 685.93, 1899.50 709.87, 1899.50 733.80" class="edge-path" fill="none" marker-end="url(#arrow_point)" stroke-width="1"/>
+        <path d="M 1899.50 590.20 C 1899.50 614.13, 1899.50 638.07, 1899.50 662.00 C 1899.50 685.93, 1899.50 709.87, 1899.50 733.80" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="1"/>
       </g>
       <g class="edge" id="edge-L-D1-D2-0">
         <path d="M 1194.30 430.60 L 1215.33 500.60" class="edge-path" stroke-dasharray="3,3" stroke-width="2" marker-end="url(#arrow_point)" fill="none"/>
       </g>
       <g class="edge" id="edge-L-D2-D3-0">
-        <path d="M 1253.30 627.00 L 1274.33 697.00" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-dasharray="3,3" stroke-width="2"/>
+        <path d="M 1253.30 627.00 L 1274.33 697.00" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="2" stroke-dasharray="3,3"/>
       </g>
       <g class="edge" id="edge-L-S1-SB1-0">
-        <path d="M 322.50 114.60 C 322.50 122.93, 322.50 131.27, 322.50 142.67 C 322.50 154.07, 322.50 168.53, 322.50 183.00" class="edge-path" fill="none" marker-end="url(#arrow_point)" stroke-width="1"/>
+        <path d="M 322.50 114.60 C 322.50 122.93, 322.50 131.27, 322.50 142.67 C 322.50 154.07, 322.50 168.53, 322.50 183.00" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-S2-SB2-0">
-        <path d="M 594.98 608.60 C 591.35 626.40, 587.73 644.20, 543.86 665.96 C 500.00 687.72, 415.90 713.44, 331.80 739.16" class="edge-path" fill="none" marker-end="url(#arrow_point)" stroke-width="1"/>
+        <path d="M 594.98 608.60 C 591.35 626.40, 587.73 644.20, 543.86 665.96 C 500.00 687.72, 415.90 713.44, 331.80 739.16" class="edge-path" stroke-width="1" fill="none" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-S3-SB3-0">
         <path d="M 869.90 608.60 C 869.90 626.40, 869.90 644.20, 854.33 665.07 C 838.75 685.93, 807.61 709.87, 776.46 733.80" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
@@ -157,19 +157,19 @@ marker path {
         <path d="M 253.70 235.37 C 215.00 249.98, 176.30 264.59, 156.95 279.13 C 137.60 293.67, 137.60 308.13, 137.60 322.60" class="edge-path" stroke-width="1" fill="none" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-SB2-CACHE-0">
-        <path d="M 210.28 733.80 C 162.49 709.87, 114.69 685.93, 90.80 641.23 C 66.90 596.53, 66.90 531.07, 73.31 489.43 C 92.53 430.00, 105.35 412.20, 105.35 412.20" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="1"/>
+        <path d="M 210.28 733.80 C 162.49 709.87, 114.69 685.93, 90.80 641.23 C 66.90 596.53, 66.90 531.07, 73.31 489.43 C 92.53 430.00, 105.35 412.20, 105.35 412.20" class="edge-path" marker-end="url(#arrow_point)" stroke-width="1" fill="none"/>
       </g>
       <g class="edge" id="edge-L-SB3-CACHE-0">
         <path d="M 742.10 733.80 C 742.10 644.40, 742.10 555.00, 656.82 496.45 C 571.53 437.89, 400.97 410.18, 230.40 382.48" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="1"/>
       </g>
       <g class="edge" id="edge-L-CACHE-SD-0">
-        <path d="M 164.56 412.20 L 284.90 519.00" class="edge-path" stroke-width="1" fill="none" marker-end="url(#arrow_point)"/>
+        <path d="M 164.56 412.20 L 284.90 519.00" class="edge-path" fill="none" marker-end="url(#arrow_point)" stroke-width="1"/>
       </g>
       <g class="edge" id="edge-L-SB1-SM1-0">
-        <path d="M 363.99 235.80 C 386.73 250.27, 409.46 264.73, 420.83 282.27 C 432.20 299.80, 432.20 320.40, 432.20 341.00" class="edge-path" stroke-width="1" fill="none" marker-end="url(#arrow_point)"/>
+        <path d="M 363.99 235.80 C 386.73 250.27, 409.46 264.73, 420.83 282.27 C 432.20 299.80, 432.20 320.40, 432.20 341.00" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-SB2-SM2-0">
-        <path d="M 263.00 786.60 C 263.00 807.20, 263.00 827.80, 263.00 842.27 C 263.00 856.73, 263.00 865.07, 263.00 873.40 C 263.00 890.07, 263.00 898.40, 263.00 898.40" class="edge-path" stroke-width="1" fill="none" marker-end="url(#arrow_point)"/>
+        <path d="M 263.00 786.60 C 263.00 807.20, 263.00 827.80, 263.00 842.27 C 263.00 856.73, 263.00 865.07, 263.00 873.40 C 263.00 890.07, 263.00 898.40, 263.00 898.40" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-SB3-SM3-0">
         <path d="M 742.10 786.60 C 742.10 807.20, 742.10 827.80, 742.10 842.27 C 742.10 856.73, 742.10 865.07, 742.10 873.40 C 742.10 890.07, 742.10 898.40, 742.10 898.40" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
@@ -178,10 +178,10 @@ marker path {
         <path d="M 439.70 519.00 C 471.80 501.20, 503.90 483.40, 519.95 443.43 C 536.00 403.47, 536.00 341.33, 511.88 302.38 C 439.53 247.66, 391.30 231.89, 391.30 231.89" class="edge-path" stroke-width="2" stroke-dasharray="3,3" fill="none" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-SD-SB2-0">
-        <path d="M 349.78 608.60 L 283.40 733.80" class="edge-path" fill="none" stroke-dasharray="3,3" stroke-width="2" marker-end="url(#arrow_point)"/>
+        <path d="M 349.78 608.60 L 283.40 733.80" class="edge-path" stroke-width="2" marker-end="url(#arrow_point)" stroke-dasharray="3,3" fill="none"/>
       </g>
       <g class="edge" id="edge-L-SD-SB3-0">
-        <path d="M 470.76 608.60 L 705.00 733.80" class="edge-path" stroke-width="2" marker-end="url(#arrow_point)" stroke-dasharray="3,3" fill="none"/>
+        <path d="M 470.76 608.60 L 705.00 733.80" class="edge-path" fill="none" stroke-width="2" stroke-dasharray="3,3" marker-end="url(#arrow_point)"/>
       </g>
     </g>
     <g class="edgeLabels">
@@ -191,7 +191,7 @@ marker path {
       </g>
       <g class="edgeLabel" id="edge-label-L-D2-D3-0">
         <rect x="1218.4015968106603" y="653.4992679119805" width="72.8" height="22" class="edge-label-bg"/>
-        <text x="1254.8015968106604" y="664.4992679119805" class="edge-label" dominant-baseline="central" text-anchor="middle">redundant</text>
+        <text x="1254.8015968106604" y="664.4992679119805" class="edge-label" text-anchor="middle" dominant-baseline="central">redundant</text>
       </g>
       <g class="edgeLabel" id="edge-label-L-SD-SB1-0">
         <rect x="499.6" y="340.3410842478889" width="72.8" height="22" class="edge-label-bg"/>
@@ -203,13 +203,13 @@ marker path {
       </g>
       <g class="edgeLabel" id="edge-label-L-SD-SB3-0">
         <rect x="558.5126624302227" y="647.3205687220548" width="72.8" height="22" class="edge-label-bg"/>
-        <text x="594.9126624302227" y="658.3205687220548" class="edge-label" text-anchor="middle" dominant-baseline="central">cache hit</text>
+        <text x="594.9126624302227" y="658.3205687220548" class="edge-label" dominant-baseline="central" text-anchor="middle">cache hit</text>
       </g>
     </g>
     <g class="nodes">
       <g class="node" id="node-B1">
         <rect x="1260.1" y="182.99999999999997" width="137.6" height="52.8"/>
-        <text x="1328.8999999999999" y="209.39999999999998" class="label" text-anchor="middle" dominant-baseline="central">cargo build</text>
+        <text x="1328.8999999999999" y="209.39999999999998" class="label" dominant-baseline="central" text-anchor="middle">cargo build</text>
       </g>
       <g class="node" id="node-B2">
         <rect x="1611.1" y="341" width="137.6" height="52.8"/>
@@ -217,23 +217,23 @@ marker path {
       </g>
       <g class="node" id="node-B3">
         <rect x="1830.7" y="537.4" width="137.6" height="52.8"/>
-        <text x="1899.5" y="563.8" class="label" dominant-baseline="central" text-anchor="middle">cargo build</text>
+        <text x="1899.5" y="563.8" class="label" text-anchor="middle" dominant-baseline="central">cargo build</text>
       </g>
       <g class="node" id="node-CACHE">
         <rect x="44.80000000000014" y="322.59999999999997" width="185.6" height="89.6" style="fill:#90EE90 !important"/>
-        <text x="137.60000000000014" y="367.4" class="label" dominant-baseline="central" style="fill: #000000" text-anchor="middle"><tspan x="137.60000000000014" y="367.4" dy="-0.6em">Shared sccache</tspan><tspan x="137.60000000000014" dy="1.2em">~/.cache/sccache</tspan></text>
+        <text x="137.60000000000014" y="367.4" class="label" style="fill: #000000" text-anchor="middle" dominant-baseline="central"><tspan x="137.60000000000014" y="367.4" dy="-0.6em">Shared sccache</tspan><tspan x="137.60000000000014" dy="1.2em">~/.cache/sccache</tspan></text>
       </g>
       <g class="node" id="node-D1">
         <rect x="1072.7" y="304.2" width="243.2" height="126.39999999999999" style="fill:#FFB6C1 !important"/>
-        <text x="1194.3" y="367.4" class="label" style="fill: #000000" text-anchor="middle" dominant-baseline="central"><tspan x="1194.3" y="367.4" dy="-1.2em">Dependencies: 95%</tspan><tspan x="1194.3" dy="1.2em">tokio, serde, ratatui,</tspan><tspan x="1194.3" dy="1.2em">selkie, resvg, etc.</tspan></text>
+        <text x="1194.3" y="367.4" class="label" text-anchor="middle" style="fill: #000000" dominant-baseline="central"><tspan x="1194.3" y="367.4" dy="-1.2em">Dependencies: 95%</tspan><tspan x="1194.3" dy="1.2em">tokio, serde, ratatui,</tspan><tspan x="1194.3" dy="1.2em">selkie, resvg, etc.</tspan></text>
       </g>
       <g class="node" id="node-D2">
         <rect x="1131.7" y="500.59999999999997" width="243.2" height="126.39999999999999" style="fill:#FFB6C1 !important"/>
-        <text x="1253.3" y="563.8" class="label" style="fill: #000000" text-anchor="middle" dominant-baseline="central"><tspan x="1253.3" y="563.8" dy="-1.2em">Dependencies: 95%</tspan><tspan x="1253.3" dy="1.2em">tokio, serde, ratatui,</tspan><tspan x="1253.3" dy="1.2em">selkie, resvg, etc.</tspan></text>
+        <text x="1253.3" y="563.8" class="label" text-anchor="middle" dominant-baseline="central" style="fill: #000000"><tspan x="1253.3" y="563.8" dy="-1.2em">Dependencies: 95%</tspan><tspan x="1253.3" dy="1.2em">tokio, serde, ratatui,</tspan><tspan x="1253.3" dy="1.2em">selkie, resvg, etc.</tspan></text>
       </g>
       <g class="node" id="node-D3">
         <rect x="1190.7" y="696.9999999999999" width="243.2" height="126.39999999999999" style="fill:#FFB6C1 !important"/>
-        <text x="1312.3" y="760.1999999999999" class="label" style="fill: #000000" dominant-baseline="central" text-anchor="middle"><tspan x="1312.3" y="760.1999999999999" dy="-1.2em">Dependencies: 95%</tspan><tspan x="1312.3" dy="1.2em">tokio, serde, ratatui,</tspan><tspan x="1312.3" dy="1.2em">selkie, resvg, etc.</tspan></text>
+        <text x="1312.3" y="760.1999999999999" class="label" dominant-baseline="central" style="fill: #000000" text-anchor="middle"><tspan x="1312.3" y="760.1999999999999" dy="-1.2em">Dependencies: 95%</tspan><tspan x="1312.3" dy="1.2em">tokio, serde, ratatui,</tspan><tspan x="1312.3" dy="1.2em">selkie, resvg, etc.</tspan></text>
       </g>
       <g class="node" id="node-M1">
         <rect x="1365.9" y="341" width="195.2" height="52.8"/>
@@ -245,19 +245,19 @@ marker path {
       </g>
       <g class="node" id="node-M3">
         <rect x="1801.9" y="733.8" width="195.2" height="52.8"/>
-        <text x="1899.5" y="760.1999999999999" class="label" text-anchor="middle" dominant-baseline="central">midtown crate: 5%</text>
+        <text x="1899.5" y="760.1999999999999" class="label" dominant-baseline="central" text-anchor="middle">midtown crate: 5%</text>
       </g>
       <g class="node" id="node-RESULT">
         <rect x="2077.1" y="25" width="300" height="89.6" style="fill:#FFD700 !important"/>
-        <text x="2227.1" y="69.8" class="label" style="fill: #000000" dominant-baseline="central" text-anchor="middle"><tspan x="2227.1" y="69.8" dy="-0.6em">Result: 3x coworkers = 1x deps + 3x delta</tspan><tspan x="2227.1" dy="1.2em">Same pattern for pnpm, GOMODCACHE, pip cache</tspan></text>
+        <text x="2227.1" y="69.8" class="label" text-anchor="middle" dominant-baseline="central" style="fill: #000000"><tspan x="2227.1" y="69.8" dy="-0.6em">Result: 3x coworkers = 1x deps + 3x delta</tspan><tspan x="2227.1" dy="1.2em">Same pattern for pnpm, GOMODCACHE, pip cache</tspan></text>
       </g>
       <g class="node" id="node-S1">
         <rect x="220.10000000000014" y="25" width="204.79999999999998" height="89.6"/>
-        <text x="322.5000000000001" y="69.8" class="label" dominant-baseline="central" text-anchor="middle"><tspan x="322.5000000000001" y="69.8" dy="-0.6em">Coworker 1</tspan><tspan x="322.5000000000001" dy="1.2em">lexington worktree</tspan></text>
+        <text x="322.5000000000001" y="69.8" class="label" text-anchor="middle" dominant-baseline="central"><tspan x="322.5000000000001" y="69.8" dy="-0.6em">Coworker 1</tspan><tspan x="322.5000000000001" dy="1.2em">lexington worktree</tspan></text>
       </g>
       <g class="node" id="node-S2">
         <rect x="525.7000000000002" y="519" width="156.8" height="89.6"/>
-        <text x="604.1000000000001" y="563.8" class="label" text-anchor="middle" dominant-baseline="central"><tspan x="604.1000000000001" y="563.8" dy="-0.6em">Coworker 2</tspan><tspan x="604.1000000000001" dy="1.2em">park worktree</tspan></text>
+        <text x="604.1000000000001" y="563.8" class="label" dominant-baseline="central" text-anchor="middle"><tspan x="604.1000000000001" y="563.8" dy="-0.6em">Coworker 2</tspan><tspan x="604.1000000000001" dy="1.2em">park worktree</tspan></text>
       </g>
       <g class="node" id="node-S3">
         <rect x="777.1000000000001" y="519" width="185.6" height="89.6"/>
@@ -265,7 +265,7 @@ marker path {
       </g>
       <g class="node" id="node-SB1">
         <rect x="253.7000000000001" y="182.99999999999997" width="137.6" height="52.8"/>
-        <text x="322.5000000000001" y="209.39999999999998" class="label" text-anchor="middle" dominant-baseline="central">cargo build</text>
+        <text x="322.5000000000001" y="209.39999999999998" class="label" dominant-baseline="central" text-anchor="middle">cargo build</text>
       </g>
       <g class="node" id="node-SB2">
         <rect x="194.20000000000005" y="733.8" width="137.6" height="52.8"/>
@@ -273,19 +273,19 @@ marker path {
       </g>
       <g class="node" id="node-SB3">
         <rect x="673.3000000000002" y="733.8" width="137.6" height="52.8"/>
-        <text x="742.1000000000001" y="760.1999999999999" class="label" text-anchor="middle" dominant-baseline="central">cargo build</text>
+        <text x="742.1000000000001" y="760.1999999999999" class="label" dominant-baseline="central" text-anchor="middle">cargo build</text>
       </g>
       <g class="node" id="node-SD">
         <rect x="242.10000000000008" y="519" width="233.6" height="89.6" style="fill:#90EE90 !important"/>
-        <text x="358.9000000000001" y="563.8" class="label" dominant-baseline="central" style="fill: #000000" text-anchor="middle"><tspan x="358.9000000000001" y="563.8" dy="-0.6em">Dependencies: 95%</tspan><tspan x="358.9000000000001" dy="1.2em">compiled once, cached</tspan></text>
+        <text x="358.9000000000001" y="563.8" class="label" text-anchor="middle" dominant-baseline="central" style="fill: #000000"><tspan x="358.9000000000001" y="563.8" dy="-0.6em">Dependencies: 95%</tspan><tspan x="358.9000000000001" dy="1.2em">compiled once, cached</tspan></text>
       </g>
       <g class="node" id="node-SM1">
         <rect x="363.40000000000003" y="341" width="137.6" height="52.8"/>
-        <text x="432.20000000000005" y="367.4" class="label" dominant-baseline="central" text-anchor="middle">midtown: 5%</text>
+        <text x="432.20000000000005" y="367.4" class="label" text-anchor="middle" dominant-baseline="central">midtown: 5%</text>
       </g>
       <g class="node" id="node-SM2">
         <rect x="194.20000000000005" y="898.3999999999999" width="137.6" height="52.8"/>
-        <text x="263.00000000000006" y="924.7999999999998" class="label" dominant-baseline="central" text-anchor="middle">midtown: 5%</text>
+        <text x="263.00000000000006" y="924.7999999999998" class="label" text-anchor="middle" dominant-baseline="central">midtown: 5%</text>
       </g>
       <g class="node" id="node-SM3">
         <rect x="673.3000000000002" y="898.3999999999999" width="137.6" height="52.8"/>
@@ -293,7 +293,7 @@ marker path {
       </g>
       <g class="node" id="node-W1">
         <rect x="1226.4999999999998" y="25" width="204.79999999999998" height="89.6"/>
-        <text x="1328.8999999999999" y="69.8" class="label" text-anchor="middle" dominant-baseline="central"><tspan x="1328.8999999999999" y="69.8" dy="-0.6em">Coworker 1</tspan><tspan x="1328.8999999999999" dy="1.2em">lexington worktree</tspan></text>
+        <text x="1328.8999999999999" y="69.8" class="label" dominant-baseline="central" text-anchor="middle"><tspan x="1328.8999999999999" y="69.8" dy="-0.6em">Coworker 1</tspan><tspan x="1328.8999999999999" dy="1.2em">lexington worktree</tspan></text>
       </g>
       <g class="node" id="node-W2">
         <rect x="1601.4999999999998" y="164.59999999999997" width="156.8" height="89.6"/>

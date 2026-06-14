@@ -1,13 +1,13 @@
 {
-  "description": "Phase 8 flowchart eval regression target after parser and label-normalization fixes.",
+  "description": "Phase 8 flowchart eval regression target after parser, label-normalization, and subgraph endpoint fixes.",
   "min_matching": 1,
-  "min_avg_structural": 0.907,
-  "max_errors": 15,
-  "max_warnings": 65,
-  "max_info": 91,
+  "min_avg_structural": 0.91,
+  "max_errors": 14,
+  "max_warnings": 64,
+  "max_info": 90,
   "max_issue_categories": {
     "error:labels_missing": 2,
-    "error:node_count": 1,
+    "error:node_count": 0,
     "error:aspect_ratio": 12
   }
 }

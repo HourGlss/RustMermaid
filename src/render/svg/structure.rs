@@ -718,7 +718,8 @@ fn rect_node_bounds(node: roxmltree::Node<'_, '_>) -> Option<NodeBounds> {
         return None;
     }
 
-    node_bounds_from_rect(node, 0.0, 0.0, node.attribute("id").unwrap_or(""))
+    let (offset_x, offset_y) = accumulated_translate(node);
+    node_bounds_from_rect(node, offset_x, offset_y, node.attribute("id").unwrap_or(""))
 }
 
 fn is_node_rect_class(class: &str) -> bool {
@@ -738,7 +739,11 @@ fn group_node_bounds(node: roxmltree::Node<'_, '_>) -> Option<NodeBounds> {
         return None;
     }
 
-    let (cx, cy) = node.attribute("transform").and_then(parse_translate)?;
+    let (cx, cy) = accumulated_translate(node);
+    if cx == 0.0 && cy == 0.0 && node.attribute("transform").is_none() {
+        return None;
+    }
+
     group_path_bounds(node, class, id, cx, cy, is_timeline_node)
         .or_else(|| architecture_group_bounds(node, id, cx, cy, is_architecture_node))
         .or_else(|| child_rect_group_bounds(node, id, cx, cy))
@@ -765,6 +770,7 @@ fn is_node_group(
         || (class.contains("node")
             && (id.contains("entity")
                 || id.starts_with("block-")
+                || id.starts_with("flowchart-")
                 || id.starts_with("id-")
                 || id.starts_with("id")
                 || id.starts_with("node-")))
@@ -910,7 +916,7 @@ fn parse_node_attr(node: roxmltree::Node<'_, '_>, attr: &str) -> f64 {
 fn collect_edge_paths(doc: &roxmltree::Document, geometry: &mut EdgeGeometry) {
     for node in doc.descendants().filter(is_edge_path_node) {
         if let Some(d) = node.attribute("d") {
-            collect_edge_path(d, geometry);
+            collect_edge_path(d, accumulated_translate(node), geometry);
         }
     }
 }
@@ -929,10 +935,13 @@ fn is_edge_path_node(node: &roxmltree::Node<'_, '_>) -> bool {
             || class.contains("transition"))
 }
 
-fn collect_edge_path(d: &str, geometry: &mut EdgeGeometry) {
+fn collect_edge_path(d: &str, offset: (f64, f64), geometry: &mut EdgeGeometry) {
     let Some((start, second_point, end)) = parse_path_with_directions(d) else {
         return;
     };
+    let start = translate_point(start, offset);
+    let second_point = second_point.map(|point| translate_point(point, offset));
+    let end = translate_point(end, offset);
 
     geometry
         .edge_endpoints
@@ -945,6 +954,10 @@ fn collect_edge_path(d: &str, geometry: &mut EdgeGeometry) {
     geometry
         .edge_details
         .push(edge_detail(start, end, best_start, best_end));
+}
+
+fn translate_point(point: (f64, f64), offset: (f64, f64)) -> (f64, f64) {
+    (point.0 + offset.0, point.1 + offset.1)
 }
 
 fn best_edge_attachments(
@@ -1058,17 +1071,9 @@ fn extract_text_bounds(doc: &roxmltree::Document, node_bounds: &[NodeBounds]) ->
                 .and_then(|s| s.parse::<f64>().ok())
                 .unwrap_or(0.0);
 
-            // Accumulate transforms from all ancestor groups
-            let mut current = node.parent();
-            while let Some(parent) = current {
-                if let Some(transform) = parent.attribute("transform") {
-                    if let Some((tx, ty)) = parse_translate(transform) {
-                        x += tx;
-                        y += ty;
-                    }
-                }
-                current = parent.parent();
-            }
+            let (tx, ty) = accumulated_translate(node);
+            x += tx;
+            y += ty;
 
             // Estimate text width based on content length and font size
             let font_size = extract_font_size(&node).unwrap_or(16.0);
@@ -1281,6 +1286,24 @@ fn parse_translate(transform: &str) -> Option<(f64, f64)> {
         }
     }
     None
+}
+
+fn accumulated_translate(node: roxmltree::Node<'_, '_>) -> (f64, f64) {
+    let mut x = 0.0;
+    let mut y = 0.0;
+    let mut current = Some(node);
+
+    while let Some(current_node) = current {
+        if let Some(transform) = current_node.attribute("transform") {
+            if let Some((tx, ty)) = parse_translate(transform) {
+                x += tx;
+                y += ty;
+            }
+        }
+        current = current_node.parent();
+    }
+
+    (x, y)
 }
 
 /// Parse rectangular path dimensions from mermaid's path d attribute
@@ -2377,6 +2400,39 @@ mod tests {
         assert!(
             !junction_bounds.is_empty(),
             "Should find junction bounds at (360, 160)"
+        );
+    }
+
+    #[test]
+    fn test_nested_transforms_apply_to_flowchart_geometry() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
+            <g transform="translate(100, 200)">
+                <g class="nodes">
+                    <g class="node default" id="flowchart-A-0" transform="translate(50, 60)">
+                        <rect class="basic label-container" x="-20" y="-10" width="40" height="20"/>
+                    </g>
+                    <g class="node default" id="flowchart-B-1" transform="translate(150, 60)">
+                        <rect class="basic label-container" x="-20" y="-10" width="40" height="20"/>
+                    </g>
+                </g>
+                <g class="edgePaths">
+                    <path class="flowchart-link" data-edge="true" d="M70,60L130,60"/>
+                </g>
+            </g>
+        </svg>"#;
+
+        let structure = SvgStructure::from_svg(svg).unwrap();
+        let bounds = &structure.edge_geometry.node_bounds;
+        let first = bounds
+            .iter()
+            .find(|bounds| bounds.id == "flowchart-A-0")
+            .expect("node A bounds should be extracted");
+
+        assert_eq!(first.x, 130.0);
+        assert_eq!(first.y, 250.0);
+        assert_eq!(
+            structure.edge_geometry.edge_endpoints,
+            vec![(170.0, 260.0, 230.0, 260.0)]
         );
     }
 

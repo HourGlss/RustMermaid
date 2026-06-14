@@ -112,40 +112,40 @@ marker path {
     </g>
     <g class="edgePaths">
       <g class="edge" id="edge-L-A1-B1-0">
-        <path d="M 577.20 77.80 C 577.20 86.13, 577.20 94.47, 577.20 102.80 C 577.20 111.13, 577.20 119.47, 577.20 127.80" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="1"/>
+        <path d="M 577.20 77.80 C 577.20 86.13, 577.20 94.47, 577.20 102.80 C 577.20 111.13, 577.20 119.47, 577.20 127.80" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
       </g>
       <g class="edge" id="edge-L-B1-C1-0">
-        <path d="M 577.20 180.60 C 577.20 188.93, 577.20 197.27, 577.20 205.60 C 577.20 213.93, 577.20 222.27, 577.20 230.60" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
+        <path d="M 577.20 180.60 C 577.20 188.93, 577.20 197.27, 577.20 205.60 C 577.20 213.93, 577.20 222.27, 577.20 230.60" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="1"/>
       </g>
       <g class="edge" id="edge-L-C1-D1-0">
-        <path d="M 577.20 283.40 C 577.20 291.73, 577.20 300.07, 577.20 308.40 C 577.20 316.73, 577.20 325.07, 577.20 333.40" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
+        <path d="M 577.20 283.40 C 577.20 291.73, 577.20 300.07, 577.20 308.40 C 577.20 316.73, 577.20 325.07, 577.20 333.40" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-D1-E1-0">
-        <path d="M 577.20 386.20 C 577.20 394.53, 577.20 402.87, 577.20 414.27 C 577.20 425.67, 577.20 440.13, 577.20 454.60" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
+        <path d="M 577.20 386.20 C 577.20 394.53, 577.20 402.87, 577.20 414.27 C 577.20 425.67, 577.20 440.13, 577.20 454.60" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
       </g>
       <g class="edge" id="edge-L-E1-F1-0">
-        <path d="M 577.20 507.40 C 577.20 521.87, 577.20 536.33, 577.20 547.73 C 577.20 559.13, 577.20 567.47, 577.20 575.80" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
+        <path d="M 577.20 507.40 C 577.20 521.87, 577.20 536.33, 577.20 547.73 C 577.20 559.13, 577.20 567.47, 577.20 575.80" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-F1-G1-0">
         <path d="M 577.20 665.40 C 577.20 673.73, 577.20 682.07, 577.20 690.40 C 577.20 698.73, 577.20 707.07, 577.20 715.40" class="edge-path" fill="none" stroke-dasharray="3,3" stroke-width="2" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-A2-B2-0">
-        <path d="M 180.80 77.80 C 180.80 86.13, 180.80 94.47, 180.80 102.80 C 180.80 111.13, 180.80 119.47, 180.80 127.80" class="edge-path" stroke-width="1" fill="none" marker-end="url(#arrow_point)"/>
+        <path d="M 180.80 77.80 C 180.80 86.13, 180.80 94.47, 180.80 102.80 C 180.80 111.13, 180.80 119.47, 180.80 127.80" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
       </g>
       <g class="edge" id="edge-L-B2-C2-0">
-        <path d="M 180.80 180.60 C 180.80 188.93, 180.80 197.27, 180.80 205.60 C 180.80 213.93, 180.80 222.27, 180.80 230.60" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="1"/>
+        <path d="M 180.80 180.60 C 180.80 188.93, 180.80 197.27, 180.80 205.60 C 180.80 213.93, 180.80 222.27, 180.80 230.60" class="edge-path" fill="none" marker-end="url(#arrow_point)" stroke-width="1"/>
       </g>
       <g class="edge" id="edge-L-C2-D2-0">
-        <path d="M 180.80 283.40 C 180.80 291.73, 180.80 300.07, 180.80 308.40 C 180.80 316.73, 180.80 325.07, 180.80 333.40" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
+        <path d="M 180.80 283.40 C 180.80 291.73, 180.80 300.07, 180.80 308.40 C 180.80 316.73, 180.80 325.07, 180.80 333.40" class="edge-path" stroke-width="1" fill="none" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-D2-E2-0">
-        <path d="M 180.80 386.20 C 180.80 394.53, 180.80 402.87, 180.80 411.20 C 180.80 419.53, 180.80 427.87, 180.80 436.20" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
+        <path d="M 180.80 386.20 C 180.80 394.53, 180.80 402.87, 180.80 411.20 C 180.80 419.53, 180.80 427.87, 180.80 436.20" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
       </g>
       <g class="edge" id="edge-L-E2-F2-0">
-        <path d="M 180.80 525.80 C 180.80 534.13, 180.80 542.47, 180.80 550.80 C 180.80 559.13, 180.80 567.47, 180.80 575.80" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
+        <path d="M 180.80 525.80 C 180.80 534.13, 180.80 542.47, 180.80 550.80 C 180.80 559.13, 180.80 567.47, 180.80 575.80" class="edge-path" marker-end="url(#arrow_point)" stroke-width="1" fill="none"/>
       </g>
       <g class="edge" id="edge-L-F2-G2-0">
-        <path d="M 180.80 665.40 C 180.80 673.73, 180.80 682.07, 180.80 690.40 C 180.80 698.73, 180.80 707.07, 180.80 715.40" class="edge-path" stroke-width="2" marker-end="url(#arrow_point)" fill="none" stroke-dasharray="3,3"/>
+        <path d="M 180.80 665.40 C 180.80 673.73, 180.80 682.07, 180.80 690.40 C 180.80 698.73, 180.80 707.07, 180.80 715.40" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="2" stroke-dasharray="3,3"/>
       </g>
     </g>
     <g class="edgeLabels">
@@ -158,7 +158,7 @@ marker path {
       </g>
       <g class="node" id="node-A2">
         <rect x="97.59999999999995" y="25.000000000000007" width="166.4" height="52.8"/>
-        <text x="180.79999999999995" y="51.400000000000006" class="label" dominant-baseline="central" text-anchor="middle">render_message</text>
+        <text x="180.79999999999995" y="51.400000000000006" class="label" text-anchor="middle" dominant-baseline="central">render_message</text>
       </g>
       <g class="node" id="node-B1">
         <rect x="489.20000000000005" y="127.80000000000001" width="176" height="52.8"/>
@@ -166,11 +166,11 @@ marker path {
       </g>
       <g class="node" id="node-B2">
         <rect x="92.79999999999995" y="127.80000000000001" width="176" height="52.8"/>
-        <text x="180.79999999999995" y="154.20000000000002" class="label" dominant-baseline="central" text-anchor="middle">Vec&amp;lt;Line&amp;gt;</text>
+        <text x="180.79999999999995" y="154.20000000000002" class="label" text-anchor="middle" dominant-baseline="central">Vec&amp;lt;Line&amp;gt;</text>
       </g>
       <g class="node" id="node-C1">
         <rect x="494.00000000000006" y="230.6" width="166.4" height="52.8"/>
-        <text x="577.2" y="257" class="label" text-anchor="middle" dominant-baseline="central">flat_map spans</text>
+        <text x="577.2" y="257" class="label" dominant-baseline="central" text-anchor="middle">flat_map spans</text>
       </g>
       <g class="node" id="node-C2">
         <rect x="83.19999999999996" y="230.6" width="195.2" height="52.8"/>
@@ -178,7 +178,7 @@ marker path {
       </g>
       <g class="node" id="node-D1">
         <rect x="498.80000000000007" y="333.40000000000003" width="156.8" height="52.8"/>
-        <text x="577.2" y="359.8" class="label" text-anchor="middle" dominant-baseline="central">join with \\n</text>
+        <text x="577.2" y="359.8" class="label" dominant-baseline="central" text-anchor="middle">join with \\n</text>
       </g>
       <g class="node" id="node-D2">
         <rect x="87.99999999999996" y="333.40000000000003" width="185.6" height="52.8"/>
@@ -186,7 +186,7 @@ marker path {
       </g>
       <g class="node" id="node-E1">
         <rect x="498.80000000000007" y="454.6000000000001" width="156.8" height="52.8"/>
-        <text x="577.2" y="481.00000000000006" class="label" text-anchor="middle" dominant-baseline="central">Single String</text>
+        <text x="577.2" y="481.00000000000006" class="label" dominant-baseline="central" text-anchor="middle">Single String</text>
       </g>
       <g class="node" id="node-E2">
         <rect x="83.19999999999996" y="436.20000000000005" width="195.2" height="89.6"/>
@@ -194,7 +194,7 @@ marker path {
       </g>
       <g class="node" id="node-F1">
         <rect x="484.40000000000003" y="575.8000000000001" width="185.6" height="89.6"/>
-        <text x="577.2" y="620.6" class="label" text-anchor="middle" dominant-baseline="central"><tspan x="577.2" y="620.6" dy="-0.6em">.contains</tspan><tspan x="577.2" dy="1.2em">indent+separator</tspan></text>
+        <text x="577.2" y="620.6" class="label" dominant-baseline="central" text-anchor="middle"><tspan x="577.2" y="620.6" dy="-0.6em">.contains</tspan><tspan x="577.2" dy="1.2em">indent+separator</tspan></text>
       </g>
       <g class="node" id="node-F2">
         <rect x="83.19999999999996" y="575.8000000000001" width="195.2" height="89.6"/>
@@ -202,11 +202,11 @@ marker path {
       </g>
       <g class="node" id="node-G1">
         <rect x="431.6" y="715.4000000000001" width="291.2" height="89.6" style="fill:#faa !important;stroke:#f00 !important"/>
-        <text x="577.2" y="760.2" class="label" dominant-baseline="central" text-anchor="middle" style="fill: #000000"><tspan x="577.2" y="760.2" dy="-0.6em">Problem: Can&apos;t verify</tspan><tspan x="577.2" dy="1.2em">which line has which indent</tspan></text>
+        <text x="577.2" y="760.2" class="label" style="fill: #000000" dominant-baseline="central" text-anchor="middle"><tspan x="577.2" y="760.2" dy="-0.6em">Problem: Can&apos;t verify</tspan><tspan x="577.2" dy="1.2em">which line has which indent</tspan></text>
       </g>
       <g class="node" id="node-G2">
         <rect x="39.99999999999994" y="715.4000000000001" width="281.6" height="89.6" style="fill:#afa !important;stroke:#0f0 !important"/>
-        <text x="180.79999999999995" y="760.2" class="label" text-anchor="middle" dominant-baseline="central" style="fill: #000000"><tspan x="180.79999999999995" y="760.2" dy="-0.6em">Catches: separator correct</tspan><tspan x="180.79999999999995" dy="1.2em">but ASCII art wrong indent</tspan></text>
+        <text x="180.79999999999995" y="760.2" class="label" dominant-baseline="central" style="fill: #000000" text-anchor="middle"><tspan x="180.79999999999995" y="760.2" dy="-0.6em">Catches: separator correct</tspan><tspan x="180.79999999999995" dy="1.2em">but ASCII art wrong indent</tspan></text>
       </g>
     </g>
   </g>

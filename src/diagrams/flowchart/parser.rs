@@ -200,8 +200,21 @@ fn process_vertex(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> Re
         }
     }
 
-    db.add_vertex_simple(&id, text.as_ref().map(|t| t.text.as_str()), vertex_type);
+    if !is_bare_subgraph_reference(db, &id, text.as_ref(), vertex_type.as_ref()) {
+        db.add_vertex_simple(&id, text.as_ref().map(|t| t.text.as_str()), vertex_type);
+    }
     Ok(id)
+}
+
+fn is_bare_subgraph_reference(
+    db: &FlowchartDb,
+    id: &str,
+    text: Option<&FlowText>,
+    vertex_type: Option<&FlowVertexType>,
+) -> bool {
+    text.is_none()
+        && vertex_type.is_none()
+        && db.subgraphs().iter().any(|subgraph| subgraph.id == id)
 }
 
 fn process_vertex_shape(pair: pest::iterators::Pair<Rule>) -> Result<(FlowVertexType, FlowText)> {
@@ -903,6 +916,32 @@ end"#;
         assert_eq!(subgraphs.len(), 1);
         assert_eq!(subgraphs[0].title, "Problem");
         assert_eq!(subgraphs[0].nodes, vec!["A".to_string(), "B".to_string()]);
+    }
+
+    #[test]
+    fn test_parse_subgraph_edges_do_not_create_duplicate_vertices() {
+        let input = r#"flowchart TB
+subgraph Terminal["Terminal Output Layers"]
+    Layer1 --> Layer2
+end
+subgraph Problem["The Fragility"]
+    P1 --> P2
+end
+Terminal -.-> Problem"#;
+        let result = parse(input);
+        assert!(result.is_ok(), "Failed to parse: {:?}", result);
+        let db = result.unwrap();
+
+        assert_eq!(db.subgraphs().len(), 2);
+        assert!(
+            !db.get_vertices().contains_key("Terminal"),
+            "subgraph edge endpoint should not become a regular vertex"
+        );
+        assert!(
+            !db.get_vertices().contains_key("Problem"),
+            "subgraph edge endpoint should not become a regular vertex"
+        );
+        assert_eq!(db.get_vertices().len(), 4);
     }
 
     #[test]

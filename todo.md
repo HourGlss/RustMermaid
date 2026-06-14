@@ -237,7 +237,7 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
   - Output: eval structural comparison HTML-decodes or otherwise canonicalizes labels before comparing.
   - Test: `labels_missing` / `labels_extra` pairs caused only by HTML entity escaping disappear without changing rendered SVG text.
 
-- [ ] Fix remaining flowchart node-count mismatches.
+- [x] Fix remaining flowchart node-count mismatches.
   - Input: eval comparison files with `node_count` errors, starting with `channel_flowchart_terminal_layers`.
   - Output: Selkie and reference structural extraction agree on node counts for those diagrams.
   - Test: flowchart eval reports zero `node_count` errors.

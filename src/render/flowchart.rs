@@ -255,6 +255,49 @@ mod tests {
     }
 
     #[test]
+    fn test_subgraph_edge_endpoints_are_single_layout_nodes() {
+        use crate::diagrams::flowchart::parse;
+
+        let input = r#"flowchart TB
+subgraph Terminal["Terminal Output Layers"]
+    Layer1 --> Layer2
+end
+subgraph Problem["The Fragility"]
+    P1 --> P2
+end
+Terminal -.-> Problem"#;
+
+        let db = parse(input).unwrap();
+        let estimator = CharacterSizeEstimator::default();
+        let graph = db.to_layout_graph(&estimator).unwrap();
+
+        assert_eq!(
+            graph
+                .nodes
+                .iter()
+                .filter(|node| node.id == "Terminal")
+                .count(),
+            1
+        );
+        assert_eq!(
+            graph
+                .nodes
+                .iter()
+                .filter(|node| node.id == "Problem")
+                .count(),
+            1
+        );
+        assert_eq!(
+            graph
+                .nodes
+                .iter()
+                .filter(|node| node.metadata.get("is_group").is_some())
+                .count(),
+            2
+        );
+    }
+
+    #[test]
     fn test_edge_labels() {
         let mut db = FlowchartDb::new();
         db.add_vertex_simple("A", Some("Start"), None);

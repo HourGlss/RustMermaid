@@ -707,10 +707,10 @@ impl FlowchartDb {
         link_id: Option<&str>,
     ) {
         // Ensure vertices exist
-        if !self.vertices.contains_key(start) {
+        if !self.has_vertex_or_subgraph(start) {
             self.add_vertex_simple(start, None, None);
         }
-        if !self.vertices.contains_key(end) {
+        if !self.has_vertex_or_subgraph(end) {
             self.add_vertex_simple(end, None, None);
         }
 
@@ -726,6 +726,10 @@ impl FlowchartDb {
         };
 
         self.add_single_link(start, end, Some(&flow_link), link_id);
+    }
+
+    fn has_vertex_or_subgraph(&self, id: &str) -> bool {
+        self.vertices.contains_key(id) || self.subgraph_lookup.contains_key(id)
     }
 
     /// Add a subgraph (simplified for parser)
