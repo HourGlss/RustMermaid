@@ -217,22 +217,22 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
 
 ## Phase 8: Flowchart Eval Parity
 
-- [ ] Make flowchart eval reproducible without local Mermaid CLI noise.
+- [x] Make flowchart eval reproducible without local Mermaid CLI noise.
   - Input: `cargo run --features eval --bin selkie -- eval --type flowchart --use-repo-svgs --brief` in an environment without `mmdc`.
   - Output: eval completes with structural report output and no failed reference PNG generation warnings, or exposes an explicit `--skip-comparison-pngs` mode.
   - Test: eval command exits with status determined only by actual parity results, not by missing `mmdc` or reference PNG setup.
 
-- [ ] Add a flowchart eval baseline report.
+- [x] Add a flowchart eval baseline report.
   - Input: current flowchart eval artifacts from `eval-report/selkie-eval-*`.
   - Output: checked-in or generated summary that records total diagrams, matching count, structural score, issue counts, and issue categories.
   - Test: summary tooling reports the current baseline as 34 diagrams, 1 matching diagram, 29 errors, 66 warnings, and 95 info items until parity work changes those counts.
 
-- [ ] Fix missing flowchart subgraph labels.
+- [x] Fix missing flowchart subgraph labels.
   - Input: eval comparison files reporting missing cluster labels such as `Current Code (line 612)`, `Fix: Use Array`, `Clippy's Concern`, and other `subgraph` titles.
   - Output: rendered SVG and extracted structure include Mermaid-compatible subgraph labels.
   - Test: flowchart eval no longer reports `labels_missing` errors for subgraph titles in the docs/sources flowchart corpus.
 
-- [ ] Normalize escaped label comparisons in eval.
+- [x] Normalize escaped label comparisons in eval.
   - Input: comparison cases where Selkie extracts `Vec&lt;Effect&gt;` and the reference extracts `Vec<Effect>`.
   - Output: eval structural comparison HTML-decodes or otherwise canonicalizes labels before comparing.
   - Test: `labels_missing` / `labels_extra` pairs caused only by HTML entity escaping disappear without changing rendered SVG text.
@@ -252,7 +252,7 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
   - Output: edge endpoints attach to node/shape boundaries in a way that more closely matches Mermaid reference output.
   - Test: flowchart eval reduces `edge_positions` warnings while `cargo test --features all-formats` and the 800-node / 1000-edge acceptance benchmark still pass.
 
-- [ ] Define a Phase 8 completion gate.
+- [x] Define a Phase 8 completion gate.
   - Input: improved flowchart eval report after the structural and layout fixes.
   - Output: explicit target thresholds for matching count, structural score, and allowed warning categories.
   - Test: a local command can compare current eval output against the Phase 8 target and fail on regressions.

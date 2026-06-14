@@ -1,0 +1,27 @@
+{
+  "eval_dir": "eval-report/selkie-eval-d8a70680",
+  "total": 34,
+  "matching": 1,
+  "parity_percent": 2.9411764705882355,
+  "avg_structural": 0.8902145698730313,
+  "issue_counts": {
+    "errors": 29,
+    "warnings": 66,
+    "info": 95,
+    "visual_only": 0
+  },
+  "issue_categories": {
+    "info:colors": 33,
+    "info:edge_details": 33,
+    "warning:edge_positions": 33,
+    "warning:dimensions": 23,
+    "info:dimensions": 22,
+    "error:labels_missing": 17,
+    "error:aspect_ratio": 11,
+    "info:labels_extra": 7,
+    "warning:aspect_ratio": 5,
+    "warning:stroke_width": 4,
+    "error:node_count": 1,
+    "warning:shapes": 1
+  }
+}

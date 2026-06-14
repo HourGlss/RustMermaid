@@ -446,13 +446,14 @@ fn check_edge_count(selkie: &SvgStructure, reference: &SvgStructure, issues: &mu
 
 /// Check for missing labels - ERROR if labels from reference are missing
 fn check_missing_labels(selkie: &SvgStructure, reference: &SvgStructure, issues: &mut Vec<Issue>) {
-    let selkie_labels: HashSet<_> = selkie.labels.iter().collect();
-    let reference_labels: HashSet<_> = reference.labels.iter().collect();
+    let selkie_labels = canonical_label_set(&selkie.labels);
+    let reference_labels = canonical_label_set(&reference.labels);
 
-    let missing: Vec<_> = reference_labels
+    let mut missing: Vec<_> = reference_labels
         .difference(&selkie_labels)
         .cloned()
         .collect();
+    missing.sort();
 
     if !missing.is_empty() {
         issues.push(
@@ -466,13 +467,14 @@ fn check_missing_labels(selkie: &SvgStructure, reference: &SvgStructure, issues:
 
 /// Check for extra labels - INFO (acceptable variation)
 fn check_extra_labels(selkie: &SvgStructure, reference: &SvgStructure, issues: &mut Vec<Issue>) {
-    let selkie_labels: HashSet<_> = selkie.labels.iter().collect();
-    let reference_labels: HashSet<_> = reference.labels.iter().collect();
+    let selkie_labels = canonical_label_set(&selkie.labels);
+    let reference_labels = canonical_label_set(&reference.labels);
 
-    let extra: Vec<_> = selkie_labels
+    let mut extra: Vec<_> = selkie_labels
         .difference(&reference_labels)
         .cloned()
         .collect();
+    extra.sort();
 
     if !extra.is_empty() {
         issues.push(Issue::info(
@@ -480,6 +482,117 @@ fn check_extra_labels(selkie: &SvgStructure, reference: &SvgStructure, issues: &
             format!("Extra labels in selkie: {:?}", extra),
         ));
     }
+}
+
+fn canonical_label_set(labels: &[String]) -> HashSet<String> {
+    labels.iter().map(|label| canonical_label(label)).collect()
+}
+
+fn canonical_label(label: &str) -> String {
+    decode_basic_html_entities(&strip_formatting_html_tags(label))
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn strip_formatting_html_tags(label: &str) -> String {
+    if !label.contains('<') {
+        return label.to_string();
+    }
+
+    let mut stripped = String::with_capacity(label.len());
+    let mut rest = label;
+
+    while let Some(start) = rest.find('<') {
+        stripped.push_str(&rest[..start]);
+        let tag_start = &rest[start..];
+
+        if let Some(end) = tag_start.find('>') {
+            let tag = &tag_start[1..end];
+            if let Some(replacement) = formatting_tag_replacement(tag) {
+                stripped.push_str(replacement);
+                rest = &tag_start[end + 1..];
+                continue;
+            }
+        }
+
+        stripped.push('<');
+        rest = &tag_start[1..];
+    }
+
+    stripped.push_str(rest);
+    stripped
+}
+
+fn formatting_tag_replacement(tag: &str) -> Option<&'static str> {
+    let tag_name = tag
+        .trim()
+        .trim_start_matches('/')
+        .split(|ch: char| ch.is_whitespace() || ch == '/')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    match tag_name.as_str() {
+        "br" => Some(" "),
+        "b" | "strong" | "i" | "em" | "u" | "span" | "font" => Some(""),
+        _ => None,
+    }
+}
+
+fn decode_basic_html_entities(label: &str) -> String {
+    if !label.contains('&') {
+        return label.to_string();
+    }
+
+    let mut decoded = String::with_capacity(label.len());
+    let mut rest = label;
+
+    while let Some(start) = rest.find('&') {
+        decoded.push_str(&rest[..start]);
+        let entity_start = &rest[start + 1..];
+
+        if let Some(end) = entity_start.find(';') {
+            let entity = &entity_start[..end];
+            if let Some(value) = decode_html_entity(entity) {
+                decoded.push_str(&value);
+                rest = &entity_start[end + 1..];
+                continue;
+            }
+        }
+
+        decoded.push('&');
+        rest = entity_start;
+    }
+
+    decoded.push_str(rest);
+    decoded
+}
+
+fn decode_html_entity(entity: &str) -> Option<String> {
+    match entity {
+        "lt" => Some("<".to_string()),
+        "gt" => Some(">".to_string()),
+        "amp" => Some("&".to_string()),
+        "quot" => Some("\"".to_string()),
+        "apos" => Some("'".to_string()),
+        _ => decode_numeric_html_entity(entity),
+    }
+}
+
+fn decode_numeric_html_entity(entity: &str) -> Option<String> {
+    let value = if let Some(hex) = entity
+        .strip_prefix("#x")
+        .or_else(|| entity.strip_prefix("#X"))
+    {
+        u32::from_str_radix(hex, 16).ok()?
+    } else if let Some(decimal) = entity.strip_prefix('#') {
+        decimal.parse::<u32>().ok()?
+    } else {
+        return None;
+    };
+
+    char::from_u32(value).map(|ch| ch.to_string())
 }
 
 /// Check dimensions - WARNING if >20% off, INFO if >5% off
@@ -1640,8 +1753,8 @@ pub fn calculate_similarity(selkie: &SvgStructure, reference: &SvgStructure) -> 
     }
 
     // Label similarity
-    let selkie_labels: HashSet<_> = selkie.labels.iter().collect();
-    let reference_labels: HashSet<_> = reference.labels.iter().collect();
+    let selkie_labels = canonical_label_set(&selkie.labels);
+    let reference_labels = canonical_label_set(&reference.labels);
     let common = selkie_labels.intersection(&reference_labels).count() as f64;
     let total = selkie_labels.len().max(reference_labels.len()) as f64;
     if total > 0.0 {
@@ -2954,6 +3067,50 @@ mod tests {
         assert!(
             has_missing_label_error,
             "Should have error for missing labels"
+        );
+    }
+
+    #[test]
+    fn test_escaped_labels_compare_canonically() {
+        let selkie = make_structure(
+            1,
+            0,
+            vec![
+                "Vec&lt;Effect&gt;",
+                "A &amp; B",
+                "cleanup_orphaned_worktrees limit: Some<b>2</b>",
+                "Re-tracked with <b>warned_at: None</b>",
+                "OrphanTracker::prune<b>&unmerged</b>",
+            ],
+        );
+        let reference = make_structure(
+            1,
+            0,
+            vec![
+                "Vec<Effect>",
+                "A & B",
+                "cleanup_orphaned_worktrees limit: Some2",
+                "Re-tracked with warned_at: None",
+                "OrphanTracker::prune&unmerged",
+            ],
+        );
+
+        let issues = check_structure(&selkie, &reference, &CheckConfig::default());
+        assert!(
+            !issues.iter().any(|i| i.check == "labels_missing"),
+            "HTML entity escaping alone should not create missing labels: {:?}",
+            issues
+        );
+        assert!(
+            !issues.iter().any(|i| i.check == "labels_extra"),
+            "HTML entity escaping alone should not create extra labels: {:?}",
+            issues
+        );
+
+        let sim = calculate_similarity(&selkie, &reference);
+        assert!(
+            (sim - 1.0).abs() < 0.01,
+            "Escaped and decoded labels should have 1.0 similarity, got {sim}"
         );
     }
 

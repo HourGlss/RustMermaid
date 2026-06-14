@@ -596,6 +596,7 @@ fn process_subgraph(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> 
     let mut id = String::new();
     let mut title = None;
     let mut subgraph_dir: Option<String> = None;
+    let mut subgraph_nodes: Vec<String> = Vec::new();
 
     // Track existing vertices before processing subgraph content
     let existing_vertices: std::collections::HashSet<String> =
@@ -608,6 +609,11 @@ fn process_subgraph(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> 
                     match i.as_rule() {
                         Rule::identifier => {
                             id = i.as_str().to_string();
+                        }
+                        Rule::quoted_string => {
+                            let quoted = unquote(i.as_str());
+                            id = quoted.clone();
+                            title = Some(quoted);
                         }
                         Rule::text => {
                             let flow_text = process_text(i)?;
@@ -632,6 +638,12 @@ fn process_subgraph(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> 
                                     }
                                 }
                             } else {
+                                if stmt_inner.as_rule() == Rule::vertex_statement {
+                                    append_unique_node_ids(
+                                        &mut subgraph_nodes,
+                                        collect_vertex_statement_node_ids(stmt_inner.clone()),
+                                    );
+                                }
                                 process_rule(stmt_inner, db)?;
                             }
                         }
@@ -649,14 +661,48 @@ fn process_subgraph(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> 
         .filter(|k| !existing_vertices.contains(*k))
         .cloned()
         .collect();
+    append_unique_node_ids(&mut subgraph_nodes, new_vertices);
 
     db.add_subgraph_with_dir(
         &id,
         title.as_deref().unwrap_or(&id),
-        new_vertices,
+        subgraph_nodes,
         subgraph_dir,
     );
     Ok(())
+}
+
+fn collect_vertex_statement_node_ids(pair: pest::iterators::Pair<Rule>) -> Vec<String> {
+    let mut node_ids = Vec::new();
+    collect_vertex_node_ids(pair, &mut node_ids);
+    node_ids
+}
+
+fn collect_vertex_node_ids(pair: pest::iterators::Pair<Rule>, node_ids: &mut Vec<String>) {
+    if pair.as_rule() == Rule::vertex {
+        for inner in pair.into_inner() {
+            if inner.as_rule() == Rule::identifier {
+                let id = inner.as_str().to_string();
+                if !node_ids.contains(&id) {
+                    node_ids.push(id);
+                }
+                break;
+            }
+        }
+        return;
+    }
+
+    for inner in pair.into_inner() {
+        collect_vertex_node_ids(inner, node_ids);
+    }
+}
+
+fn append_unique_node_ids(node_ids: &mut Vec<String>, new_ids: Vec<String>) {
+    for id in new_ids {
+        if !node_ids.contains(&id) {
+            node_ids.push(id);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -775,6 +821,22 @@ end"#;
     }
 
     #[test]
+    fn test_parse_quoted_subgraph_title() {
+        let input = r#"flowchart TD
+subgraph "Current Code (line 612)"
+    A --> B
+end"#;
+        let result = parse(input);
+        assert!(result.is_ok(), "Failed to parse: {:?}", result);
+        let db = result.unwrap();
+
+        let subgraphs = db.subgraphs();
+        assert_eq!(subgraphs.len(), 1);
+        assert_eq!(subgraphs[0].id, "Current Code (line 612)");
+        assert_eq!(subgraphs[0].title, "Current Code (line 612)");
+    }
+
+    #[test]
     fn test_parse_subgraph_with_direction() {
         let input = r#"flowchart LR
 subgraph sub1[Title]
@@ -822,6 +884,25 @@ end"#;
             subgraph.dir, None,
             "Subgraph without direction statement should have dir=None"
         );
+    }
+
+    #[test]
+    fn test_parse_subgraph_with_existing_node_members() {
+        let input = r#"flowchart TD
+A --> B
+subgraph Problem
+direction TB
+A
+B
+end"#;
+        let result = parse(input);
+        assert!(result.is_ok(), "Failed to parse: {:?}", result);
+        let db = result.unwrap();
+
+        let subgraphs = db.subgraphs();
+        assert_eq!(subgraphs.len(), 1);
+        assert_eq!(subgraphs[0].title, "Problem");
+        assert_eq!(subgraphs[0].nodes, vec!["A".to_string(), "B".to_string()]);
     }
 
     #[test]

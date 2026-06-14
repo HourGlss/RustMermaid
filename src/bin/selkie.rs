@@ -164,6 +164,7 @@ Examples:
   selkie eval ./diagrams/         Evaluate .mmd files from directory
   selkie eval --brief             Compact summary output
   selkie eval --verbose           Show detailed per-diagram diffs
+  selkie eval --use-repo-svgs --skip-comparison-pngs
 ")]
 struct EvalArgs {
     /// Input to evaluate: JSON file, directory, .mmd file, or omit for gallery samples
@@ -202,6 +203,11 @@ struct EvalArgs {
     /// Useful in CI where Playwright/Chromium may not be available.
     #[arg(long)]
     use_repo_svgs: bool,
+
+    /// Skip generated PNG comparison artifacts.
+    /// Useful for structural-only eval runs and environments without Mermaid CLI.
+    #[arg(long)]
+    skip_comparison_pngs: bool,
 
     /// Evaluate ASCII output instead of SVG (only flowchart diagrams)
     #[arg(long)]
@@ -611,7 +617,9 @@ fn run_eval(args: EvalArgs) -> Result<(), Box<dyn std::error::Error>> {
     let output_dir = create_eval_output_dir(args.output.clone())?;
     write_eval_report_files(&result, &output_dir)?;
     let svg_pairs = runner.take_svg_pairs();
-    write_comparison_pngs_if_enabled(&output_dir, &svg_pairs, runner.cache());
+    if should_write_comparison_pngs(&args, svg_pairs.len()) {
+        write_comparison_pngs_if_enabled(&output_dir, &svg_pairs, runner.cache());
+    }
     eval::report::write_json_by_type(&result, &output_dir)?;
     print_eval_summary(&args, &result, &output_dir);
 
@@ -629,6 +637,11 @@ fn run_eval(args: EvalArgs) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(feature = "eval")]
+fn should_write_comparison_pngs(args: &EvalArgs, svg_pair_count: usize) -> bool {
+    svg_pair_count > 0 && !args.use_repo_svgs && !args.skip_comparison_pngs
 }
 
 #[cfg(feature = "eval")]
@@ -1466,5 +1479,50 @@ fn layout_diagram(
         _ => Err(selkie::error::MermaidError::RenderError(
             "Diagram type does not support layout graph".to_string(),
         )),
+    }
+}
+
+#[cfg(all(test, feature = "eval"))]
+mod eval_cli_tests {
+    use super::*;
+
+    fn eval_args() -> EvalArgs {
+        EvalArgs {
+            target: None,
+            diagram_type: Some("flowchart".to_string()),
+            output: None,
+            verbose: false,
+            brief: true,
+            force_refresh: false,
+            cache_info: false,
+            open_report: false,
+            use_repo_svgs: false,
+            skip_comparison_pngs: false,
+            ascii: false,
+        }
+    }
+
+    #[test]
+    fn use_repo_svgs_skips_comparison_pngs() {
+        let mut args = eval_args();
+        args.use_repo_svgs = true;
+
+        assert!(!should_write_comparison_pngs(&args, 1));
+    }
+
+    #[test]
+    fn explicit_flag_skips_comparison_pngs() {
+        let mut args = eval_args();
+        args.skip_comparison_pngs = true;
+
+        assert!(!should_write_comparison_pngs(&args, 1));
+    }
+
+    #[test]
+    fn png_comparisons_run_when_available_and_not_skipped() {
+        let args = eval_args();
+
+        assert!(should_write_comparison_pngs(&args, 1));
+        assert!(!should_write_comparison_pngs(&args, 0));
     }
 }
