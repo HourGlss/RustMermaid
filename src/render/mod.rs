@@ -30,7 +30,7 @@ mod xychart;
 
 use crate::diagrams::{detect_init, detect_type, parse, remove_directives, Diagram};
 use crate::error::{MermaidError, Result};
-use crate::layout::{self, CharacterSizeEstimator, ToLayoutGraph};
+use crate::layout::{self, CachedSizeEstimator, CharacterSizeEstimator, ToLayoutGraph};
 
 pub use svg::{RenderConfig, SvgRenderer, Theme};
 
@@ -222,7 +222,7 @@ fn render_flowchart(
         output_bytes = tracing::field::Empty,
     );
     let _enter = span.enter();
-    let size_estimator = CharacterSizeEstimator::default();
+    let size_estimator = CachedSizeEstimator::new(CharacterSizeEstimator::default());
 
     // Convert to layout graph
     let graph = {

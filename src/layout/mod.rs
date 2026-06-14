@@ -12,7 +12,10 @@ pub mod dagre;
 
 pub use adapter::{NodeSizeConfig, SizeEstimator, ToLayoutGraph};
 pub use graph::LayoutGraph;
-pub use size::{create_size_estimator, CharacterSizeEstimator, FontdueSizeEstimator};
+pub use size::{
+    create_size_estimator, CachedSizeEstimator, CharacterSizeEstimator, FontdueSizeEstimator,
+    MeasurementStats,
+};
 pub use types::{
     geometric_midpoint, LayoutDirection, LayoutEdge, LayoutNode, LayoutOptions, LayoutRanker,
     NodeShape, Padding, Point,

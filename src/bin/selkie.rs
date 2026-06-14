@@ -24,7 +24,7 @@ use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 #[cfg(feature = "eval")]
-use selkie::eval::{self, runner::DiagramInput, samples};
+use selkie::eval::{self, runner::DiagramInput, runner::SvgPair, samples};
 #[cfg(feature = "eval")]
 use selkie::render::ascii as ascii_render;
 use selkie::render::{RenderConfig, Theme};
@@ -548,6 +548,7 @@ fn write_terminal_output_file(
 }
 
 #[cfg(not(feature = "kitty"))]
+#[allow(dead_code)]
 fn render_to_terminal_if_requested(
     _args: &RenderArgs,
     _svg: &str,
@@ -607,7 +608,7 @@ fn run_eval(args: EvalArgs) -> Result<(), Box<dyn std::error::Error>> {
     // Run evaluation
     let result = runner.evaluate(&inputs);
 
-    let output_dir = create_eval_output_dir(args.output)?;
+    let output_dir = create_eval_output_dir(args.output.clone())?;
     write_eval_report_files(&result, &output_dir)?;
     let svg_pairs = runner.take_svg_pairs();
     write_comparison_pngs_if_enabled(&output_dir, &svg_pairs, runner.cache());
@@ -739,7 +740,7 @@ fn create_eval_output_dir(
 
 #[cfg(feature = "eval")]
 fn write_eval_report_files(
-    result: &eval::runner::EvalResult,
+    result: &eval::EvalResult,
     output_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     eprint!("Writing HTML report...");
@@ -754,7 +755,7 @@ fn write_eval_report_files(
 
 #[cfg(feature = "eval")]
 fn write_eval_svgs(
-    result: &eval::runner::EvalResult,
+    result: &eval::EvalResult,
     output_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let docs_images = Path::new("docs/images");
@@ -774,7 +775,7 @@ fn write_eval_svgs(
 
 #[cfg(feature = "eval")]
 fn write_eval_svg_pair(
-    diagram: &eval::runner::DiagramResult,
+    diagram: &eval::DiagramResult,
     type_dir: &Path,
     safe_name: &str,
     write_to_docs: bool,
@@ -803,7 +804,7 @@ fn write_eval_svg_pair(
 #[cfg(feature = "eval")]
 fn write_comparison_pngs_if_enabled(
     output_dir: &Path,
-    svg_pairs: &[(String, String, String)],
+    svg_pairs: &[SvgPair],
     cache: &eval::cache::ReferenceCache,
 ) {
     #[cfg(feature = "png")]
@@ -825,7 +826,7 @@ fn write_comparison_pngs_if_enabled(
 }
 
 #[cfg(feature = "eval")]
-fn print_eval_summary(args: &EvalArgs, result: &eval::runner::EvalResult, output_dir: &Path) {
+fn print_eval_summary(args: &EvalArgs, result: &eval::EvalResult, output_dir: &Path) {
     if args.brief {
         eprintln!("{}", eval::report::text_summary(result, Some(output_dir)));
     } else if args.verbose {

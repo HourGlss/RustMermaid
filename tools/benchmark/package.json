@@ -5,9 +5,12 @@
   "description": "Performance benchmark for Selkie vs Mermaid.js",
   "scripts": {
     "benchmark": "node benchmark.mjs",
+    "benchmark:browser": "node browser-performance.mjs",
+    "acceptance:large": "node large-flowchart-benchmark.mjs && node browser-performance.mjs",
     "phase6": "node phase6-trace.mjs",
     "gate:performance": "node phase6-trace.mjs && node phase6-trace.mjs check-budgets baselines/phase7-performance-budgets.json reports/phase6/summary.json",
     "test:phase6": "node phase6-trace.test.mjs",
+    "test:browser-performance": "node browser-performance.test.mjs",
     "test:editor": "node editor-interaction.test.mjs"
   },
   "dependencies": {

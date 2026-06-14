@@ -1,5 +1,8 @@
 //! Size estimation for layout
 
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+
 use super::adapter::{NodeSizeConfig, SizeEstimator};
 use super::types::NodeShape;
 
@@ -160,6 +163,138 @@ impl SizeEstimator for CharacterSizeEstimator {
             .unwrap_or(final_width);
 
         (final_width, final_height)
+    }
+}
+
+/// Size estimator wrapper that memoizes repeated text and node measurements.
+///
+/// Mermaid's browser renderer memoizes text dimension work because repeated
+/// labels are common in generated or large diagrams. This wrapper provides the
+/// same behavior for Rust-side layout while exposing counters that benchmarks
+/// can assert against.
+#[derive(Debug, Clone)]
+pub struct CachedSizeEstimator<E> {
+    inner: E,
+    text_cache: RefCell<HashMap<TextSizeKey, (f64, f64)>>,
+    node_cache: RefCell<HashMap<NodeSizeKey, (f64, f64)>>,
+    text_cache_hits: Cell<usize>,
+    text_cache_misses: Cell<usize>,
+    node_cache_hits: Cell<usize>,
+    node_cache_misses: Cell<usize>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MeasurementStats {
+    pub text_cache_hits: usize,
+    pub text_cache_misses: usize,
+    pub text_measurements: usize,
+    pub node_cache_hits: usize,
+    pub node_cache_misses: usize,
+    pub node_measurements: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct TextSizeKey {
+    text: String,
+    font_size: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct NodeSizeKey {
+    label: Option<String>,
+    shape: NodeShape,
+    config: NodeSizeConfigKey,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct NodeSizeConfigKey {
+    font_size: u64,
+    padding_horizontal: u64,
+    padding_vertical: u64,
+    min_width: u64,
+    min_height: u64,
+    max_width: Option<u64>,
+}
+
+impl From<&NodeSizeConfig> for NodeSizeConfigKey {
+    fn from(config: &NodeSizeConfig) -> Self {
+        Self {
+            font_size: config.font_size.to_bits(),
+            padding_horizontal: config.padding_horizontal.to_bits(),
+            padding_vertical: config.padding_vertical.to_bits(),
+            min_width: config.min_width.to_bits(),
+            min_height: config.min_height.to_bits(),
+            max_width: config.max_width.map(f64::to_bits),
+        }
+    }
+}
+
+impl<E> CachedSizeEstimator<E> {
+    pub fn new(inner: E) -> Self {
+        Self {
+            inner,
+            text_cache: RefCell::new(HashMap::new()),
+            node_cache: RefCell::new(HashMap::new()),
+            text_cache_hits: Cell::new(0),
+            text_cache_misses: Cell::new(0),
+            node_cache_hits: Cell::new(0),
+            node_cache_misses: Cell::new(0),
+        }
+    }
+
+    pub fn stats(&self) -> MeasurementStats {
+        let text_cache_misses = self.text_cache_misses.get();
+        let node_cache_misses = self.node_cache_misses.get();
+        MeasurementStats {
+            text_cache_hits: self.text_cache_hits.get(),
+            text_cache_misses,
+            text_measurements: text_cache_misses,
+            node_cache_hits: self.node_cache_hits.get(),
+            node_cache_misses,
+            node_measurements: node_cache_misses,
+        }
+    }
+}
+
+impl<E: SizeEstimator> SizeEstimator for CachedSizeEstimator<E> {
+    fn estimate_text_size(&self, text: &str, font_size: f64) -> (f64, f64) {
+        let key = TextSizeKey {
+            text: text.to_string(),
+            font_size: font_size.to_bits(),
+        };
+
+        if let Some(size) = self.text_cache.borrow().get(&key).copied() {
+            self.text_cache_hits.set(self.text_cache_hits.get() + 1);
+            return size;
+        }
+
+        self.text_cache_misses.set(self.text_cache_misses.get() + 1);
+        let size = self.inner.estimate_text_size(text, font_size);
+        self.text_cache.borrow_mut().insert(key, size);
+        size
+    }
+
+    fn estimate_node_size(
+        &self,
+        label: Option<&str>,
+        shape: NodeShape,
+        config: &NodeSizeConfig,
+    ) -> (f64, f64) {
+        let key = NodeSizeKey {
+            label: label.map(str::to_string),
+            shape,
+            config: config.into(),
+        };
+
+        if let Some(size) = self.node_cache.borrow().get(&key).copied() {
+            self.node_cache_hits.set(self.node_cache_hits.get() + 1);
+            return size;
+        }
+
+        self.node_cache_misses.set(self.node_cache_misses.get() + 1);
+        let size = self.inner.estimate_node_size(label, shape, config);
+        self.node_cache.borrow_mut().insert(key, size);
+        size
     }
 }
 
@@ -365,6 +500,27 @@ mod tests {
         let (circle_w, circle_h) =
             estimator.estimate_node_size(Some("Test"), NodeShape::Circle, &config);
         assert!((circle_w - circle_h).abs() < 0.001);
+    }
+
+    #[test]
+    fn cached_estimator_reuses_repeated_node_measurements() {
+        let estimator = CachedSizeEstimator::new(CharacterSizeEstimator::default());
+        let config = NodeSizeConfig::default();
+
+        for _ in 0..10 {
+            let (width, height) =
+                estimator.estimate_node_size(Some("Repeated"), NodeShape::Rectangle, &config);
+            assert!(width > 0.0);
+            assert!(height > 0.0);
+        }
+
+        let stats = estimator.stats();
+        assert_eq!(stats.node_cache_misses, 1);
+        assert_eq!(stats.node_cache_hits, 9);
+        assert!(
+            stats.node_measurements < 10,
+            "repeated labels should avoid one measurement per node"
+        );
     }
 
     #[test]

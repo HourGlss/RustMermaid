@@ -14,7 +14,8 @@ use crate::diagrams::flowchart::{
 use crate::diagrams::{detect_type, remove_directives, DiagramType};
 use crate::error::{MermaidError, Result};
 use crate::layout::{
-    self, CharacterSizeEstimator, LayoutEdge, LayoutGraph, LayoutNode, ToLayoutGraph,
+    self, CachedSizeEstimator, CharacterSizeEstimator, LayoutEdge, LayoutGraph, LayoutNode,
+    ToLayoutGraph,
 };
 use crate::render;
 
@@ -200,6 +201,8 @@ pub struct EditableLabelPart {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EditableEdgeRoutes {
     pub node_id: String,
+    #[serde(default)]
+    pub recomputed_edge_count: usize,
     #[serde(default)]
     pub edges: Vec<EditableEdgePart>,
 }
@@ -515,6 +518,7 @@ pub fn route_edges_for_node_with_layout_mode(
     span.record("routed_edges", edges.len() as u64);
     Ok(EditableEdgeRoutes {
         node_id: node_id.to_string(),
+        recomputed_edge_count: edges.len(),
         edges,
     })
 }
@@ -581,7 +585,7 @@ fn layout_graph_for_editable_with_mode(
     }
 
     let db = flowchart_db_from_graph(graph)?;
-    let size_estimator = CharacterSizeEstimator::default();
+    let size_estimator = CachedSizeEstimator::new(CharacterSizeEstimator::default());
     let layout_graph = db.to_layout_graph(&size_estimator)?;
     let mut layout_graph = layout::layout(layout_graph)?;
     apply_locked_positions(graph, &mut layout_graph);
@@ -603,7 +607,7 @@ fn positioned_layout_graph_for_editable(graph: &EditableDiagram) -> Result<Optio
         })
         .collect();
     let db = flowchart_db_from_graph(graph)?;
-    let size_estimator = CharacterSizeEstimator::default();
+    let size_estimator = CachedSizeEstimator::new(CharacterSizeEstimator::default());
     let mut layout_graph = db.to_layout_graph(&size_estimator)?;
 
     for node in &mut layout_graph.nodes {
@@ -1513,6 +1517,19 @@ flowchart TD
         assert!(route_ids.contains(&edge_ab.as_str()));
         assert!(!route_ids.contains(&edge_bc.as_str()));
         assert!(routes.edges.iter().all(|edge| edge.points.len() == 2));
+    }
+
+    #[test]
+    fn route_edges_for_node_reports_recomputed_degree() {
+        let graph_json = parse_to_graph_json(
+            "flowchart TD\nA[Start] --> B[Middle]\nC[Other] --> A\nB --> C\nC --> D[End]",
+        )
+        .expect("graph json");
+        let routes_json = route_edges_for_node_json(&graph_json, "A").expect("routes");
+        let routes: EditableEdgeRoutes = serde_json::from_str(&routes_json).unwrap();
+
+        assert_eq!(routes.edges.len(), 2);
+        assert_eq!(routes.recomputed_edge_count, 2);
     }
 
     #[test]

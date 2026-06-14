@@ -141,27 +141,27 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
 
 ## Phase 5: Performance Gates And Optimization
 
-- [ ] Add browser performance benchmark for initial load.
+- [x] Add browser performance benchmark for initial load.
   - Input: 800-node / 1000-edge fixture.
   - Output: JSON report with load time, render time, DOM/update time, and memory estimate.
   - Test: benchmark fails if the graph cannot become interactive.
 
-- [ ] Add drag-latency benchmark.
+- [x] Add drag-latency benchmark.
   - Input: scripted drag of one node across 60 frames in the 800-node fixture.
   - Output: frame timing report with average, p95, and max frame time.
   - Test: benchmark fails if p95 drag update exceeds the configured threshold.
 
-- [ ] Cache text measurements.
+- [x] Cache text measurements.
   - Input: graph with repeated labels and shapes.
   - Output: repeated labels reuse cached size measurements.
   - Test: instrumentation shows fewer measurement calls than node count when labels repeat.
 
-- [ ] Add incremental edge rerouting cache.
+- [x] Add incremental edge rerouting cache.
   - Input: graph patch that moves node `A`.
   - Output: only incident edge routes are recomputed.
   - Test: instrumentation shows recomputed edge count equals degree of `A`.
 
-- [ ] Add full-layout and edit-layout modes.
+- [x] Add full-layout and edit-layout modes.
   - Input: editor graph with manual positions.
   - Output: `full-layout` recalculates the whole graph; `edit-layout` preserves user positions and updates local geometry.
   - Test: mode-specific tests prove the same graph produces different expected position behavior.
@@ -222,5 +222,5 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
 - [x] `cargo test --features all-formats` passes.
 - [x] WASM tests cover `parse_to_graph_json`, `graph_to_mermaid_text`, and `render_graph_json`.
 - [x] Browser tests cover load, pan, zoom, select, move, create node, create edge, edit label, edit color, export, and re-import.
-- [ ] The 800-node / 1000-edge fixture passes CLI and browser acceptance tests.
+- [x] The 800-node / 1000-edge fixture passes CLI and browser acceptance tests.
 - [x] The implementation keeps static Mermaid rendering compatibility for existing docs/sources files.
