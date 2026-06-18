@@ -1,0 +1,11 @@
+{
+  "description": "Phase 9 milestone target: all flowchart eval structural errors eliminated before warning cleanup begins.",
+  "min_matching": 2,
+  "min_avg_structural": 1.0,
+  "max_errors": 0,
+  "max_issue_categories": {
+    "error:aspect_ratio": 0,
+    "error:labels_missing": 0,
+    "error:node_count": 0
+  }
+}

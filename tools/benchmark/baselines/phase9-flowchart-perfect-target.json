@@ -1,0 +1,21 @@
+{
+  "description": "Phase 9 final target: perfect flowchart eval parity across the 34-diagram corpus.",
+  "min_matching": 34,
+  "min_avg_structural": 1.0,
+  "max_errors": 0,
+  "max_warnings": 0,
+  "max_info": 0,
+  "max_issue_categories": {
+    "error:aspect_ratio": 0,
+    "error:labels_missing": 0,
+    "error:node_count": 0,
+    "warning:aspect_ratio": 0,
+    "warning:dimensions": 0,
+    "warning:edge_positions": 0,
+    "warning:stroke_width": 0,
+    "info:colors": 0,
+    "info:dimensions": 0,
+    "info:edge_details": 0,
+    "info:labels_extra": 0
+  }
+}

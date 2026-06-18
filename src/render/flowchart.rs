@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::diagrams::flowchart::{Direction, FlowVertexType, FlowchartDb};
+use crate::diagrams::flowchart::{Direction, FlowSubGraph, FlowVertexType, FlowchartDb};
 use crate::error::Result;
 use crate::layout::{
     LayoutDirection, LayoutEdge, LayoutGraph, LayoutNode, LayoutOptions, NodeShape, NodeSizeConfig,
@@ -14,23 +14,19 @@ impl ToLayoutGraph for FlowchartDb {
         let config = NodeSizeConfig::default();
         let mut graph = LayoutGraph::new("flowchart");
 
+        // Build map of node_id -> subgraph_id for setting parent relationships
+        let node_to_subgraph = build_node_to_subgraph(self);
+
         // Set layout options from diagram direction
         // Use dagre defaults (50/50) - compound graph support handles horizontal spread
+        let graph_direction = self.preferred_direction();
         graph.options = LayoutOptions {
-            direction: self.preferred_direction(),
+            direction: graph_direction,
             node_spacing: 50.0,
             layer_spacing: 50.0,
             padding: Padding::uniform(20.0),
             ..Default::default()
         };
-
-        // Build map of node_id -> subgraph_id for setting parent relationships
-        let mut node_to_subgraph: HashMap<&str, &str> = HashMap::new();
-        for subgraph in self.subgraphs() {
-            for node_id in &subgraph.nodes {
-                node_to_subgraph.insert(node_id.as_str(), subgraph.id.as_str());
-            }
-        }
 
         // Add subgraph nodes first (compound parent nodes)
         // These have zero dimensions initially - they're calculated from children by layout
@@ -48,10 +44,15 @@ impl ToLayoutGraph for FlowchartDb {
                 .metadata
                 .insert("is_group".to_string(), "true".to_string());
 
-            // Store subgraph direction if specified
-            // Note: Full subgraph direction support requires recursive layout (like mermaid.js)
             if let Some(ref dir) = subgraph.dir {
                 sg_node.metadata.insert("dir".to_string(), dir.clone());
+            } else if let Some(dir) = infer_disconnected_subgraph_direction(
+                self,
+                subgraph,
+                &node_to_subgraph,
+                graph_direction,
+            ) {
+                sg_node.metadata.insert("dir".to_string(), dir.to_string());
             }
 
             graph.add_node(sg_node);
@@ -129,6 +130,57 @@ impl ToLayoutGraph for FlowchartDb {
 
     fn preferred_direction(&self) -> LayoutDirection {
         Direction::parse(self.get_direction()).into()
+    }
+}
+
+fn build_node_to_subgraph(db: &FlowchartDb) -> HashMap<&str, &str> {
+    let mut node_to_subgraph = HashMap::new();
+    for subgraph in db.subgraphs() {
+        for node_id in &subgraph.nodes {
+            node_to_subgraph.insert(node_id.as_str(), subgraph.id.as_str());
+        }
+    }
+    node_to_subgraph
+}
+
+fn infer_disconnected_subgraph_direction(
+    db: &FlowchartDb,
+    subgraph: &FlowSubGraph,
+    node_to_subgraph: &HashMap<&str, &str>,
+    graph_direction: LayoutDirection,
+) -> Option<&'static str> {
+    if graph_direction != LayoutDirection::TopToBottom || subgraph.nodes.len() < 2 {
+        return None;
+    }
+
+    let subgraph_id = subgraph.id.as_str();
+    let mut has_internal_edge = false;
+
+    for edge in db.edges() {
+        let source_subgraph = endpoint_subgraph(edge.start.as_str(), subgraph_id, node_to_subgraph);
+        let target_subgraph = endpoint_subgraph(edge.end.as_str(), subgraph_id, node_to_subgraph);
+        let source_inside = source_subgraph == Some(subgraph_id);
+        let target_inside = target_subgraph == Some(subgraph_id);
+
+        if source_inside && target_inside {
+            has_internal_edge = true;
+        } else if source_inside || target_inside {
+            return None;
+        }
+    }
+
+    has_internal_edge.then_some("LR")
+}
+
+fn endpoint_subgraph<'a>(
+    endpoint: &str,
+    subgraph_id: &'a str,
+    node_to_subgraph: &HashMap<&str, &'a str>,
+) -> Option<&'a str> {
+    if endpoint == subgraph_id {
+        Some(subgraph_id)
+    } else {
+        node_to_subgraph.get(endpoint).copied()
     }
 }
 
@@ -294,6 +346,70 @@ Terminal -.-> Problem"#;
                 .filter(|node| node.metadata.get("is_group").is_some())
                 .count(),
             2
+        );
+    }
+
+    #[test]
+    fn test_disconnected_tb_subgraph_infers_lr_direction() {
+        use crate::diagrams::flowchart::parse;
+        use crate::layout;
+
+        let input = r#"flowchart TB
+subgraph current["Current Path"]
+    A1[Source] --> A2[Parse] --> A3[Render]
+end
+
+subgraph proposed["Proposed Path"]
+    B1[Source] --> B2[ASCII] --> B3[Terminal]
+end"#;
+
+        let db = parse(input).unwrap();
+        let estimator = CharacterSizeEstimator::default();
+        let graph = db.to_layout_graph(&estimator).unwrap();
+
+        let current = graph.get_node("current").unwrap();
+        let proposed = graph.get_node("proposed").unwrap();
+        assert_eq!(current.metadata.get("dir"), Some(&"LR".to_string()));
+        assert_eq!(proposed.metadata.get("dir"), Some(&"LR".to_string()));
+
+        let graph = layout::layout(graph).unwrap();
+        let a1 = graph.get_node("A1").unwrap();
+        let a2 = graph.get_node("A2").unwrap();
+        let a1_center_y = a1.y.unwrap() + a1.height / 2.0;
+        let a2_center_y = a2.y.unwrap() + a2.height / 2.0;
+
+        assert!(
+            (a1_center_y - a2_center_y).abs() < 15.0,
+            "disconnected TB subgraph should use horizontal internal ranks. A1.y={:.1}, A2.y={:.1}",
+            a1_center_y,
+            a2_center_y
+        );
+        assert!(
+            a2.x.unwrap() > a1.x.unwrap(),
+            "A2 should be to the right of A1 after inferred LR layout"
+        );
+    }
+
+    #[test]
+    fn test_connected_tb_subgraph_keeps_parent_direction() {
+        use crate::diagrams::flowchart::parse;
+
+        let input = r#"flowchart TB
+subgraph work["Work"]
+    A[Start] --> B[Finish]
+end
+B --> C[External]"#;
+
+        let db = parse(input).unwrap();
+        let estimator = CharacterSizeEstimator::default();
+        let graph = db.to_layout_graph(&estimator).unwrap();
+        let work = graph.get_node("work").unwrap();
+
+        assert_eq!(graph.options.direction, LayoutDirection::TopToBottom);
+        assert_eq!(
+            work.metadata.get("dir"),
+            None,
+            "connected subgraphs should keep the parent TB direction unless Mermaid specifies one"
         );
     }
 
@@ -494,6 +610,29 @@ Terminal -.-> Problem"#;
             "B should be to the right of A in LR subgraph. A.x={:.1}, B.x={:.1}",
             a.x.unwrap(),
             b.x.unwrap()
+        );
+
+        let edge = graph
+            .edges
+            .iter()
+            .find(|edge| edge.source() == Some("A") && edge.target() == Some("B"))
+            .expect("A -> B edge should be present");
+        let first = edge
+            .bend_points
+            .first()
+            .expect("A -> B edge should have bend points");
+        let last = edge
+            .bend_points
+            .last()
+            .expect("A -> B edge should have bend points");
+
+        assert!(
+            (first.y - last.y).abs() < 1.0,
+            "A -> B edge should be rerouted horizontally after subgraph child positions are applied"
+        );
+        assert!(
+            last.x > first.x,
+            "A -> B edge should run left-to-right after subgraph child positions are applied"
         );
 
         // C is in the TB main graph, so it should be above the subgraph (lower y)
