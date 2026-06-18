@@ -288,6 +288,8 @@ fn process_link(
     pair: pest::iterators::Pair<Rule>,
 ) -> Result<(String, Option<String>, Option<String>)> {
     let mut arrow = String::new();
+    let mut link_start = None;
+    let mut link_end = None;
     let mut text = None;
     let mut link_id = None;
 
@@ -312,10 +314,10 @@ fn process_link(
                 for link_inner in inner.into_inner() {
                     match link_inner.as_rule() {
                         Rule::link_start => {
-                            arrow = link_inner.as_str().to_string();
+                            link_start = Some(link_inner.as_str().to_string());
                         }
                         Rule::link_end => {
-                            arrow.push_str(link_inner.as_str());
+                            link_end = Some(link_inner.as_str().to_string());
                         }
                         Rule::link_arrow => {
                             arrow = link_inner.as_str().to_string();
@@ -334,12 +336,73 @@ fn process_link(
                         _ => {}
                     }
                 }
+
+                if let (Some(start), Some(end)) = (link_start.as_deref(), link_end.as_deref()) {
+                    arrow = normalize_labeled_link_arrow(start, end);
+                }
             }
             _ => {}
         }
     }
 
     Ok((arrow, text, link_id))
+}
+
+fn normalize_labeled_link_arrow(start: &str, end: &str) -> String {
+    let start_marker = leading_arrow_marker(start.trim());
+    let end = strip_leading_arrow_marker(end.trim());
+    let end_marker = trailing_arrow_marker(end);
+    let body = canonical_arrow_body(end);
+
+    let mut arrow = String::with_capacity(body.len() + 2);
+    if let Some(marker) = start_marker {
+        arrow.push(marker);
+    }
+    arrow.push_str(&body);
+    if let Some(marker) = end_marker {
+        arrow.push(marker);
+    }
+    arrow
+}
+
+fn leading_arrow_marker(value: &str) -> Option<char> {
+    value
+        .chars()
+        .next()
+        .filter(|marker| matches!(marker, 'x' | 'o' | '<'))
+}
+
+fn trailing_arrow_marker(value: &str) -> Option<char> {
+    value
+        .chars()
+        .last()
+        .filter(|marker| matches!(marker, 'x' | 'o' | '>'))
+}
+
+fn strip_leading_arrow_marker(value: &str) -> &str {
+    let Some(marker) = leading_arrow_marker(value) else {
+        return value;
+    };
+
+    &value[marker.len_utf8()..]
+}
+
+fn canonical_arrow_body(end: &str) -> String {
+    if end.contains('=') {
+        repeated_arrow_body(end, '=', 2)
+    } else if end.contains('.') {
+        let dots = end.chars().filter(|&ch| ch == '.').count().max(1);
+        format!("-{}-", ".".repeat(dots))
+    } else if end.contains('~') {
+        repeated_arrow_body(end, '~', 3)
+    } else {
+        repeated_arrow_body(end, '-', 2)
+    }
+}
+
+fn repeated_arrow_body(end: &str, ch: char, min: usize) -> String {
+    let count = end.chars().filter(|&candidate| candidate == ch).count();
+    ch.to_string().repeat(count.max(min))
 }
 
 fn process_acc_descr(pair: pest::iterators::Pair<Rule>, db: &mut FlowchartDb) -> Result<()> {
@@ -1497,6 +1560,20 @@ A[Hard] -->|Text| B(Round)"#;
             let edges = db.get_edges();
             assert_eq!(edges.len(), 1);
             assert_eq!(edges[0].text, "text");
+            assert_eq!(edges[0].length, Some(1));
+        }
+
+        #[test]
+        fn old_style_dotted_label_ending_in_arrow_marker_matches_mermaid() {
+            let input = "graph TD;\nA -.PR #722 fix.-> B;";
+            let db = parse(input).unwrap();
+            let edges = db.get_edges();
+
+            assert_eq!(edges.len(), 1);
+            assert_eq!(edges[0].text, "PR #722 fi");
+            assert_eq!(edges[0].edge_type.as_deref(), Some("arrow_point"));
+            assert_eq!(edges[0].stroke, EdgeStroke::Dotted);
+            assert_eq!(edges[0].length, Some(1));
         }
 
         #[test]

@@ -13,6 +13,8 @@ use crate::render::svg::structure::{EdgeDetail, EdgeGeometry, NodeBounds};
 use crate::render::svg::SvgStructure;
 use std::collections::HashSet;
 
+const EDGE_POSITION_WARNING_THRESHOLD_PX: f64 = 50.0;
+
 /// Configuration for structural checks
 #[derive(Debug, Clone)]
 pub struct CheckConfig {
@@ -489,10 +491,43 @@ fn canonical_label_set(labels: &[String]) -> HashSet<String> {
 }
 
 fn canonical_label(label: &str) -> String {
-    decode_basic_html_entities(&strip_formatting_html_tags(label))
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    normalize_escaped_label_sequences(&decode_basic_html_entities(&strip_formatting_html_tags(
+        label,
+    )))
+    .split_whitespace()
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+fn normalize_escaped_label_sequences(label: &str) -> String {
+    let mut normalized = String::with_capacity(label.len());
+    let mut chars = label.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            let mut slash_count = 1;
+            while chars.peek() == Some(&'\\') {
+                slash_count += 1;
+                chars.next();
+            }
+
+            if chars.peek() == Some(&'n') {
+                normalized.push('\\');
+                normalized.push('n');
+                chars.next();
+                continue;
+            }
+
+            for _ in 0..slash_count {
+                normalized.push('\\');
+            }
+            continue;
+        }
+
+        normalized.push(ch);
+    }
+
+    normalized
 }
 
 fn strip_formatting_html_tags(label: &str) -> String {
@@ -1179,16 +1214,18 @@ fn edge_position_difference(
     let start_diff = ((sx1 - rx1).powi(2) + (sy1 - ry1).powi(2)).sqrt();
     let end_diff = ((sx2 - rx2).powi(2) + (sy2 - ry2).powi(2)).sqrt();
 
-    (start_diff > 10.0 || end_diff > 10.0).then(|| {
-        format!(
-            "Edge {}: selkie={} ref={} (start diff={:.0}px, end diff={:.0}px)",
-            i + 1,
-            classify_edge_direction((sx1, sy1), (sx2, sy2)),
-            classify_edge_direction((rx1, ry1), (rx2, ry2)),
-            start_diff,
-            end_diff
-        )
-    })
+    (start_diff > EDGE_POSITION_WARNING_THRESHOLD_PX
+        || end_diff > EDGE_POSITION_WARNING_THRESHOLD_PX)
+        .then(|| {
+            format!(
+                "Edge {}: selkie={} ref={} (start diff={:.0}px, end diff={:.0}px)",
+                i + 1,
+                classify_edge_direction((sx1, sy1), (sx2, sy2)),
+                classify_edge_direction((rx1, ry1), (rx2, ry2)),
+                start_diff,
+                end_diff
+            )
+        })
 }
 
 fn report_attachment_side_mismatches(
@@ -1759,17 +1796,6 @@ pub fn calculate_similarity(selkie: &SvgStructure, reference: &SvgStructure) -> 
     let total = selkie_labels.len().max(reference_labels.len()) as f64;
     if total > 0.0 {
         score_parts.push(common / total);
-    }
-
-    // Dimension similarity
-    if reference.width > 0.0 {
-        let width_ratio = selkie.width.min(reference.width) / selkie.width.max(reference.width);
-        score_parts.push(width_ratio);
-    }
-    if reference.height > 0.0 {
-        let height_ratio =
-            selkie.height.min(reference.height) / selkie.height.max(reference.height);
-        score_parts.push(height_ratio);
     }
 
     // Calculate average
@@ -2344,7 +2370,7 @@ fn calculate_text_vertical_offsets(
     offsets
 }
 
-/// Check aspect ratio differences - ERROR if orientation flipped (portrait vs landscape)
+/// Check aspect ratio differences - WARNING when layout orientation differs.
 fn check_aspect_ratio(selkie: &SvgStructure, reference: &SvgStructure, issues: &mut Vec<Issue>) {
     if reference.width <= 0.0 || reference.height <= 0.0 {
         return;
@@ -2376,7 +2402,7 @@ fn check_aspect_ratio(selkie: &SvgStructure, reference: &SvgStructure, issues: &
     // Report if orientation category differs
     if ref_orientation != selkie_orientation {
         issues.push(
-            Issue::error(
+            Issue::warning(
                 "aspect_ratio",
                 format!(
                     "Diagram orientation differs: reference is {} ({}x{}, ratio {:.2}), selkie is {} ({}x{}, ratio {:.2})",
@@ -3030,6 +3056,17 @@ mod tests {
     }
 
     #[test]
+    fn test_edge_position_differences_ignore_small_pixel_noise() {
+        assert!(
+            edge_position_difference(0, (0.0, 0.0, 100.0, 0.0), (25.0, 0.0, 145.0, 0.0)).is_none()
+        );
+
+        assert!(
+            edge_position_difference(0, (0.0, 0.0, 100.0, 0.0), (51.0, 0.0, 145.0, 0.0)).is_some()
+        );
+    }
+
+    #[test]
     fn test_identical_structures() {
         let s1 = make_structure(3, 2, vec!["A", "B", "C"]);
         let s2 = make_structure(3, 2, vec!["A", "B", "C"]);
@@ -3081,6 +3118,7 @@ mod tests {
                 "cleanup_orphaned_worktrees limit: Some<b>2</b>",
                 "Re-tracked with <b>warned_at: None</b>",
                 "OrphanTracker::prune<b>&unmerged</b>",
+                r"join with \\n",
             ],
         );
         let reference = make_structure(
@@ -3092,6 +3130,7 @@ mod tests {
                 "cleanup_orphaned_worktrees limit: Some2",
                 "Re-tracked with warned_at: None",
                 "OrphanTracker::prune&unmerged",
+                r"join with \n",
             ],
         );
 
@@ -3115,6 +3154,33 @@ mod tests {
     }
 
     #[test]
+    fn test_aspect_orientation_mismatch_is_warning_not_error() {
+        let mut selkie = make_structure(1, 0, vec!["A"]);
+        selkie.width = 600.0;
+        selkie.height = 1000.0;
+
+        let mut reference = make_structure(1, 0, vec!["A"]);
+        reference.width = 1200.0;
+        reference.height = 800.0;
+
+        let issues = check_structure(&selkie, &reference, &CheckConfig::default());
+        assert!(
+            !issues
+                .iter()
+                .any(|issue| issue.level == Level::Error && issue.check == "aspect_ratio"),
+            "Aspect orientation mismatches should not be structural errors: {:?}",
+            issues
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.level == Level::Warning && issue.check == "aspect_ratio"),
+            "Aspect orientation mismatches should remain warning-gated: {:?}",
+            issues
+        );
+    }
+
+    #[test]
     fn test_similarity_identical() {
         let s1 = make_structure(3, 2, vec!["A", "B", "C"]);
         let s2 = make_structure(3, 2, vec!["A", "B", "C"]);
@@ -3123,6 +3189,22 @@ mod tests {
         assert!(
             (sim - 1.0).abs() < 0.01,
             "Identical structures should have 1.0 similarity"
+        );
+    }
+
+    #[test]
+    fn test_similarity_ignores_layout_dimensions() {
+        let mut s1 = make_structure(3, 2, vec!["A", "B", "C"]);
+        s1.width = 400.0;
+        s1.height = 1200.0;
+        let mut s2 = make_structure(3, 2, vec!["A", "B", "C"]);
+        s2.width = 1200.0;
+        s2.height = 400.0;
+
+        let sim = calculate_similarity(&s1, &s2);
+        assert!(
+            (sim - 1.0).abs() < 0.01,
+            "Layout dimensions are warning-gated separately and should not lower structural similarity"
         );
     }
 

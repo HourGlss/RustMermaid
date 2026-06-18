@@ -165,7 +165,7 @@ link_start = @{
 
 // link_end matches the closing part of an edge with text (e.g., -->, --->, ==>, etc.)
 link_end = @{
-    ("-"+ | "="+ | ".-") ~ arrow_end?
+    arrow_start? ~ ("-"+ | "="+ | ".-") ~ arrow_end?
 }
 
 arrow_start = { "x" | "o" | "<" }

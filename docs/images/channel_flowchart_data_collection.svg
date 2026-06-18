@@ -123,7 +123,7 @@ marker path {
         <path d="M 190.00 77.80 C 190.00 86.13, 190.00 94.47, 190.00 102.80 C 190.00 111.13, 190.00 119.47, 190.00 127.80" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="1"/>
       </g>
       <g class="edge" id="edge-L-B-C-0">
-        <path d="M 190.00 180.60 C 190.00 188.93, 190.00 197.27, 190.00 205.60 C 190.00 213.93, 190.00 222.27, 190.00 230.60" class="edge-path" marker-end="url(#arrow_point)" stroke-width="1" fill="none"/>
+        <path d="M 190.00 180.60 C 190.00 188.93, 190.00 197.27, 190.00 205.60 C 190.00 213.93, 190.00 222.27, 190.00 230.60" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="1"/>
       </g>
       <g class="edge" id="edge-L-D-E-0">
         <path d="M 672.70 77.80 C 672.70 86.13, 672.70 94.47, 672.70 102.80 C 672.70 111.13, 672.70 119.47, 672.70 127.80" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
@@ -138,28 +138,28 @@ marker path {
         <path d="M 1402.98 1166.28 C 1366.15 1196.12, 1329.33 1225.96, 1191.56 1246.71 C 1053.80 1267.47, 815.10 1279.13, 695.75 1293.87 C 576.40 1326.40, 576.40 1344.20, 576.40 1344.20" class="edge-path" stroke-width="1" fill="none" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-G-I-0">
-        <path d="M 1531.80 1166.50 C 1568.27 1196.26, 1604.73 1226.03, 1488.77 1246.75 C 1372.80 1267.47, 1104.40 1279.13, 970.20 1290.80 C 836.00 1314.13, 836.00 1325.80, 836.00 1325.80" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
+        <path d="M 1531.80 1166.50 C 1568.27 1196.26, 1604.73 1226.03, 1488.77 1246.75 C 1372.80 1267.47, 1104.40 1279.13, 970.20 1290.80 C 836.00 1314.13, 836.00 1325.80, 836.00 1325.80" class="edge-path" marker-end="url(#arrow_point)" stroke-width="1" fill="none"/>
       </g>
       <g class="edge" id="edge-L-I-J-0">
-        <path d="M 836.00 1415.40 C 836.00 1423.73, 836.00 1432.07, 836.00 1440.40 C 836.00 1448.73, 836.00 1457.07, 836.00 1465.40" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="1"/>
+        <path d="M 836.00 1415.40 C 836.00 1423.73, 836.00 1432.07, 836.00 1440.40 C 836.00 1448.73, 836.00 1457.07, 836.00 1465.40" class="edge-path" stroke-width="1" fill="none" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-C-K-0">
-        <path d="M 190.00 283.40 C 190.00 303.40, 190.00 323.40, 399.48 339.23 C 608.97 355.07, 1027.93 366.73, 1237.42 376.73 C 1446.90 395.07, 1446.90 403.40, 1446.90 403.40" class="edge-path" stroke-width="2" marker-end="url(#arrow_point)" stroke-dasharray="3,3" fill="none"/>
+        <path d="M 190.00 283.40 C 190.00 303.40, 190.00 323.40, 399.48 339.23 C 608.97 355.07, 1027.93 366.73, 1237.42 376.73 C 1446.90 395.07, 1446.90 403.40, 1446.90 403.40" class="edge-path" marker-end="url(#arrow_point)" stroke-width="2" stroke-dasharray="3,3" fill="none"/>
       </g>
       <g class="edge" id="edge-L-F-K-0">
         <path d="M 677.84 283.40 C 679.46 315.07, 681.08 346.73, 791.39 372.57 C 901.70 398.40, 1120.70 418.41, 1339.70 438.41" class="edge-path" fill="none" stroke-width="2" marker-end="url(#arrow_point)" stroke-dasharray="3,3"/>
       </g>
       <g class="edge" id="edge-L-K-G-0">
-        <path d="M 1554.10 462.34 C 1694.73 480.89, 1835.37 499.45, 1837.38 514.56 C 1839.40 529.67, 1702.80 541.33, 1634.50 615.37 C 1566.20 689.40, 1566.20 825.80, 1557.42 907.50 C 1531.08 1016.21, 1513.52 1043.22, 1513.52 1043.22" class="edge-path" marker-end="url(#arrow_point)" fill="none" stroke-width="2" stroke-dasharray="3,3"/>
+        <path d="M 1554.10 462.34 C 1694.73 480.89, 1835.37 499.45, 1837.38 514.56 C 1839.40 529.67, 1702.80 541.33, 1634.50 615.37 C 1566.20 689.40, 1566.20 825.80, 1557.42 907.50 C 1531.08 1016.21, 1513.52 1043.22, 1513.52 1043.22" class="edge-path" marker-end="url(#arrow_point)" stroke-dasharray="3,3" fill="none" stroke-width="2"/>
       </g>
       <g class="edge" id="edge-L-L-M-0">
-        <path d="M 1680.70 467.50 C 1578.80 484.33, 1476.90 501.17, 1425.95 521.25 C 1375.00 541.33, 1375.00 564.67, 1375.00 588.00" class="edge-path" fill="none" marker-end="url(#arrow_point)" stroke-width="1"/>
+        <path d="M 1680.70 467.50 C 1578.80 484.33, 1476.90 501.17, 1425.95 521.25 C 1375.00 541.33, 1375.00 564.67, 1375.00 588.00" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
       </g>
       <g class="edge" id="edge-L-M-N-0">
-        <path d="M 1474.08 815.17 C 1558.42 864.18, 1642.76 913.19, 1684.93 955.53 C 1727.10 997.87, 1727.10 1033.53, 1727.10 1069.20" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
+        <path d="M 1474.08 815.17 C 1558.42 864.18, 1642.76 913.19, 1684.93 955.53 C 1727.10 997.87, 1727.10 1033.53, 1727.10 1069.20" class="edge-path" stroke-width="1" marker-end="url(#arrow_point)" fill="none"/>
       </g>
       <g class="edge" id="edge-L-M-G-0">
-        <path d="M 1375.00 927.20 L 1423.28 1041.42" class="edge-path" fill="none" marker-end="url(#arrow_point)" stroke-width="1"/>
+        <path d="M 1375.00 927.20 L 1423.28 1041.42" class="edge-path" marker-end="url(#arrow_point)" stroke-width="1" fill="none"/>
       </g>
       <g class="edge" id="edge-L-F-L-0">
         <path d="M 779.53 283.40 C 813.26 291.73, 846.98 300.07, 863.84 315.90 C 880.70 331.73, 880.70 355.07, 1014.03 376.88 C 1414.03 419.01, 1680.70 439.31, 1680.70 439.31" class="edge-path" fill="none" stroke-width="1" marker-end="url(#arrow_point)"/>
@@ -172,15 +172,15 @@ marker path {
       </g>
       <g class="edgeLabel" id="edge-label-L-G-H-0">
         <rect x="956.7949768070848" y="1260.1326013290773" width="44" height="22" class="edge-label-bg"/>
-        <text x="978.7949768070848" y="1271.1326013290773" class="edge-label" text-anchor="middle" dominant-baseline="central">found</text>
+        <text x="978.7949768070848" y="1271.1326013290773" class="edge-label" dominant-baseline="central" text-anchor="middle">found</text>
       </g>
       <g class="edgeLabel" id="edge-label-L-G-I-0">
         <rect x="1255.259135591409" y="1259.9936540664442" width="72.8" height="22" class="edge-label-bg"/>
-        <text x="1291.659135591409" y="1270.9936540664442" class="edge-label" dominant-baseline="central" text-anchor="middle">not found</text>
+        <text x="1291.659135591409" y="1270.9936540664442" class="edge-label" text-anchor="middle" dominant-baseline="central">not found</text>
       </g>
       <g class="edgeLabel" id="edge-label-L-C-K-0">
         <rect x="724.9567809448131" y="349.4128787756134" width="152" height="22" class="edge-label-bg"/>
-        <text x="800.9567809448131" y="360.4128787756134" class="edge-label" text-anchor="middle" dominant-baseline="central">Available but unused</text>
+        <text x="800.9567809448131" y="360.4128787756134" class="edge-label" dominant-baseline="central" text-anchor="middle">Available but unused</text>
       </g>
       <g class="edgeLabel" id="edge-label-L-F-K-0">
         <rect x="891.2635053973319" y="393.06246097452737" width="144.79999999999998" height="22" class="edge-label-bg"/>
@@ -192,17 +192,17 @@ marker path {
       </g>
       <g class="edgeLabel" id="edge-label-L-M-N-0">
         <rect x="1632.0472713988684" y="904.5663496967012" width="29.599999999999998" height="22" class="edge-label-bg"/>
-        <text x="1646.8472713988683" y="915.5663496967012" class="edge-label" text-anchor="middle" dominant-baseline="central">yes</text>
+        <text x="1646.8472713988683" y="915.5663496967012" class="edge-label" dominant-baseline="central" text-anchor="middle">yes</text>
       </g>
       <g class="edgeLabel" id="edge-label-L-M-G-0">
         <rect x="1378.8315891337838" y="975.8680565460368" width="22.4" height="22" class="edge-label-bg"/>
-        <text x="1390.0315891337839" y="986.8680565460368" class="edge-label" dominant-baseline="central" text-anchor="middle">no</text>
+        <text x="1390.0315891337839" y="986.8680565460368" class="edge-label" text-anchor="middle" dominant-baseline="central">no</text>
       </g>
     </g>
     <g class="nodes">
       <g class="node" id="node-A">
         <rect x="68.4" y="25.000000000000007" width="243.2" height="52.8"/>
-        <text x="190" y="51.400000000000006" class="label" text-anchor="middle" dominant-baseline="central">collect_world_snapshot</text>
+        <text x="190" y="51.400000000000006" class="label" dominant-baseline="central" text-anchor="middle">collect_world_snapshot</text>
       </g>
       <g class="node" id="node-B">
         <rect x="40" y="127.80000000000001" width="300" height="52.8"/>
@@ -210,15 +210,15 @@ marker path {
       </g>
       <g class="node" id="node-C">
         <rect x="40" y="230.6" width="300" height="52.8"/>
-        <text x="190" y="257" class="label" text-anchor="middle" dominant-baseline="central">coworkers_with_merged_prs: HashSet</text>
+        <text x="190" y="257" class="label" dominant-baseline="central" text-anchor="middle">coworkers_with_merged_prs: HashSet</text>
       </g>
       <g class="node" id="node-D">
         <rect x="546.3" y="25.000000000000007" width="252.79999999999998" height="52.8"/>
-        <text x="672.6999999999999" y="51.400000000000006" class="label" dominant-baseline="central" text-anchor="middle">spawn_for_pending_tasks</text>
+        <text x="672.6999999999999" y="51.400000000000006" class="label" text-anchor="middle" dominant-baseline="central">spawn_for_pending_tasks</text>
       </g>
       <g class="node" id="node-E">
         <rect x="555.9" y="127.80000000000001" width="233.6" height="52.8"/>
-        <text x="672.6999999999999" y="154.20000000000002" class="label" dominant-baseline="central" text-anchor="middle">iterate pending tasks</text>
+        <text x="672.6999999999999" y="154.20000000000002" class="label" text-anchor="middle" dominant-baseline="central">iterate pending tasks</text>
       </g>
       <g class="node" id="node-F">
         <rect x="527.0999999999999" y="230.6" width="291.2" height="52.8"/>
@@ -230,7 +230,7 @@ marker path {
       </g>
       <g class="node" id="node-H">
         <rect x="450" y="1344.2" width="252.79999999999998" height="52.8"/>
-        <text x="576.4" y="1370.6000000000001" class="label" text-anchor="middle" dominant-baseline="central">Group to existing owner</text>
+        <text x="576.4" y="1370.6000000000001" class="label" dominant-baseline="central" text-anchor="middle">Group to existing owner</text>
       </g>
       <g class="node" id="node-I">
         <rect x="752.7999999999998" y="1325.8000000000002" width="166.4" height="89.6"/>
@@ -238,23 +238,23 @@ marker path {
       </g>
       <g class="node" id="node-J">
         <rect x="719.1999999999999" y="1465.4" width="233.6" height="52.8"/>
-        <text x="835.9999999999999" y="1491.8000000000002" class="label" text-anchor="middle" dominant-baseline="central">Assign/nudge coworker</text>
+        <text x="835.9999999999999" y="1491.8000000000002" class="label" dominant-baseline="central" text-anchor="middle">Assign/nudge coworker</text>
       </g>
       <g class="node" id="node-K">
         <rect x="1339.7" y="403.40000000000003" width="214.4" height="89.6" style="fill:#ff6b6b !important;stroke:#c92a2a !important;color:#fff !important"/>
-        <text x="1446.9" y="448.20000000000005" class="label" text-anchor="middle" dominant-baseline="central" style="fill: #fff"><tspan x="1446.9" y="448.20000000000005" dy="-0.6em">❌ Never checks if</tspan><tspan x="1446.9" dy="1.2em">PR is in merged set</tspan></text>
+        <text x="1446.9" y="448.20000000000005" class="label" dominant-baseline="central" style="fill: #fff" text-anchor="middle"><tspan x="1446.9" y="448.20000000000005" dy="-0.6em">❌ Never checks if</tspan><tspan x="1446.9" dy="1.2em">PR is in merged set</tspan></text>
       </g>
       <g class="node" id="node-L">
         <rect x="1680.7" y="421.80000000000007" width="233.6" height="52.8"/>
-        <text x="1797.5" y="448.20000000000005" class="label" text-anchor="middle" dominant-baseline="central">After extracting PR #</text>
+        <text x="1797.5" y="448.20000000000005" class="label" dominant-baseline="central" text-anchor="middle">After extracting PR #</text>
       </g>
       <g class="node" id="node-M">
         <polygon points="1375,588 1525,757.6 1375,927.2 1225,757.6"/>
-        <text x="1375" y="757.6" class="label" text-anchor="middle" dominant-baseline="central"><tspan x="1375" y="757.6" dy="-0.6em">Is PR in</tspan><tspan x="1375" dy="1.2em">coworkers_with_merged_prs?</tspan></text>
+        <text x="1375" y="757.6" class="label" dominant-baseline="central" text-anchor="middle"><tspan x="1375" y="757.6" dy="-0.6em">Is PR in</tspan><tspan x="1375" dy="1.2em">coworkers_with_merged_prs?</tspan></text>
       </g>
       <g class="node" id="node-N">
         <rect x="1634.3" y="1069.2" width="185.6" height="89.6" style="fill:#51cf66 !important;stroke:#2f9e44 !important;color:#000 !important"/>
-        <text x="1727.1" y="1114" class="label" dominant-baseline="central" text-anchor="middle" style="fill: #000"><tspan x="1727.1" y="1114" dy="-0.6em">Skip task or</tspan><tspan x="1727.1" dy="1.2em">auto-complete it</tspan></text>
+        <text x="1727.1" y="1114" class="label" dominant-baseline="central" style="fill: #000" text-anchor="middle"><tspan x="1727.1" y="1114" dy="-0.6em">Skip task or</tspan><tspan x="1727.1" dy="1.2em">auto-complete it</tspan></text>
       </g>
     </g>
   </g>

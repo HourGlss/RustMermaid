@@ -31,9 +31,19 @@ use std::collections::HashMap;
 struct SubgraphLayoutResult {
     /// Relative positions of child nodes (relative to subgraph origin)
     child_positions: HashMap<String, (f64, f64)>, // (x, y) relative to subgraph top-left
+    /// Direction used for the internal subgraph layout
+    direction: LayoutDirection,
     /// Computed width of the subgraph content
     width: f64,
     /// Computed height of the subgraph content
+    height: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct NodeRouteBounds {
+    x: f64,
+    y: f64,
+    width: f64,
     height: f64,
 }
 
@@ -85,6 +95,7 @@ pub fn layout(mut graph: LayoutGraph) -> Result<LayoutGraph> {
 
     // Phase 5: Apply pre-computed child positions for subgraphs with custom directions
     apply_subgraph_child_positions(&mut graph, &subgraph_layouts);
+    reroute_subgraph_internal_edges(&mut graph, &subgraph_layouts);
 
     // Compute graph bounds
     graph.compute_bounds();
@@ -189,6 +200,7 @@ fn layout_subgraphs_with_directions(
                         node.id.clone(),
                         SubgraphLayoutResult {
                             child_positions,
+                            direction: subgraph_dir,
                             width: sub_graph.width.unwrap_or(0.0),
                             height: sub_graph.height.unwrap_or(0.0),
                         },
@@ -224,6 +236,125 @@ fn apply_subgraph_child_positions(
                 }
             }
         }
+    }
+}
+
+fn reroute_subgraph_internal_edges(
+    graph: &mut LayoutGraph,
+    subgraph_layouts: &HashMap<String, SubgraphLayoutResult>,
+) {
+    if subgraph_layouts.is_empty() {
+        return;
+    }
+
+    let node_bounds = collect_node_route_bounds(graph);
+
+    for layout_result in subgraph_layouts.values() {
+        for edge in &mut graph.edges {
+            let (Some(source), Some(target)) = (
+                edge.source().map(str::to_string),
+                edge.target().map(str::to_string),
+            ) else {
+                continue;
+            };
+
+            if !layout_result.child_positions.contains_key(source.as_str())
+                || !layout_result.child_positions.contains_key(target.as_str())
+            {
+                continue;
+            }
+
+            let (Some(source_bounds), Some(target_bounds)) = (
+                node_bounds.get(source.as_str()),
+                node_bounds.get(target.as_str()),
+            ) else {
+                continue;
+            };
+
+            edge.bend_points =
+                route_edge_between_nodes(*source_bounds, *target_bounds, layout_result.direction);
+
+            if edge.label.is_some() && !edge.bend_points.is_empty() {
+                edge.label_position = types::geometric_midpoint(&edge.bend_points);
+            }
+        }
+    }
+}
+
+fn collect_node_route_bounds(graph: &LayoutGraph) -> HashMap<String, NodeRouteBounds> {
+    let mut bounds = HashMap::new();
+
+    graph.traverse_nodes(|node| {
+        if let (Some(x), Some(y)) = (node.x, node.y) {
+            bounds.insert(
+                node.id.clone(),
+                NodeRouteBounds {
+                    x,
+                    y,
+                    width: node.width,
+                    height: node.height,
+                },
+            );
+        }
+    });
+
+    bounds
+}
+
+fn route_edge_between_nodes(
+    source: NodeRouteBounds,
+    target: NodeRouteBounds,
+    direction: LayoutDirection,
+) -> Vec<Point> {
+    match direction {
+        LayoutDirection::LeftToRight => {
+            let start = Point::new(source.x + source.width, source.y + source.height / 2.0);
+            let end = Point::new(target.x, target.y + target.height / 2.0);
+            orthogonal_route(start, end, true)
+        }
+        LayoutDirection::RightToLeft => {
+            let start = Point::new(source.x, source.y + source.height / 2.0);
+            let end = Point::new(target.x + target.width, target.y + target.height / 2.0);
+            orthogonal_route(start, end, true)
+        }
+        LayoutDirection::TopToBottom => {
+            let start = Point::new(source.x + source.width / 2.0, source.y + source.height);
+            let end = Point::new(target.x + target.width / 2.0, target.y);
+            orthogonal_route(start, end, false)
+        }
+        LayoutDirection::BottomToTop => {
+            let start = Point::new(source.x + source.width / 2.0, source.y);
+            let end = Point::new(target.x + target.width / 2.0, target.y + target.height);
+            orthogonal_route(start, end, false)
+        }
+    }
+}
+
+fn orthogonal_route(start: Point, end: Point, horizontal: bool) -> Vec<Point> {
+    const ALIGNMENT_EPSILON: f64 = 1.0;
+
+    if horizontal {
+        if (start.y - end.y).abs() < ALIGNMENT_EPSILON {
+            vec![start, end]
+        } else {
+            let mid_x = (start.x + end.x) / 2.0;
+            vec![
+                start,
+                Point::new(mid_x, start.y),
+                Point::new(mid_x, end.y),
+                end,
+            ]
+        }
+    } else if (start.x - end.x).abs() < ALIGNMENT_EPSILON {
+        vec![start, end]
+    } else {
+        let mid_y = (start.y + end.y) / 2.0;
+        vec![
+            start,
+            Point::new(start.x, mid_y),
+            Point::new(end.x, mid_y),
+            end,
+        ]
     }
 }
 
@@ -454,6 +585,33 @@ mod tests {
             "B should be to the right of A in LR subgraph. A.x={:.1}, B.x={:.1}",
             a.x.unwrap(),
             b.x.unwrap()
+        );
+
+        let edge = result
+            .edges
+            .iter()
+            .find(|edge| edge.id == "e1")
+            .expect("internal subgraph edge should be present");
+        let first = edge
+            .bend_points
+            .first()
+            .expect("internal subgraph edge should have a start point");
+        let last = edge
+            .bend_points
+            .last()
+            .expect("internal subgraph edge should have an end point");
+
+        assert!(
+            (first.y - last.y).abs() < 1.0,
+            "LR subgraph edge should be rerouted horizontally after child positions move. start={:?}, end={:?}",
+            first,
+            last
+        );
+        assert!(
+            last.x > first.x,
+            "LR subgraph edge should run left-to-right. start={:?}, end={:?}",
+            first,
+            last
         );
     }
 

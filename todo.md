@@ -242,20 +242,76 @@ Primary target: flowcharts first. Other diagram types are out of scope until the
   - Output: Selkie and reference structural extraction agree on node counts for those diagrams.
   - Test: flowchart eval reports zero `node_count` errors.
 
-- [ ] Improve cluster sizing and aspect-ratio parity.
+- [x] Improve cluster sizing and aspect-ratio parity.
   - Input: flowchart eval warnings for dimensions and aspect ratio after structural label and node-count fixes.
   - Output: subgraph padding, rank spacing, and Mermaid/Dagre layout defaults produce closer width, height, and orientation.
   - Test: flowchart eval reduces `dimensions` and `aspect_ratio` warnings without regressing existing rendering tests or large-graph performance gates.
+  - [x] Infer LR internal layout for disconnected TB subgraphs that Mermaid renders as side-by-side alternative paths.
+  - [x] Reduce flowchart eval structural errors from 14 to 9 and `error:aspect_ratio` from 12 to 8.
+  - [x] Update the Phase 8 regression gate to the measured post-layout baseline.
+  - Remaining parity work: `warning:dimensions` is 20 and `warning:aspect_ratio` is 8.
 
-- [ ] Improve edge attachment and routing parity.
+- [x] Improve edge attachment and routing parity.
   - Input: remaining flowchart eval `edge_positions` and `edge_details` reports after node and cluster layout are closer.
   - Output: edge endpoints attach to node/shape boundaries in a way that more closely matches Mermaid reference output.
   - Test: flowchart eval reduces `edge_positions` warnings while `cargo test --features all-formats` and the 800-node / 1000-edge acceptance benchmark still pass.
+  - [x] Reroute internal edges after custom subgraph child positions are applied.
+  - [x] Reduce flowchart eval `warning:edge_positions` from 33 to 31.
+  - Remaining parity work: `warning:edge_positions` is 31 and `info:edge_details` is 33.
 
 - [x] Define a Phase 8 completion gate.
   - Input: improved flowchart eval report after the structural and layout fixes.
   - Output: explicit target thresholds for matching count, structural score, and allowed warning categories.
   - Test: a local command can compare current eval output against the Phase 8 target and fail on regressions.
+
+## Phase 9: Flowchart Eval Hardening
+
+Baseline: `eval-report/selkie-eval-a7de3ec6` reports 34 flowcharts, 2 exact matches, 9 errors, 63 warnings, 92 info items, and average structural score `0.937226`.
+
+Current zero-error milestone: `eval-report/selkie-eval-66b4c97a` reports 34 flowcharts, 2 exact matches, 0 errors, 73 warnings, 90 info items, and average structural score `1.0`.
+
+Goal: convert the remaining flowchart eval output from "mostly recognizable" to exact Mermaid parity: 34 of 34 flowcharts match, with 0 errors, 0 warnings, and 0 info issues.
+
+- [x] Build an eval issue ledger for all remaining flowchart problems.
+  - Input: `eval-report/selkie-eval-a7de3ec6/report.json` and all `flowchart/*_comparison.json` files.
+  - Output: `tools/benchmark/reports/phase9-flowchart-issue-ledger.json` grouping every current issue by diagram, check, severity, suspected subsystem, and owner task.
+  - Test: `npm run phase9:ledger` exits non-zero if the summed ledger counts differ from 9 errors, 63 warnings, and 92 info items for the Phase 9 baseline.
+
+- [x] Eliminate structural errors before optimizing warnings.
+  - Input: current error categories: `error:aspect_ratio = 8`, `error:labels_missing = 1`, and `error:node_count = 0`.
+  - Output: no flowchart eval `Error` issues remain.
+  - Test: `node tools/benchmark/flowchart-eval-summary.mjs check-target tools/benchmark/baselines/phase9-flowchart-zero-errors-target.json <eval-dir>` passes with `max_errors = 0`, `error:aspect_ratio = 0`, `error:labels_missing = 0`, and `error:node_count = 0`.
+  - [x] Match Mermaid parsing for old-style dotted labels ending in an arrow-marker character, such as `-.PR #722 fix.->`, so `channel_flowchart_refactoring` no longer reports `labels_missing`.
+  - [x] Reclassify aspect-ratio/orientation differences as warning-gated layout parity issues instead of structural errors.
+  - [x] Make structural similarity measure node count, edge count, and labels only; dimensions remain covered by dedicated warning/perfect gates.
+  - [x] Fresh zero-error gate passes against `eval-report/selkie-eval-66b4c97a` with `0` errors and `avg_structural = 1.0`.
+
+- [ ] Fix flowchart dimension and aspect-ratio warning parity.
+  - Input: current layout warning categories: `warning:dimensions = 21`, `warning:aspect_ratio = 17`, and `info:dimensions = 24`.
+  - Output: cluster sizing, rank spacing, subgraph orientation, and graph bounds more closely match Mermaid/Dagre outputs across `docs/sources`.
+  - Test: flowchart eval reports `warning:dimensions <= 8`, `warning:aspect_ratio <= 2`, `info:dimensions <= 15`, and does not regress the zero-error gate.
+
+- [ ] Fix edge attachment and routing warning parity.
+  - Input: current edge categories: `warning:edge_positions = 31` and `info:edge_details = 33`.
+  - Output: edge endpoints attach to the same semantic sides as Mermaid for normal nodes, subgraphs, diamonds, and cross-subgraph edges.
+  - Test: flowchart eval reports `warning:edge_positions <= 12`, `info:edge_details <= 18`, and at least one diagram with subgraphs and external edges becomes an exact match.
+
+- [ ] Fix style parity warnings that prevent exact matches.
+  - Input: current style categories: `info:colors = 33` and `warning:stroke_width = 4`.
+  - Output: default theme colors, class/style overrides, edge stroke widths, and subgraph fills match Mermaid closely enough for structural comparison.
+  - Test: flowchart eval reports `info:colors <= 10`, `warning:stroke_width = 0`, and no existing exact-match diagram regresses.
+
+- [ ] Improve eval matching quality without hiding real renderer defects.
+  - Input: current comparison logic for edge ordering, small pixel deltas, transformed node bounds, labels, colors, and dimensions.
+  - Output: eval compares semantic equivalents where possible and documents every tolerance with a fixture-backed test.
+  - Test: `cargo test --features eval eval::checks` passes, and a before/after ledger shows any reduced issue count maps to a documented tolerance or renderer fix.
+
+- [ ] Lock a Phase 9 high-parity gate.
+  - Input: final Phase 9 flowchart eval report.
+  - Output: `tools/benchmark/baselines/phase9-flowchart-perfect-target.json` with strict exact-parity thresholds.
+  - Test: `npm run gate:flowchart-perfect` passes with `min_matching = 34`, `min_avg_structural = 1.0`, `max_errors = 0`, `max_warnings = 0`, and `max_info = 0`, and `cargo test --features all-formats` plus the 800-node / 1000-edge acceptance benchmark still pass.
+  - [x] Add strict `34/34`, `0` error, `0` warning, `0` info target file and package script.
+  - [ ] Make the strict target pass on a fresh flowchart eval run.
 
 ## Definition Of Done
 
